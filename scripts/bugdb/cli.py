@@ -16,10 +16,9 @@ _PARENT = Path(__file__).resolve().parent.parent
 if str(_PARENT) not in sys.path:
     sys.path.insert(0, str(_PARENT))
 
-from bugdb import config, formatters, search as search_mod  # noqa: E402
+from bugdb import formatters, search as search_mod  # noqa: E402
 from bugdb.db import BugDB  # noqa: E402
 from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
-from bugdb.models import BugRecord, ErrorType, Status  # noqa: E402
 
 
 def _print(payload: str) -> None:
@@ -80,25 +79,8 @@ def cmd_list(args, db: BugDB) -> int:
 
 
 def cmd_stats(args, db: BugDB) -> int:
-    """stats 子命令处理函数。聚合 total + by_status/language/error_type。"""
-    with db._connection() as conn:
-        total = conn.execute("SELECT COUNT(*) FROM bugs").fetchone()[0]
-        by_status = dict(conn.execute(
-            "SELECT status, COUNT(*) FROM bugs GROUP BY status"
-        ).fetchall())
-        by_language = dict(conn.execute(
-            "SELECT language, COUNT(*) FROM bugs GROUP BY language"
-        ).fetchall())
-        by_error_type = dict(conn.execute(
-            "SELECT error_type, COUNT(*) FROM bugs GROUP BY error_type"
-        ).fetchall())
-    stats = {
-        'total': total,
-        'by_status': by_status,
-        'by_language': by_language,
-        'by_error_type': by_error_type,
-        'db_path': str(db._path),
-    }
+    """stats 子命令处理函数。"""
+    stats = db.stats()
     _output(stats, 'stats', args.format)
     return 0
 
@@ -138,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI 主入口。"""
     parser = build_parser()
     args = parser.parse_args(argv)

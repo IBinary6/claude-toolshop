@@ -411,6 +411,35 @@ class BugDB:
             rows = conn.execute(sql, params).fetchall()
         return [self._row_to_record(r) for r in rows]
 
+    def stats(self) -> dict:
+        """聚合 bug 表统计信息。
+
+        Returns:
+            dict 包含 total / by_status / by_language / by_error_type / db_path
+
+        Example::
+
+            >>> # db.stats() -> {'total': 0, 'by_status': {}, ...}
+        """
+        with self._connection() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM bugs").fetchone()[0]
+            by_status = dict(conn.execute(
+                "SELECT status, COUNT(*) FROM bugs GROUP BY status"
+            ).fetchall())
+            by_language = dict(conn.execute(
+                "SELECT language, COUNT(*) FROM bugs GROUP BY language"
+            ).fetchall())
+            by_error_type = dict(conn.execute(
+                "SELECT error_type, COUNT(*) FROM bugs GROUP BY error_type"
+            ).fetchall())
+        return {
+            'total': total,
+            'by_status': by_status,
+            'by_language': by_language,
+            'by_error_type': by_error_type,
+            'db_path': str(self._path),
+        }
+
     # --- FTS5 搜索 ---
     @staticmethod
     def _build_match_expr(safe_query: str, columns: list) -> str:
