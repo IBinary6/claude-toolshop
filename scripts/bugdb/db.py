@@ -15,6 +15,12 @@ _COLUMNS = (
     "created_at, updated_at, consecutive_failures"
 )
 
+# 反馈衰减规则常量。集中定义以便测试 import 复用，避免 magic number 散落。
+_DECAY_FAILURE_THRESHOLD = 3   # 触发衰减所需的连续失败次数
+_DECAY_STEP = 20               # 每次衰减扣减的 confidence
+_DECAY_FLOOR = 20              # confidence 衰减下限（同时也是 deprecated 阈值）
+_DECAY_SUCCESS_RATE = 0.3      # 成功率低于该值才允许衰减
+
 
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """初始建表 + FTS5 + 触发器。"""
@@ -321,28 +327,66 @@ class BugDB:
     def feedback(self, bug_id: int, success: bool) -> BugRecord:
         """记录一次使用反馈，触发置信度衰减规则。
 
-        规则：
-        - 失败：usage_count+1, consecutive_failures+1
-        - 成功：usage_count+1, success_count+1, consecutive_failures=0
-        - 衰减触发：consecutive_failures >= 3 且 success_count/usage_count < 0.3
-          → confidence = max(confidence - 20, 20), consecutive_failures=0
-        - confidence <= 20 → status=deprecated, deprecation_note='auto: low confidence'
+        规则（常量见模块顶部 ``_DECAY_*``）：
+        - 失败：``usage_count+1``, ``consecutive_failures+1``
+        - 成功：``usage_count+1``, ``success_count+1``, ``consecutive_failures=0``
+        - 衰减触发：``consecutive_failures >= _DECAY_FAILURE_THRESHOLD`` 且
+          ``success_count/usage_count < _DECAY_SUCCESS_RATE``
+          → ``confidence = max(confidence - _DECAY_STEP, _DECAY_FLOOR)``，
+          ``consecutive_failures=0``
+        - 衰减后 ``confidence <= _DECAY_FLOOR`` → ``status=deprecated``，
+          ``deprecation_note='auto: low confidence'``
+
+        SELECT 与 UPDATE 在同一 ``_connection()`` 事务内执行，避免并发
+        read-modify-write 丢失更新；id 不存在抛 ``RecordNotFound``。
+
+        Example::
+
+            rec = db.feedback(1, success=False)
+            assert rec.consecutive_failures >= 1
         """
-        bug = self.get(bug_id)
-        bug.usage_count += 1
-        if success:
-            bug.success_count += 1
-            bug.consecutive_failures = 0
-        else:
-            bug.consecutive_failures += 1
-            rate = bug.success_count / bug.usage_count if bug.usage_count else 0
-            if bug.consecutive_failures >= 3 and rate < 0.3:
-                bug.confidence = max(bug.confidence - 20, 20)
+        with self._connection() as conn:
+            row = conn.execute(
+                f"SELECT {_COLUMNS} FROM bugs WHERE id=?", (bug_id,)
+            ).fetchone()
+            if row is None:
+                raise RecordNotFound(f"bug id={bug_id} not found")
+            bug = self._row_to_record(row)
+
+            bug.usage_count += 1
+            if success:
+                bug.success_count += 1
                 bug.consecutive_failures = 0
-                if bug.confidence <= 20:
-                    bug.status = Status.DEPRECATED
-                    bug.deprecation_note = 'auto: low confidence'
-        return self.update(bug)
+            else:
+                bug.consecutive_failures += 1
+                # 失败分支必然已经 usage_count+=1，分母不可能为 0。
+                rate = bug.success_count / bug.usage_count
+                if (bug.consecutive_failures >= _DECAY_FAILURE_THRESHOLD
+                        and rate < _DECAY_SUCCESS_RATE):
+                    bug.confidence = max(bug.confidence - _DECAY_STEP, _DECAY_FLOOR)
+                    bug.consecutive_failures = 0
+                    if bug.confidence <= _DECAY_FLOOR:
+                        bug.status = Status.DEPRECATED
+                        bug.deprecation_note = 'auto: low confidence'
+
+            bug.updated_at = utils.now_iso()
+            conn.execute(
+                """UPDATE bugs SET
+                    usage_count=?, success_count=?, consecutive_failures=?,
+                    confidence=?, status=?, deprecation_note=?, updated_at=?
+                WHERE id=?""",
+                (
+                    bug.usage_count,
+                    bug.success_count,
+                    bug.consecutive_failures,
+                    bug.confidence,
+                    bug.status.value if isinstance(bug.status, Status) else bug.status,
+                    bug.deprecation_note,
+                    bug.updated_at,
+                    bug.id,
+                ),
+            )
+        return bug
 
     def list_all(self, status: str | None = None, language: str | None = None) -> list[BugRecord]:
         """列出记录，可按 status/language 过滤。
