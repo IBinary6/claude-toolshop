@@ -7,6 +7,14 @@ from . import config, utils
 from .exceptions import RecordNotFound, SchemaMigrationError
 from .models import BugRecord, ErrorType, Status
 
+# 显式列名常量。顺序与 schema (v1 + v2) 列定义保持一致，避免 SELECT * 隐式依赖列顺序。
+_COLUMNS = (
+    "id, error_type, error_pattern, error_message, root_cause, solution, "
+    "solution_steps, language, project_type, tags, confidence, usage_count, "
+    "success_count, status, replaces_id, valid_for, deprecation_note, "
+    "created_at, updated_at, consecutive_failures"
+)
+
 
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
     """初始建表 + FTS5 + 触发器。"""
@@ -140,11 +148,7 @@ class BugDB:
         steps_raw = row['solution_steps'] or '[]'
         steps = utils.safe_json_loads(steps_raw) or []
         tags = utils.comma_split(row['tags'] or '')
-        # consecutive_failures 在 v2 加入；老库可能缺失
-        try:
-            cf = row['consecutive_failures'] or 0
-        except (IndexError, KeyError):
-            cf = 0
+        cf = row['consecutive_failures'] or 0
         return BugRecord(
             id=row['id'],
             error_type=ErrorType(row['error_type']),
@@ -170,7 +174,7 @@ class BugDB:
 
     # --- CRUD ---
     def add(self, record: BugRecord) -> BugRecord:
-        """插入一条记录，返回带 id 与时间戳的副本。
+        """插入一条记录。原地补全 id 与时间戳并返回该对象（注意：会修改入参）。
 
         Example::
 
@@ -192,6 +196,7 @@ class BugDB:
                     consecutive_failures, created_at, updated_at
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
+                    # BugRecord 是普通 dataclass，不强制 Enum；调用方可能直接传字符串。
                     record.error_type.value if isinstance(record.error_type, ErrorType) else record.error_type,
                     record.error_pattern,
                     record.error_message,
@@ -225,13 +230,17 @@ class BugDB:
             print(rec.error_pattern)
         """
         with self._connection() as conn:
-            row = conn.execute("SELECT * FROM bugs WHERE id=?", (bug_id,)).fetchone()
+            row = conn.execute(f"SELECT {_COLUMNS} FROM bugs WHERE id=?", (bug_id,)).fetchone()
         if row is None:
             raise RecordNotFound(f"bug id={bug_id} not found")
         return self._row_to_record(row)
 
     def update(self, record: BugRecord) -> BugRecord:
-        """整条更新。会刷新 updated_at。
+        """整条更新（整行覆盖语义）。会刷新 updated_at。
+
+        调用方应先 ``get()`` 拿到完整记录，再修改字段后 ``update()``。
+        期间若有其他进程/线程修改了同一行，本次 update 会用入参中的字段值
+        完整覆盖整行，外部并发修改会被静默丢弃。
 
         Example::
 
@@ -308,7 +317,7 @@ class BugDB:
         record.consecutive_failures = 0
         return self.update(record)
 
-    def list_all(self, status: str | None = None, language: str | None = None) -> list:
+    def list_all(self, status: str | None = None, language: str | None = None) -> list[BugRecord]:
         """列出记录，可按 status/language 过滤。
 
         - status='all' 等同不过滤；language 过滤时同时匹配 'any'。
@@ -318,7 +327,7 @@ class BugDB:
 
             actives = db.list_all(status='active', language='c++')
         """
-        sql = "SELECT * FROM bugs WHERE 1=1"
+        sql = f"SELECT {_COLUMNS} FROM bugs WHERE 1=1"
         params: list = []
         if status and status != 'all':
             sql += " AND status=?"

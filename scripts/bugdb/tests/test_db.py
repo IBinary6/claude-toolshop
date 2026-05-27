@@ -1,5 +1,6 @@
 """Schema 初始化与迁移测试。"""
 import sqlite3
+import time
 import pytest
 from bugdb.db import BugDB, MIGRATIONS
 from bugdb import utils
@@ -182,3 +183,68 @@ def test_list_all(db):
     db.add(_sample_bug())
     rows = db.list_all()
     assert len(rows) >= 2
+
+
+def test_update_refreshes_updated_at(db):
+    """update() 必须刷新 updated_at（用于版本追踪、衰减计算）。"""
+    b = db.add(_sample_bug())
+    t1 = b.updated_at
+    time.sleep(1.1)  # ISO 秒级精度，sleep > 1s 确保字符串字典序差异
+    b.solution = "another"
+    db.update(b)
+    assert b.updated_at > t1
+
+
+def test_update_missing_id_raises(db):
+    """id=None 的记录无法定位行，必须抛 RecordNotFound 而非静默 no-op。"""
+    from bugdb.exceptions import RecordNotFound
+    rec = _sample_bug()
+    assert rec.id is None
+    with pytest.raises(RecordNotFound):
+        db.update(rec)
+
+
+def test_update_nonexistent_id_raises(db):
+    """指定不存在的 id 必须抛 RecordNotFound（rowcount==0 检查）。"""
+    from bugdb.exceptions import RecordNotFound
+    rec = _sample_bug()
+    rec.id = 99999
+    with pytest.raises(RecordNotFound):
+        db.update(rec)
+
+
+def test_delete_hard_missing_raises(db):
+    """物理删除不存在的 id 必须抛 RecordNotFound，不可静默成功。"""
+    from bugdb.exceptions import RecordNotFound
+    with pytest.raises(RecordNotFound):
+        db.delete(99999, hard=True)
+
+
+def test_json_roundtrip_empty_and_special_chars(db):
+    """solution_steps 空列表与含引号/反斜杠/换行/中文 的 step 必须完整往返。"""
+    # 空列表往返
+    rec1 = _sample_bug()
+    rec1.solution_steps = []
+    saved1 = db.add(rec1)
+    assert db.get(saved1.id).solution_steps == []
+
+    # 特殊字符往返
+    rec2 = _sample_bug()
+    rec2.solution_steps = ['"quoted"', 'back\\slash', 'line1\nline2', '中文步骤']
+    saved2 = db.add(rec2)
+    fetched = db.get(saved2.id)
+    assert fetched.solution_steps == ['"quoted"', 'back\\slash', 'line1\nline2', '中文步骤']
+
+
+def test_list_all_sorted_by_confidence_desc(db):
+    """list_all 必须按 confidence DESC 排序（spec 列表语义）。"""
+    a = _sample_bug(); a.confidence = 50
+    b = _sample_bug(); b.confidence = 90
+    c = _sample_bug(); c.confidence = 70
+    db.add(a)
+    db.add(b)
+    db.add(c)
+    rows = db.list_all()
+    confidences = [r.confidence for r in rows]
+    assert confidences == sorted(confidences, reverse=True)
+    assert confidences[:3] == [90, 70, 50]
