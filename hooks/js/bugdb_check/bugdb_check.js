@@ -12,11 +12,12 @@ const CLI_PATH = path.join(HOMEDIR, '.claude', 'scripts', 'bugdb', 'cli.py');
 // 智能预过滤：99% Bash 调用零开销
 const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
 
-function runSearch(errorLine, language) {
+function runSearch(errorLine) {
     // 用 base64 包装传参，彻底避免引号/换行/反斜杠注入
+    // 不传 --language：Hook 无法可靠推断错误语言，让 CLI 默认跨语言搜索
     const payload = Buffer.from(errorLine, 'utf-8').toString('base64');
     return execSync(
-        `python "${CLI_PATH}" search --query-b64 ${payload} --language ${language || 'any'} --format json`,
+        `python "${CLI_PATH}" search --query-b64 ${payload} --format json`,
         { timeout: 4000, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
     );
 }
@@ -35,7 +36,7 @@ module.exports = async function bugdbCheck(context) {
             return { continue: true };
         }
 
-        const raw = runSearch(errorLine, 'any');
+        const raw = runSearch(errorLine);
         const data = JSON.parse(raw);
         if (!data.results || data.results.length === 0) {
             return { continue: true };
