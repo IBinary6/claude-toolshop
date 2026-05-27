@@ -8,6 +8,7 @@ Example:
     >>> # python -m bugdb.cli stats --format text
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -222,37 +223,65 @@ def cmd_find_similar(args, db: BugDB) -> int:
 def cmd_normalize(args, db: BugDB) -> int:
     """normalize 子命令处理：暴露 normalizer 给 Hook/Skill。"""
     from bugdb import normalizer
-    import json as _json
     normalized = normalizer.normalize(args.input)
     keywords = normalizer.extract_keywords(normalized)
     out = {'normalized': normalized, 'keywords': keywords}
     if args.format == 'text':
         _print(f"normalized: {normalized}\nkeywords:   {keywords}")
     else:
-        _print(_json.dumps(out, ensure_ascii=False, indent=2))
+        _print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 
 
 def cmd_export(args, db: BugDB) -> int:
     """export 子命令处理：全量导出到 JSON 文件。"""
-    import json as _json
     records = db.list_all(status='all')
     payload = {
         'version': 1,
-        'records': [formatters._record_to_dict(r) for r in records],
+        'records': [formatters.record_to_dict(r) for r in records],
     }
-    Path(args.output).write_text(_json.dumps(payload, ensure_ascii=False, indent=2),
+    Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                                  encoding='utf-8')
     _output({'exported': len(records), 'path': args.output}, 'stats', args.format)
     return 0
 
 
+def _load_import_payload(path: Path) -> list[dict]:
+    """读取并校验 import JSON。
+
+    错误时抛 ValueError（消息已是人类可读）；成功返回 records 列表。
+    校验项：JSON 可解析、顶层为 dict、含 records 键、records 为 list、
+    单条为 dict 且含 error_type 与 error_pattern。
+    """
+    raw = path.read_text(encoding='utf-8')
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"invalid JSON: {e}") from e
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be a JSON object")
+    if 'records' not in payload:
+        raise ValueError("missing required key: records")
+    records = payload['records']
+    if not isinstance(records, list):
+        raise ValueError("records must be a list")
+    for idx, item in enumerate(records):
+        if not isinstance(item, dict):
+            raise ValueError(f"records[{idx}] must be an object")
+        if not item.get('error_type'):
+            raise ValueError(f"records[{idx}] missing field: error_type")
+        if not item.get('error_pattern'):
+            raise ValueError(f"records[{idx}] missing field: error_pattern")
+    return records
+
+
 def cmd_import(args, db: BugDB) -> int:
     """import 子命令处理：从 JSON 文件批量导入。"""
-    import json as _json
-    raw = Path(args.input).read_text(encoding='utf-8')
-    payload = _json.loads(raw)
-    records = payload.get('records', [])
+    try:
+        records = _load_import_payload(Path(args.input))
+    except (ValueError, OSError) as e:
+        sys.stderr.write(f"import error: {e}\n")
+        return 2
     imported = 0
     for d in records:
         rec = BugRecord(

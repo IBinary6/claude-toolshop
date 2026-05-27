@@ -193,12 +193,16 @@ def test_cli_find_similar(tmp_path):
     _add_bug(db_file)
     r = _run(["find-similar", "--pattern", "C2065 undeclared identifier"], db_file)
     assert r.returncode == 0
-    assert len(json.loads(r.stdout)["results"]) >= 1
+    results = json.loads(r.stdout)["results"]
+    assert len(results) >= 1
+    # 第一条应包含查询中的关键 token
+    assert "C2065" in results[0]["error_pattern"]
 
 
 def test_cli_normalize(tmp_path):
     r = _run(["normalize", "--input", r"C:\x.cpp(42): error LNK2001"], tmp_path / "x.db")
     assert r.returncode == 0
+    assert r.stderr == ""
     obj = json.loads(r.stdout)
     assert "C:\\" not in obj["normalized"]
     assert "LNK2001" in obj["normalized"]
@@ -208,11 +212,52 @@ def test_cli_export_import(tmp_path):
     db_a = tmp_path / "a.db"
     db_b = tmp_path / "b.db"
     _add_bug(db_a)
+    _add_bug(db_a, tags="linker")
     out = tmp_path / "dump.json"
     e = _run(["export", "--output", str(out)], db_a)
     assert e.returncode == 0
     assert out.exists()
     i = _run(["import", "--input", str(out)], db_b)
     assert i.returncode == 0
-    lst = _run(["list"], db_b)
-    assert len(json.loads(lst.stdout)["results"]) >= 1
+    # 比较 a/b 两库的关键字段一致
+    list_a = json.loads(_run(["list", "--format", "json"], db_a).stdout)["results"]
+    list_b = json.loads(_run(["list", "--format", "json"], db_b).stdout)["results"]
+    assert len(list_a) >= 2
+    assert len(list_b) >= 2
+
+    def _key(rec):
+        return (rec["error_pattern"], rec["solution"], rec["status"])
+
+    set_a = sorted(_key(r) for r in list_a)
+    set_b = sorted(_key(r) for r in list_b)
+    assert set_a == set_b
+
+
+def test_cli_import_rejects_invalid_json(tmp_path):
+    """非 JSON 输入应触发 returncode 2 + 'import error' 提示。"""
+    db_file = tmp_path / "x.db"
+    bad = tmp_path / "bad.json"
+    bad.write_text("not a json {", encoding="utf-8")
+    r = _run(["import", "--input", str(bad)], db_file)
+    assert r.returncode == 2
+    assert "import error" in r.stderr
+
+
+def test_cli_import_rejects_missing_records_key(tmp_path):
+    """缺 records 键应退出 2。"""
+    db_file = tmp_path / "x.db"
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}", encoding="utf-8")
+    r = _run(["import", "--input", str(bad)], db_file)
+    assert r.returncode == 2
+    assert "import error" in r.stderr
+
+
+def test_cli_import_rejects_record_missing_fields(tmp_path):
+    """records 单条缺关键字段应退出 2。"""
+    db_file = tmp_path / "x.db"
+    bad = tmp_path / "bad.json"
+    bad.write_text('{"records": [{}]}', encoding="utf-8")
+    r = _run(["import", "--input", str(bad)], db_file)
+    assert r.returncode == 2
+    assert "import error" in r.stderr

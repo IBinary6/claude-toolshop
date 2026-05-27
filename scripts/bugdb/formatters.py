@@ -3,8 +3,8 @@ import json
 from .models import BugRecord
 
 
-def _record_to_dict(r: BugRecord) -> dict:
-    """将 BugRecord 转为 JSON 友好的 dict。
+def record_to_dict(r: BugRecord) -> dict:
+    """将 BugRecord 转为 JSON 友好的 dict（公开 API）。
 
     Enum 字段使用 ``.value`` 字符串化；solution_steps / tags 转为 list；
     replacement_hint 若存在则展开为 replacement_id / replacement_solution。
@@ -35,6 +35,10 @@ def _record_to_dict(r: BugRecord) -> dict:
         d['replacement_id'] = hint.id
         d['replacement_solution'] = hint.solution
     return d
+
+
+# 内部别名，保留模块内既有调用点的命名风格
+_record_to_dict = record_to_dict
 
 
 def record_to_json(r: BugRecord) -> str:
