@@ -5,15 +5,11 @@ from pathlib import Path
 def get_db_path(explicit: Path | str | None = None) -> Path:
     """解析 BugDB SQLite 路径。
 
-    # Examples
-    ```
-    >>> get_db_path('/tmp/x.db')
-    PosixPath('/tmp/x.db')
-    ```
+    空字符串视为未提供（大声报错原则），回退到下一级来源。
     """
-    if explicit:
+    if explicit is not None and explicit != "":
         return Path(explicit).expanduser()
     env = os.environ.get('BUGDB_PATH')
-    if env:
+    if env is not None and env != "":
         return Path(env).expanduser()
     return Path.home() / '.claude' / 'bugs.db'
