@@ -317,6 +317,33 @@ class BugDB:
         record.consecutive_failures = 0
         return self.update(record)
 
+    # --- 反馈与自动衰减 ---
+    def feedback(self, bug_id: int, success: bool) -> BugRecord:
+        """记录一次使用反馈，触发置信度衰减规则。
+
+        规则：
+        - 失败：usage_count+1, consecutive_failures+1
+        - 成功：usage_count+1, success_count+1, consecutive_failures=0
+        - 衰减触发：consecutive_failures >= 3 且 success_count/usage_count < 0.3
+          → confidence = max(confidence - 20, 20), consecutive_failures=0
+        - confidence <= 20 → status=deprecated, deprecation_note='auto: low confidence'
+        """
+        bug = self.get(bug_id)
+        bug.usage_count += 1
+        if success:
+            bug.success_count += 1
+            bug.consecutive_failures = 0
+        else:
+            bug.consecutive_failures += 1
+            rate = bug.success_count / bug.usage_count if bug.usage_count else 0
+            if bug.consecutive_failures >= 3 and rate < 0.3:
+                bug.confidence = max(bug.confidence - 20, 20)
+                bug.consecutive_failures = 0
+                if bug.confidence <= 20:
+                    bug.status = Status.DEPRECATED
+                    bug.deprecation_note = 'auto: low confidence'
+        return self.update(bug)
+
     def list_all(self, status: str | None = None, language: str | None = None) -> list[BugRecord]:
         """列出记录，可按 status/language 过滤。
 
