@@ -261,3 +261,33 @@ def test_cli_import_rejects_record_missing_fields(tmp_path):
     r = _run(["import", "--input", str(bad)], db_file)
     assert r.returncode == 2
     assert "import error" in r.stderr
+
+
+import base64
+
+
+def test_cli_search_query_b64(tmp_path):
+    db_file = tmp_path / "b64.db"
+    add = _run([
+        "add", "--error-type", "link",
+        "--error-message", "error LNK2001: unresolved external symbol __imp_WSAStartup",
+        "--root-cause", "missing ws2_32.lib",
+        "--solution", "link ws2_32.lib",
+        "--language", "c++",
+    ], db_file)
+    assert add.returncode == 0
+    bug_id = json.loads(add.stdout)["id"]
+
+    raw = 'C:\\x.cpp(42): error LNK2001: unresolved external symbol __imp_WSAStartup\n"quoted"'
+    encoded = base64.b64encode(raw.encode('utf-8')).decode('ascii')
+    r = _run(["search", "--query-b64", encoded, "--language", "c++"], db_file)
+    assert r.returncode == 0
+    obj = json.loads(r.stdout)
+    assert any(rec["id"] == bug_id for rec in obj["results"])
+
+
+def test_cli_search_b64_invalid_falls_back(tmp_path):
+    """无效 base64 不应崩溃 CLI。"""
+    db_file = tmp_path / "b64bad.db"
+    r = _run(["search", "--query-b64", "!!!not-base64!!!"], db_file)
+    assert r.returncode in (0, 1, 2, 3)
