@@ -341,6 +341,19 @@ class BugDB:
         return [self._row_to_record(r) for r in rows]
 
     # --- FTS5 搜索 ---
+    @staticmethod
+    def _build_match_expr(safe_query: str, columns: list) -> str:
+        """把用户查询安全地转换为 FTS5 MATCH 表达式。
+
+        每个 term 用双引号包成 phrase，term 中已有的 ``"`` 转义为 ``""``，
+        避免 ``:`` / ``-`` / ``*`` / ``(`` / ``)`` 等触发 FTS5 语法错误。
+        """
+        terms = [t for t in safe_query.split() if t.strip()]
+        if not terms:
+            return ""
+        quoted = " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in terms)
+        return " OR ".join(f"{col}:({quoted})" for col in columns)
+
     def _fts_query(self, columns: list, query: str, statuses: list | None,
                    language: str | None, limit: int) -> list:
         """构造并执行 FTS5 MATCH 查询。
@@ -348,12 +361,13 @@ class BugDB:
         - columns 由调用方传入，且仅用于构造 MATCH 表达式的列名前缀
           （白名单语义，禁止接受用户输入）。
         - 其余参数全部走绑定占位符防注入。
+        - MATCH 表达式构造失败由调用方 ``fts_search`` 兜底走 LIKE。
 
         Example::
 
             db._fts_query(['error_pattern'], 'LNK2001', ['active'], 'c++', 20)
         """
-        col_expr = ' OR '.join(f"{c}:({query})" for c in columns)
+        col_expr = self._build_match_expr(query, columns)
         # 显式投影到 bugs.<col> 以匹配 _row_to_record 期望的列顺序。
         projection = ', '.join(f"bugs.{c.strip()}" for c in _COLUMNS.split(','))
         sql = (
@@ -379,6 +393,8 @@ class BugDB:
         """FTS5 不可用时的兜底 LIKE 查询。
 
         将 query 按空白拆词，每个词对每列做 LIKE OR；全部参数化绑定。
+        term 中的 ``\\`` / ``%`` / ``_`` 会被转义，并通过 ``ESCAPE '\\'`` 字面匹配，
+        避免用户搜 ``100%`` / ``foo_bar`` 时被通配符吞掉。
 
         Example::
 
@@ -387,11 +403,12 @@ class BugDB:
         like_terms = [t for t in query.split() if t]
         if not like_terms:
             return []
-        where_or = ' OR '.join(f"{c} LIKE ?" for c in columns for _ in like_terms)
+        where_or = ' OR '.join(f"{c} LIKE ? ESCAPE '\\'" for c in columns for _ in like_terms)
         params: list = []
         for c in columns:
             for t in like_terms:
-                params.append(f"%{t}%")
+                escaped = t.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+                params.append(f"%{escaped}%")
         sql = f"SELECT {_COLUMNS} FROM bugs WHERE ({where_or})"
         if statuses:
             placeholders = ','.join('?' * len(statuses))
@@ -424,6 +441,10 @@ class BugDB:
         if not query or not query.strip():
             return []
         safe_query = query.replace('"', ' ').strip()
+        # trigram tokenize 要求 ≥ 3 字符，短查询 MATCH 不报错但返回空，前置走 LIKE。
+        if len(safe_query.replace(' ', '')) < 3:
+            rows = self._like_fallback(columns, safe_query, statuses, language, limit)
+            return [self._row_to_record(r) for r in rows]
         try:
             rows = self._fts_query(columns, safe_query, statuses, language, limit)
         except Exception:

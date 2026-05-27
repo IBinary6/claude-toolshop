@@ -283,3 +283,56 @@ def test_fts_search_falls_back_to_like(db, monkeypatch):
     monkeypatch.setattr(db, '_fts_query', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("force")))
     rows = db.fts_search(["error_pattern"], "LNK2001")
     assert any(r.id == b.id for r in rows)
+
+
+def test_fts_search_handles_special_chars(db):
+    """查询含 FTS5 特殊字符（如 ``:``）不应抛语法错误，必须能正常命中。"""
+    b = db.add(_sample_bug())  # error_pattern 含 'LNK2001 unresolved external symbol'
+    # 查询字符串带 ':'，未转义时会触发 FTS5 语法错误
+    rows = db.fts_search(["error_pattern", "error_message"], "LNK2001:")
+    assert any(r.id == b.id for r in rows)
+
+
+def test_fts_search_short_query_uses_like(db):
+    """短于 3 字符的查询应走 LIKE 兜底（trigram tokenize 要求 ≥ 3 字符）。"""
+    rec = _sample_bug()
+    rec.error_pattern = "build OK status"
+    b = db.add(rec)
+    rows = db.fts_search(["error_pattern"], "OK")  # 2 字符
+    assert any(r.id == b.id for r in rows)
+
+
+def test_fts_search_orders_by_confidence_desc(db):
+    """FTS 搜索结果应按 confidence DESC 排序。"""
+    a = _sample_bug(); a.confidence = 50
+    b = _sample_bug(); b.confidence = 90
+    c = _sample_bug(); c.confidence = 70
+    db.add(a); db.add(b); db.add(c)
+    rows = db.fts_search(["error_pattern"], "LNK2001")
+    confidences = [r.confidence for r in rows]
+    assert confidences == sorted(confidences, reverse=True)
+
+
+def test_like_fallback_escapes_wildcards(db, monkeypatch):
+    """LIKE 兜底必须转义 ``%`` / ``_`` 字面匹配，避免被通配符吞掉。"""
+    rec1 = _sample_bug()
+    rec1.error_pattern = "progress 100% complete"
+    hit = db.add(rec1)
+    rec2 = _sample_bug()
+    rec2.error_pattern = "progress 1XYZ complete"
+    miss = db.add(rec2)
+    # 强制走 LIKE 兜底以校验转义逻辑
+    monkeypatch.setattr(db, '_fts_query', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("force")))
+    rows = db.fts_search(["error_pattern"], "100%")
+    ids = {r.id for r in rows}
+    assert hit.id in ids
+    assert miss.id not in ids
+
+
+def test_fts_search_language_any_compat(db):
+    """language='any' 的记录用 language='c++' 搜索时应可见（跨语言可见）。"""
+    rec = _sample_bug()
+    rec.language = "any"
+    b = db.add(rec)
+    rows = db.fts_search(["error_pattern"], "LNK2001", language="c++")
+    assert any(r.id == b.id for r in rows)
