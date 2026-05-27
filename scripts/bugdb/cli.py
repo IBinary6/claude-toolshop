@@ -17,9 +17,32 @@ if str(_PARENT) not in sys.path:
     sys.path.insert(0, str(_PARENT))
 
 from bugdb import formatters, search as search_mod  # noqa: E402
+from bugdb import utils as _utils  # noqa: E402
 from bugdb.db import BugDB  # noqa: E402
 from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
 from bugdb.models import BugRecord, ErrorType  # noqa: E402
+
+
+def _parse_steps(raw: str) -> list | None:
+    """解析 --solution-steps JSON 数组字符串。
+
+    None 表示解析失败或非 list（调用方应 exit 2）；空字符串视为 []。
+
+    Example:
+        >>> _parse_steps('["a","b"]') == ['a', 'b']
+        True
+        >>> _parse_steps('null') is None
+        True
+    """
+    parsed = _utils.safe_json_loads(raw)
+    if parsed is None:
+        # 区分：raw 是 "[]" 默认值（合法空列表） vs "null"（明确错误）
+        if (raw or '').strip() == '[]':
+            return []
+        return None
+    if not isinstance(parsed, list):
+        return None
+    return parsed
 
 
 def _print(payload: str) -> None:
@@ -88,9 +111,9 @@ def cmd_stats(args, db: BugDB) -> int:
 
 def cmd_add(args, db: BugDB) -> int:
     """add 子命令处理函数：构造 BugRecord 并写入。"""
-    from bugdb import normalizer, utils as _utils
-    steps = _utils.safe_json_loads(args.solution_steps) or []
-    if not isinstance(steps, list):
+    from bugdb import normalizer
+    steps = _parse_steps(args.solution_steps)
+    if steps is None:
         sys.stderr.write("error: --solution-steps must be a JSON array\n")
         return 2
     pattern = args.error_pattern or normalizer.normalize(args.error_message)
@@ -117,15 +140,14 @@ def cmd_add(args, db: BugDB) -> int:
 
 def cmd_update(args, db: BugDB) -> int:
     """update 子命令处理函数：仅覆盖显式给出的字段。"""
-    from bugdb import utils as _utils
     rec = db.get(args.id)
     if args.solution is not None:
         rec.solution = args.solution
     if args.root_cause is not None:
         rec.root_cause = args.root_cause
     if args.solution_steps is not None:
-        steps = _utils.safe_json_loads(args.solution_steps)
-        if not isinstance(steps, list):
+        steps = _parse_steps(args.solution_steps)
+        if steps is None:
             sys.stderr.write("error: --solution-steps must be a JSON array\n")
             return 2
         rec.solution_steps = steps

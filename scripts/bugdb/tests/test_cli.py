@@ -102,10 +102,12 @@ def test_cli_delete_soft_and_restore(tmp_path):
         "--root-cause", "rc", "--solution", "sol",
     ], db_file)
     bug_id = json.loads(add.stdout)["id"]
-    _run(["delete", "--id", str(bug_id)], db_file)
+    d = _run(["delete", "--id", str(bug_id)], db_file)
+    assert d.returncode == 0, d.stderr
     g = _run(["get", "--id", str(bug_id)], db_file)
     assert json.loads(g.stdout)["status"] == "archived"
-    _run(["restore", "--id", str(bug_id)], db_file)
+    rr = _run(["restore", "--id", str(bug_id)], db_file)
+    assert rr.returncode == 0, rr.stderr
     g = _run(["get", "--id", str(bug_id)], db_file)
     assert json.loads(g.stdout)["status"] == "active"
 
@@ -118,8 +120,34 @@ def test_cli_feedback(tmp_path):
         "--root-cause", "rc", "--solution", "sol",
     ], db_file)
     bug_id = json.loads(add.stdout)["id"]
-    _run(["feedback", "--id", str(bug_id), "--result", "success"], db_file)
+    fb = _run(["feedback", "--id", str(bug_id), "--result", "success"], db_file)
+    assert fb.returncode == 0, fb.stderr
     g = _run(["get", "--id", str(bug_id)], db_file)
     obj = json.loads(g.stdout)
     assert obj["usage_count"] == 1
     assert obj["success_count"] == 1
+
+
+def test_cli_add_rejects_solution_steps_null(tmp_path):
+    """--solution-steps 'null' 应当报错退出 2，而不是被静默吞为 []。"""
+    db_file = tmp_path / "n.db"
+    r = _run([
+        "add", "--error-type", "compile",
+        "--error-message", "msg",
+        "--root-cause", "rc", "--solution", "sol",
+        "--solution-steps", "null",
+    ], db_file)
+    assert r.returncode == 2
+    assert "JSON array" in r.stderr
+
+
+def test_cli_add_rejects_solution_steps_object(tmp_path):
+    """--solution-steps '{}' 应当报错退出 2。"""
+    db_file = tmp_path / "o.db"
+    r = _run([
+        "add", "--error-type", "compile",
+        "--error-message", "msg",
+        "--root-cause", "rc", "--solution", "sol",
+        "--solution-steps", "{}",
+    ], db_file)
+    assert r.returncode == 2
