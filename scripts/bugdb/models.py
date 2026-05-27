@@ -24,17 +24,21 @@ class Status(str, Enum):
 
 @dataclass
 class BugRecord:
-    """单条 Bug 记录。字段顺序对应 SQLite 列。"""
+    """单条 Bug 记录。字段顺序对应 SQLite 列。
+
+    confidence: 0-100 整数百分比（100=最高，0=完全失效）。
+    spec 第 11 节衰减公式使用整数，DB schema 对应 INTEGER 列。
+    """
     error_type: ErrorType = ErrorType.COMPILE
     error_pattern: str = ""
     root_cause: str = ""
     solution: str = ""
     id: int | None = None
     error_message: str = ""
-    solution_steps: list = field(default_factory=list)
+    solution_steps: list[str] = field(default_factory=list)
     language: str = "any"
     project_type: str = "any"
-    tags: list = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     confidence: int = 100
     usage_count: int = 0
     success_count: int = 0
