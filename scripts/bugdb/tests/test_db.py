@@ -248,3 +248,38 @@ def test_list_all_sorted_by_confidence_desc(db):
     confidences = [r.confidence for r in rows]
     assert confidences == sorted(confidences, reverse=True)
     assert confidences[:3] == [90, 70, 50]
+
+
+# ============================================================
+# Task 7: FTS5 搜索
+# ============================================================
+
+def test_fts_search_by_pattern(db):
+    """FTS5 MATCH 应能按 error_pattern 命中。"""
+    b = db.add(_sample_bug())
+    rows = db.fts_search(["error_pattern"], "LNK2001")
+    assert any(r.id == b.id for r in rows)
+
+
+def test_fts_search_filters_status(db):
+    """软删后默认状态过滤应排除 archived。"""
+    b = db.add(_sample_bug())
+    db.delete(b.id, hard=False)  # status=archived
+    rows = db.fts_search(["error_pattern"], "LNK2001", statuses=["active"])
+    assert all(r.id != b.id for r in rows)
+
+
+def test_fts_search_filters_language(db):
+    """language 过滤：c++ 记录不应匹配 rust 过滤。"""
+    b = db.add(_sample_bug())
+    rows = db.fts_search(["error_pattern"], "LNK2001", language="rust")
+    matching = [r for r in rows if r.id == b.id]
+    assert matching == []
+
+
+def test_fts_search_falls_back_to_like(db, monkeypatch):
+    """FTS 路径异常时应自动回退到 LIKE 兜底。"""
+    b = db.add(_sample_bug())
+    monkeypatch.setattr(db, '_fts_query', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("force")))
+    rows = db.fts_search(["error_pattern"], "LNK2001")
+    assert any(r.id == b.id for r in rows)

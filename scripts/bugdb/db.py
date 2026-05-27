@@ -339,3 +339,93 @@ class BugDB:
         with self._connection() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [self._row_to_record(r) for r in rows]
+
+    # --- FTS5 搜索 ---
+    def _fts_query(self, columns: list, query: str, statuses: list | None,
+                   language: str | None, limit: int) -> list:
+        """构造并执行 FTS5 MATCH 查询。
+
+        - columns 由调用方传入，且仅用于构造 MATCH 表达式的列名前缀
+          （白名单语义，禁止接受用户输入）。
+        - 其余参数全部走绑定占位符防注入。
+
+        Example::
+
+            db._fts_query(['error_pattern'], 'LNK2001', ['active'], 'c++', 20)
+        """
+        col_expr = ' OR '.join(f"{c}:({query})" for c in columns)
+        # 显式投影到 bugs.<col> 以匹配 _row_to_record 期望的列顺序。
+        projection = ', '.join(f"bugs.{c.strip()}" for c in _COLUMNS.split(','))
+        sql = (
+            f"SELECT {projection} FROM bugs_fts "
+            "JOIN bugs ON bugs.id = bugs_fts.rowid "
+            "WHERE bugs_fts MATCH ?"
+        )
+        params: list = [col_expr]
+        if statuses:
+            placeholders = ','.join('?' * len(statuses))
+            sql += f" AND bugs.status IN ({placeholders})"
+            params.extend(statuses)
+        if language:
+            sql += " AND (bugs.language=? OR bugs.language='any')"
+            params.append(language)
+        sql += " ORDER BY bugs.confidence DESC, bugs.success_count DESC LIMIT ?"
+        params.append(limit)
+        with self._connection() as conn:
+            return conn.execute(sql, params).fetchall()
+
+    def _like_fallback(self, columns: list, query: str, statuses: list | None,
+                       language: str | None, limit: int) -> list:
+        """FTS5 不可用时的兜底 LIKE 查询。
+
+        将 query 按空白拆词，每个词对每列做 LIKE OR；全部参数化绑定。
+
+        Example::
+
+            db._like_fallback(['error_pattern'], 'LNK2001', None, None, 20)
+        """
+        like_terms = [t for t in query.split() if t]
+        if not like_terms:
+            return []
+        where_or = ' OR '.join(f"{c} LIKE ?" for c in columns for _ in like_terms)
+        params: list = []
+        for c in columns:
+            for t in like_terms:
+                params.append(f"%{t}%")
+        sql = f"SELECT {_COLUMNS} FROM bugs WHERE ({where_or})"
+        if statuses:
+            placeholders = ','.join('?' * len(statuses))
+            sql += f" AND status IN ({placeholders})"
+            params.extend(statuses)
+        if language:
+            sql += " AND (language=? OR language='any')"
+            params.append(language)
+        sql += " ORDER BY confidence DESC, success_count DESC LIMIT ?"
+        params.append(limit)
+        with self._connection() as conn:
+            return conn.execute(sql, params).fetchall()
+
+    def fts_search(self, columns: list, query: str,
+                   statuses: list | None = None,
+                   language: str | None = None,
+                   limit: int = 20) -> list:
+        """两层兜底搜索：先 FTS5 MATCH，失败回退 LIKE。
+
+        - columns：白名单列（如 ``['error_pattern','error_message','root_cause']``）。
+        - query：用户查询字符串，会先 strip 并把双引号替换为空格（防注入 FTS 表达式）。
+        - statuses：状态过滤；None=不过滤；典型 ``['active']`` 或 ``['active','deprecated']``。
+        - language：精确语言；同时匹配 'any'。
+
+        Example::
+
+            db.fts_search(['error_pattern'], 'LNK2001',
+                          statuses=['active'], language='c++')
+        """
+        if not query or not query.strip():
+            return []
+        safe_query = query.replace('"', ' ').strip()
+        try:
+            rows = self._fts_query(columns, safe_query, statuses, language, limit)
+        except Exception:
+            rows = self._like_fallback(columns, safe_query, statuses, language, limit)
+        return [self._row_to_record(r) for r in rows]
