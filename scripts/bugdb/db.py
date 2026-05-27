@@ -4,7 +4,8 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import config, utils
-from .exceptions import SchemaMigrationError
+from .exceptions import RecordNotFound, SchemaMigrationError
+from .models import BugRecord, ErrorType, Status
 
 
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:
@@ -125,3 +126,207 @@ class BugDB:
                     )
             except sqlite3.Error as e:
                 raise SchemaMigrationError(f"migration to v{failed_version} failed: {e}") from e
+
+    # --- 序列化辅助 ---
+    @staticmethod
+    def _row_to_record(row: sqlite3.Row) -> BugRecord:
+        """sqlite3.Row -> BugRecord。
+
+        Example::
+
+            row = conn.execute("SELECT * FROM bugs WHERE id=1").fetchone()
+            rec = BugDB._row_to_record(row)
+        """
+        steps_raw = row['solution_steps'] or '[]'
+        steps = utils.safe_json_loads(steps_raw) or []
+        tags = utils.comma_split(row['tags'] or '')
+        # consecutive_failures 在 v2 加入；老库可能缺失
+        try:
+            cf = row['consecutive_failures'] or 0
+        except (IndexError, KeyError):
+            cf = 0
+        return BugRecord(
+            id=row['id'],
+            error_type=ErrorType(row['error_type']),
+            error_pattern=row['error_pattern'],
+            error_message=row['error_message'] or '',
+            root_cause=row['root_cause'],
+            solution=row['solution'],
+            solution_steps=steps,
+            language=row['language'] or 'any',
+            project_type=row['project_type'] or 'any',
+            tags=tags,
+            confidence=row['confidence'],
+            usage_count=row['usage_count'],
+            success_count=row['success_count'],
+            status=Status(row['status']),
+            replaces_id=row['replaces_id'],
+            valid_for=row['valid_for'],
+            deprecation_note=row['deprecation_note'],
+            consecutive_failures=cf,
+            created_at=row['created_at'],
+            updated_at=row['updated_at'],
+        )
+
+    # --- CRUD ---
+    def add(self, record: BugRecord) -> BugRecord:
+        """插入一条记录，返回带 id 与时间戳的副本。
+
+        Example::
+
+            rec = BugRecord(error_type=ErrorType.LINK, error_pattern="LNK2001",
+                            root_cause="missing lib", solution="link ws2_32.lib")
+            saved = db.add(rec)
+            assert saved.id is not None
+        """
+        now = utils.now_iso()
+        record.created_at = record.created_at or now
+        record.updated_at = now
+        with self._connection() as conn:
+            cur = conn.execute(
+                """INSERT INTO bugs(
+                    error_type, error_pattern, error_message, root_cause, solution,
+                    solution_steps, language, project_type, tags,
+                    confidence, usage_count, success_count, status,
+                    replaces_id, valid_for, deprecation_note,
+                    consecutive_failures, created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    record.error_type.value if isinstance(record.error_type, ErrorType) else record.error_type,
+                    record.error_pattern,
+                    record.error_message,
+                    record.root_cause,
+                    record.solution,
+                    utils.to_json_array(record.solution_steps),
+                    record.language,
+                    record.project_type,
+                    utils.comma_join(record.tags),
+                    record.confidence,
+                    record.usage_count,
+                    record.success_count,
+                    record.status.value if isinstance(record.status, Status) else record.status,
+                    record.replaces_id,
+                    record.valid_for,
+                    record.deprecation_note,
+                    record.consecutive_failures,
+                    record.created_at,
+                    record.updated_at,
+                ),
+            )
+            record.id = cur.lastrowid
+        return record
+
+    def get(self, bug_id: int) -> BugRecord:
+        """按 ID 查询，缺失抛 RecordNotFound。
+
+        Example::
+
+            rec = db.get(1)
+            print(rec.error_pattern)
+        """
+        with self._connection() as conn:
+            row = conn.execute("SELECT * FROM bugs WHERE id=?", (bug_id,)).fetchone()
+        if row is None:
+            raise RecordNotFound(f"bug id={bug_id} not found")
+        return self._row_to_record(row)
+
+    def update(self, record: BugRecord) -> BugRecord:
+        """整条更新。会刷新 updated_at。
+
+        Example::
+
+            rec = db.get(1)
+            rec.solution = "new"
+            db.update(rec)
+        """
+        if record.id is None:
+            raise RecordNotFound("cannot update record without id")
+        record.updated_at = utils.now_iso()
+        with self._connection() as conn:
+            cur = conn.execute(
+                """UPDATE bugs SET
+                    error_type=?, error_pattern=?, error_message=?, root_cause=?, solution=?,
+                    solution_steps=?, language=?, project_type=?, tags=?,
+                    confidence=?, usage_count=?, success_count=?, status=?,
+                    replaces_id=?, valid_for=?, deprecation_note=?,
+                    consecutive_failures=?, updated_at=?
+                WHERE id=?""",
+                (
+                    record.error_type.value if isinstance(record.error_type, ErrorType) else record.error_type,
+                    record.error_pattern,
+                    record.error_message,
+                    record.root_cause,
+                    record.solution,
+                    utils.to_json_array(record.solution_steps),
+                    record.language,
+                    record.project_type,
+                    utils.comma_join(record.tags),
+                    record.confidence,
+                    record.usage_count,
+                    record.success_count,
+                    record.status.value if isinstance(record.status, Status) else record.status,
+                    record.replaces_id,
+                    record.valid_for,
+                    record.deprecation_note,
+                    record.consecutive_failures,
+                    record.updated_at,
+                    record.id,
+                ),
+            )
+            if cur.rowcount == 0:
+                raise RecordNotFound(f"bug id={record.id} not found")
+        return record
+
+    def delete(self, bug_id: int, hard: bool = False) -> None:
+        """删除。默认软删（status=archived），hard=True 物理删除。
+
+        Example::
+
+            db.delete(1)             # 软删 -> archived
+            db.delete(1, hard=True)  # 物理 DELETE
+        """
+        if hard:
+            with self._connection() as conn:
+                cur = conn.execute("DELETE FROM bugs WHERE id=?", (bug_id,))
+                if cur.rowcount == 0:
+                    raise RecordNotFound(f"bug id={bug_id} not found")
+            return
+        record = self.get(bug_id)
+        record.status = Status.ARCHIVED
+        self.update(record)
+
+    def restore(self, bug_id: int) -> BugRecord:
+        """从 archived 恢复为 active，并清零 consecutive_failures。
+
+        Example::
+
+            db.delete(1)
+            db.restore(1)  # 状态回到 active
+        """
+        record = self.get(bug_id)
+        record.status = Status.ACTIVE
+        record.consecutive_failures = 0
+        return self.update(record)
+
+    def list_all(self, status: str | None = None, language: str | None = None) -> list:
+        """列出记录，可按 status/language 过滤。
+
+        - status='all' 等同不过滤；language 过滤时同时匹配 'any'。
+        - 排序：confidence DESC, id DESC。
+
+        Example::
+
+            actives = db.list_all(status='active', language='c++')
+        """
+        sql = "SELECT * FROM bugs WHERE 1=1"
+        params: list = []
+        if status and status != 'all':
+            sql += " AND status=?"
+            params.append(status)
+        if language:
+            sql += " AND (language=? OR language='any')"
+            params.append(language)
+        sql += " ORDER BY confidence DESC, id DESC"
+        with self._connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._row_to_record(r) for r in rows]

@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 from bugdb.db import BugDB, MIGRATIONS
 from bugdb import utils
+from bugdb.models import BugRecord, ErrorType, Status
 
 
 def test_schema_initialized(db):
@@ -100,3 +101,84 @@ def test_fk_replaces_id_on_delete_set_null(db):
         row = conn.execute("SELECT replaces_id FROM bugs WHERE id = ?", (b_id,)).fetchone()
     assert row is not None
     assert row[0] is None
+
+
+# ============================================================
+# Task 6: CRUD 测试
+# ============================================================
+
+def _sample_bug() -> BugRecord:
+    return BugRecord(
+        error_type=ErrorType.LINK,
+        error_pattern="LNK2001 unresolved external symbol",
+        error_message="error LNK2001: unresolved external symbol __imp_WSAStartup",
+        root_cause="missing ws2_32.lib",
+        solution="link ws2_32.lib",
+        solution_steps=["open project", "linker > input", "add ws2_32.lib"],
+        language="c++",
+        project_type="vs",
+        tags=["linker", "windows"],
+    )
+
+
+def test_add_returns_id(db):
+    b = db.add(_sample_bug())
+    assert b.id is not None
+    assert b.created_at != ""
+    assert b.updated_at != ""
+
+
+def test_get_returns_record(db):
+    added = db.add(_sample_bug())
+    fetched = db.get(added.id)
+    assert fetched.error_pattern == added.error_pattern
+    assert fetched.solution_steps == ["open project", "linker > input", "add ws2_32.lib"]
+    assert fetched.tags == ["linker", "windows"]
+    assert fetched.status == Status.ACTIVE
+
+
+def test_get_missing_raises(db):
+    from bugdb.exceptions import RecordNotFound
+    with pytest.raises(RecordNotFound):
+        db.get(99999)
+
+
+def test_update_changes_fields(db):
+    b = db.add(_sample_bug())
+    b.solution = "updated solution"
+    b.confidence = 80
+    db.update(b)
+    fetched = db.get(b.id)
+    assert fetched.solution == "updated solution"
+    assert fetched.confidence == 80
+
+
+def test_delete_soft(db):
+    b = db.add(_sample_bug())
+    db.delete(b.id, hard=False)
+    fetched = db.get(b.id)
+    assert fetched.status == Status.ARCHIVED
+
+
+def test_delete_hard(db):
+    from bugdb.exceptions import RecordNotFound
+    b = db.add(_sample_bug())
+    db.delete(b.id, hard=True)
+    with pytest.raises(RecordNotFound):
+        db.get(b.id)
+
+
+def test_restore(db):
+    b = db.add(_sample_bug())
+    db.delete(b.id, hard=False)
+    db.restore(b.id)
+    fetched = db.get(b.id)
+    assert fetched.status == Status.ACTIVE
+    assert fetched.consecutive_failures == 0
+
+
+def test_list_all(db):
+    db.add(_sample_bug())
+    db.add(_sample_bug())
+    rows = db.list_all()
+    assert len(rows) >= 2
