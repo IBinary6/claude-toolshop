@@ -20,7 +20,7 @@ from bugdb import formatters, search as search_mod  # noqa: E402
 from bugdb import utils as _utils  # noqa: E402
 from bugdb.db import BugDB  # noqa: E402
 from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
-from bugdb.models import BugRecord, ErrorType  # noqa: E402
+from bugdb.models import BugRecord, ErrorType, Status  # noqa: E402
 
 
 def _parse_steps(raw: str) -> list | None:
@@ -187,6 +187,98 @@ def cmd_feedback(args, db: BugDB) -> int:
     return 0
 
 
+def cmd_deprecate(args, db: BugDB) -> int:
+    """deprecate 子命令处理：标记为废弃 + 关联替代方案。"""
+    rec = db.get(args.id)
+    rec.status = Status.DEPRECATED
+    if args.replace_with is not None:
+        rec.replaces_id = args.replace_with
+    if args.reason:
+        rec.deprecation_note = args.reason
+    updated = db.update(rec)
+    _output(updated, 'record', args.format)
+    return 0
+
+
+def cmd_obsolete(args, db: BugDB) -> int:
+    """obsolete 子命令处理：标记为方案不可用。"""
+    rec = db.get(args.id)
+    rec.status = Status.OBSOLETE
+    if args.reason:
+        rec.deprecation_note = args.reason
+    updated = db.update(rec)
+    _output(updated, 'record', args.format)
+    return 0
+
+
+def cmd_find_similar(args, db: BugDB) -> int:
+    """find-similar 子命令处理：录入前去重。"""
+    results = search_mod.find_similar(db, pattern=args.pattern,
+                                      threshold=args.threshold, limit=args.limit)
+    _output(results, 'results', args.format)
+    return 0
+
+
+def cmd_normalize(args, db: BugDB) -> int:
+    """normalize 子命令处理：暴露 normalizer 给 Hook/Skill。"""
+    from bugdb import normalizer
+    import json as _json
+    normalized = normalizer.normalize(args.input)
+    keywords = normalizer.extract_keywords(normalized)
+    out = {'normalized': normalized, 'keywords': keywords}
+    if args.format == 'text':
+        _print(f"normalized: {normalized}\nkeywords:   {keywords}")
+    else:
+        _print(_json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_export(args, db: BugDB) -> int:
+    """export 子命令处理：全量导出到 JSON 文件。"""
+    import json as _json
+    records = db.list_all(status='all')
+    payload = {
+        'version': 1,
+        'records': [formatters._record_to_dict(r) for r in records],
+    }
+    Path(args.output).write_text(_json.dumps(payload, ensure_ascii=False, indent=2),
+                                 encoding='utf-8')
+    _output({'exported': len(records), 'path': args.output}, 'stats', args.format)
+    return 0
+
+
+def cmd_import(args, db: BugDB) -> int:
+    """import 子命令处理：从 JSON 文件批量导入。"""
+    import json as _json
+    raw = Path(args.input).read_text(encoding='utf-8')
+    payload = _json.loads(raw)
+    records = payload.get('records', [])
+    imported = 0
+    for d in records:
+        rec = BugRecord(
+            error_type=ErrorType(d.get('error_type', 'compile')),
+            error_pattern=d.get('error_pattern', ''),
+            error_message=d.get('error_message', ''),
+            root_cause=d.get('root_cause', ''),
+            solution=d.get('solution', ''),
+            solution_steps=list(d.get('solution_steps') or []),
+            language=d.get('language', 'any'),
+            project_type=d.get('project_type', 'any'),
+            tags=list(d.get('tags') or []),
+            confidence=int(d.get('confidence', 100)),
+            usage_count=int(d.get('usage_count', 0)),
+            success_count=int(d.get('success_count', 0)),
+            status=Status(d.get('status', 'active')),
+            replaces_id=d.get('replaces_id'),
+            valid_for=d.get('valid_for'),
+            deprecation_note=d.get('deprecation_note'),
+        )
+        db.add(rec)
+        imported += 1
+    _output({'imported': imported, 'path': args.input}, 'stats', args.format)
+    return 0
+
+
 def _add_common(p: argparse.ArgumentParser) -> None:
     """所有子命令共用的参数。"""
     p.add_argument('--format', choices=['json', 'text'], default='json')
@@ -267,6 +359,41 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--result', required=True, choices=['success', 'failure'])
     _add_common(p)
 
+    # deprecate
+    p = sub.add_parser('deprecate', help='标记记录为废弃（建议有替代方案）')
+    p.add_argument('--id', type=int, required=True)
+    p.add_argument('--replace-with', dest='replace_with', type=int, default=None)
+    p.add_argument('--reason', default=None)
+    _add_common(p)
+
+    # obsolete
+    p = sub.add_parser('obsolete', help='标记记录为方案不可用（无替代）')
+    p.add_argument('--id', type=int, required=True)
+    p.add_argument('--reason', default=None)
+    _add_common(p)
+
+    # find-similar
+    p = sub.add_parser('find-similar', help='录入前查找相似记录')
+    p.add_argument('--pattern', required=True)
+    p.add_argument('--threshold', type=float, default=0.7)
+    p.add_argument('--limit', type=int, default=5)
+    _add_common(p)
+
+    # normalize
+    p = sub.add_parser('normalize', help='对错误消息做归一化（暴露给 Hook/Skill）')
+    p.add_argument('--input', required=True)
+    _add_common(p)
+
+    # export
+    p = sub.add_parser('export', help='全量导出到 JSON 文件')
+    p.add_argument('--output', required=True)
+    _add_common(p)
+
+    # import
+    p = sub.add_parser('import', help='从 JSON 文件批量导入')
+    p.add_argument('--input', required=True)
+    _add_common(p)
+
     return parser
 
 
@@ -302,6 +429,15 @@ HANDLERS.update({
     'delete': cmd_delete,
     'restore': cmd_restore,
     'feedback': cmd_feedback,
+})
+
+HANDLERS.update({
+    'deprecate': cmd_deprecate,
+    'obsolete': cmd_obsolete,
+    'find-similar': cmd_find_similar,
+    'normalize': cmd_normalize,
+    'export': cmd_export,
+    'import': cmd_import,
 })
 
 

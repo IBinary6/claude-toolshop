@@ -151,3 +151,68 @@ def test_cli_add_rejects_solution_steps_object(tmp_path):
         "--solution-steps", "{}",
     ], db_file)
     assert r.returncode == 2
+
+
+def _add_bug(db_file, **extra):
+    base = [
+        "add", "--error-type", "compile",
+        "--error-message", "error C2065: undeclared identifier foo",
+        "--root-cause", "missing include",
+        "--solution", "include header",
+    ]
+    for k, v in extra.items():
+        base.extend([f"--{k}", str(v)])
+    r = _run(base, db_file)
+    return json.loads(r.stdout)["id"]
+
+
+def test_cli_deprecate(tmp_path):
+    db_file = tmp_path / "x.db"
+    old_id = _add_bug(db_file)
+    new_id = _add_bug(db_file)
+    r = _run(["deprecate", "--id", str(old_id), "--replace-with", str(new_id),
+              "--reason", "better way"], db_file)
+    assert r.returncode == 0
+    g = _run(["get", "--id", str(old_id)], db_file)
+    obj = json.loads(g.stdout)
+    assert obj["status"] == "deprecated"
+    assert obj["replaces_id"] == new_id
+
+
+def test_cli_obsolete(tmp_path):
+    db_file = tmp_path / "x.db"
+    bug_id = _add_bug(db_file)
+    r = _run(["obsolete", "--id", str(bug_id), "--reason", "API gone"], db_file)
+    assert r.returncode == 0
+    g = _run(["get", "--id", str(bug_id)], db_file)
+    assert json.loads(g.stdout)["status"] == "obsolete"
+
+
+def test_cli_find_similar(tmp_path):
+    db_file = tmp_path / "x.db"
+    _add_bug(db_file)
+    r = _run(["find-similar", "--pattern", "C2065 undeclared identifier"], db_file)
+    assert r.returncode == 0
+    assert len(json.loads(r.stdout)["results"]) >= 1
+
+
+def test_cli_normalize(tmp_path):
+    r = _run(["normalize", "--input", r"C:\x.cpp(42): error LNK2001"], tmp_path / "x.db")
+    assert r.returncode == 0
+    obj = json.loads(r.stdout)
+    assert "C:\\" not in obj["normalized"]
+    assert "LNK2001" in obj["normalized"]
+
+
+def test_cli_export_import(tmp_path):
+    db_a = tmp_path / "a.db"
+    db_b = tmp_path / "b.db"
+    _add_bug(db_a)
+    out = tmp_path / "dump.json"
+    e = _run(["export", "--output", str(out)], db_a)
+    assert e.returncode == 0
+    assert out.exists()
+    i = _run(["import", "--input", str(out)], db_b)
+    assert i.returncode == 0
+    lst = _run(["list"], db_b)
+    assert len(json.loads(lst.stdout)["results"]) >= 1
