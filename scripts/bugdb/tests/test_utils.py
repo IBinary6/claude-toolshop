@@ -21,8 +21,18 @@ def test_truncate_short():
 
 def test_truncate_long():
     out = utils.truncate('a' * 300, 10)
-    assert len(out) <= 13
+    assert len(out) == 10
     assert out.endswith('...')
+    assert out == 'aaaaaaa...'
+
+def test_now_iso_has_timezone():
+    s = utils.now_iso()
+    dt = utils.parse_iso(s)
+    assert dt.tzinfo is not None
+
+def test_parse_iso_with_z_suffix():
+    dt = utils.parse_iso('2024-01-01T12:00:00Z')
+    assert dt.tzinfo is not None
 
 def test_comma_split_empty():
     assert utils.comma_split('') == []
