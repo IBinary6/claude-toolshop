@@ -87,6 +87,9 @@ class BugDB:
     def _connection(self):
         """打开连接，启用 WAL + 外键，事务自动提交/回滚。"""
         conn = sqlite3.connect(str(self._path))
+        # WAL 与 foreign_keys 都必须在任何事务开启之前设置：
+        # - journal_mode=WAL 是数据库级持久设置，但若已在事务内则会被忽略；
+        # - foreign_keys 是连接级开关，不跨连接持久化，因此每次新建连接都要重新打开。
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
@@ -111,13 +114,14 @@ class BugDB:
             row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
             current = row[0] if row and row[0] is not None else 0
             target = max(MIGRATIONS.keys())
-            v = current
+            failed_version = current
             try:
                 for v in range(current + 1, target + 1):
+                    failed_version = v
                     MIGRATIONS[v](conn)
                     conn.execute(
                         "INSERT INTO schema_version(version, applied_at) VALUES (?, ?)",
                         (v, utils.now_iso()),
                     )
             except sqlite3.Error as e:
-                raise SchemaMigrationError(f"migration to v{v} failed: {e}") from e
+                raise SchemaMigrationError(f"migration to v{failed_version} failed: {e}") from e
