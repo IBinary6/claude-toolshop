@@ -1,37 +1,37 @@
 """序列化 BugRecord 为 JSON / 人类可读纯文本。"""
 import json
-from .models import BugRecord, ErrorType, Status
+from .models import BugRecord
 
 
 def _record_to_dict(r: BugRecord) -> dict:
     """将 BugRecord 转为 JSON 友好的 dict。
 
     Enum 字段使用 ``.value`` 字符串化；solution_steps / tags 转为 list；
-    replacement_hint 通过 getattr 防御性读取并展开为 replacement_id / replacement_solution。
+    replacement_hint 若存在则展开为 replacement_id / replacement_solution。
     """
     d = {
         'id': r.id,
-        'error_type': r.error_type.value if isinstance(r.error_type, ErrorType) else r.error_type,
+        'error_type': r.error_type.value,
         'error_pattern': r.error_pattern,
         'error_message': r.error_message,
         'root_cause': r.root_cause,
         'solution': r.solution,
-        'solution_steps': list(r.solution_steps or []),
+        'solution_steps': list(r.solution_steps),
         'language': r.language,
         'project_type': r.project_type,
-        'tags': list(r.tags or []),
+        'tags': list(r.tags),
         'confidence': r.confidence,
         'usage_count': r.usage_count,
         'success_count': r.success_count,
-        'status': r.status.value if isinstance(r.status, Status) else r.status,
+        'status': r.status.value,
         'replaces_id': r.replaces_id,
         'valid_for': r.valid_for,
         'deprecation_note': r.deprecation_note,
         'created_at': r.created_at,
         'updated_at': r.updated_at,
     }
-    hint = getattr(r, 'replacement_hint', None)
-    if hint is not None and hasattr(hint, 'id'):
+    hint = r.replacement_hint
+    if hint is not None:
         d['replacement_id'] = hint.id
         d['replacement_solution'] = hint.solution
     return d
@@ -85,16 +85,16 @@ def results_to_text(results: list) -> str:
         return "(no results)"
     lines = []
     for r in results:
-        et = r.error_type.value if isinstance(r.error_type, ErrorType) else r.error_type
-        st = r.status.value if isinstance(r.status, Status) else r.status
+        et = r.error_type.value
+        st = r.status.value
         lines.append(f"#{r.id} [{et}] confidence={r.confidence} status={st}")
         lines.append(f"  pattern: {r.error_pattern}")
         lines.append(f"  solution: {r.solution}")
         if r.solution_steps:
             for i, step in enumerate(r.solution_steps, 1):
                 lines.append(f"    {i}. {step}")
-        hint = getattr(r, 'replacement_hint', None)
-        if hint is not None and hasattr(hint, 'id'):
+        hint = r.replacement_hint
+        if hint is not None:
             lines.append(f"  -> replaced by #{hint.id}: {hint.solution}")
         lines.append("")
     return '\n'.join(lines)
@@ -130,13 +130,13 @@ def stats_to_json(stats: dict) -> str:
 
 
 def stats_to_text(stats: dict) -> str:
-    """stats 字典序列化为人类可读纯文本。
+    """stats 字典序列化为人类可读纯文本（按 key 字母序排序，输出确定化）。
 
     # Example
     ```python
     >>> stats_to_text({"total": 10, "active": 8})
-    'total: 10\\nactive: 8'
+    'active: 8\\ntotal: 10'
     ```
     """
-    lines = [f"{k}: {v}" for k, v in stats.items()]
+    lines = [f"{k}: {v}" for k, v in sorted(stats.items())]
     return '\n'.join(lines)
