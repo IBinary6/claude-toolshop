@@ -18,17 +18,6 @@ RULES = [
     (re.compile(r'\s+'), ' '),
 ]
 
-
-def normalize(raw: str) -> str:
-    """对原始错误信息按 RULES 顺序清洗，返回规范化字符串。"""
-    if not raw:
-        return ''
-    out = raw
-    for pattern, repl in RULES:
-        out = pattern.sub(repl, out)
-    return out.strip()
-
-
 KNOWN_PHRASES = [
     "unresolved external symbol", "undefined reference",
     "cannot convert", "no matching function",
@@ -38,6 +27,27 @@ KNOWN_PHRASES = [
 
 _ERROR_CODE_RE = re.compile(r'[A-Z]+\d{3,5}|error\[E\d+\]')
 _SYMBOL_RE = re.compile(r'[\w:]+(?:::[\w]+)+|__\w+')
+
+
+def normalize(raw: str) -> str:
+    """对原始错误信息按 RULES 顺序清洗，返回规范化字符串。
+
+    # Example
+    ```
+    >>> normalize("C:/proj/x.cpp(42): error LNK2001: unresolved")
+    'error LNK2001 unresolved'
+    >>> normalize("main.rs:10:5 error[E0308] at 0xDEADBEEF")
+    'main error[E0308] at'
+    >>> normalize("2024-01-15T10:30:00 panic at line 42")
+    'panic at'
+    ```
+    """
+    if not raw:
+        return ''
+    out = raw
+    for pattern, repl in RULES:
+        out = pattern.sub(repl, out)
+    return out.strip()
 
 
 def extract_keywords(normalized: str) -> str:
@@ -53,7 +63,7 @@ def extract_keywords(normalized: str) -> str:
     """
     if not normalized:
         return ''
-    keywords: list = []
+    keywords: list[str] = []
     keywords.extend(_ERROR_CODE_RE.findall(normalized))
     keywords.extend(_SYMBOL_RE.findall(normalized))
     lower = normalized.lower()
@@ -63,10 +73,4 @@ def extract_keywords(normalized: str) -> str:
     if not keywords:
         return normalized.strip()
     # 去重保序
-    seen = set()
-    uniq = []
-    for k in keywords:
-        if k not in seen:
-            seen.add(k)
-            uniq.append(k)
-    return ' '.join(uniq)
+    return ' '.join(dict.fromkeys(keywords))
