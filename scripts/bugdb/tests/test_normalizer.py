@@ -3,7 +3,7 @@
 验证意图：清洗后的字符串能让不同路径/行号/地址下的相同错误产生一致的 pattern，
 从而保证 BugDB 的命中率。
 """
-from bugdb.normalizer import normalize
+from bugdb.normalizer import normalize, extract_keywords
 
 
 def test_windows_path_stripped():
@@ -61,3 +61,33 @@ def test_same_error_different_paths_normalize_equal():
     a = normalize(r"C:\Users\alice\proj\main.cpp(42): error LNK2001 unresolved")
     b = normalize(r"D:\dev\other\src\main.cpp(99): error LNK2001 unresolved")
     assert a == b
+
+
+def test_extract_error_code():
+    kw = extract_keywords("error LNK2001 unresolved")
+    assert "LNK2001" in kw
+
+
+def test_extract_rust_error_code():
+    kw = extract_keywords("error[E0308]: mismatched types")
+    assert "error[E0308]" in kw
+
+
+def test_extract_namespace_symbol():
+    kw = extract_keywords("undefined reference to std::vector::push_back")
+    assert "std::vector::push_back" in kw
+
+
+def test_extract_double_underscore_symbol():
+    kw = extract_keywords("__imp_WSAStartup unresolved")
+    assert "__imp_WSAStartup" in kw
+
+
+def test_extract_known_phrase():
+    kw = extract_keywords("unresolved external symbol foo")
+    assert "unresolved external symbol" in kw
+
+
+def test_extract_fallback_to_input():
+    kw = extract_keywords("just some plain words")
+    assert kw == "just some plain words"

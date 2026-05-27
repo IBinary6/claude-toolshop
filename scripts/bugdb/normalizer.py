@@ -27,3 +27,46 @@ def normalize(raw: str) -> str:
     for pattern, repl in RULES:
         out = pattern.sub(repl, out)
     return out.strip()
+
+
+KNOWN_PHRASES = [
+    "unresolved external symbol", "undefined reference",
+    "cannot convert", "no matching function",
+    "access violation", "segmentation fault",
+    "module not found", "no module named",
+]
+
+_ERROR_CODE_RE = re.compile(r'[A-Z]+\d{3,5}|error\[E\d+\]')
+_SYMBOL_RE = re.compile(r'[\w:]+(?:::[\w]+)+|__\w+')
+
+
+def extract_keywords(normalized: str) -> str:
+    """从规范化字符串中提取错误码 / 命名空间符号 / 已知短语。
+
+    返回空格分隔的关键词串；无关键词时回退到原文。
+
+    # Example
+    ```
+    >>> extract_keywords("error LNK2001 unresolved external symbol foo")
+    'LNK2001 unresolved external symbol'
+    ```
+    """
+    if not normalized:
+        return ''
+    keywords: list = []
+    keywords.extend(_ERROR_CODE_RE.findall(normalized))
+    keywords.extend(_SYMBOL_RE.findall(normalized))
+    lower = normalized.lower()
+    for phrase in KNOWN_PHRASES:
+        if phrase in lower:
+            keywords.append(phrase)
+    if not keywords:
+        return normalized.strip()
+    # 去重保序
+    seen = set()
+    uniq = []
+    for k in keywords:
+        if k not in seen:
+            seen.add(k)
+            uniq.append(k)
+    return ' '.join(uniq)
