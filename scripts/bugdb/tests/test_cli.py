@@ -53,3 +53,73 @@ def test_cli_list_empty(tmp_path):
 def test_cli_get_missing(tmp_path):
     r = _run(["get", "--id", "999"], tmp_path / "x.db")
     assert r.returncode == 2  # RecordNotFound 退出码契约
+
+
+def test_cli_add_and_search_roundtrip(tmp_path):
+    db_file = tmp_path / "rt.db"
+    add = _run([
+        "add",
+        "--error-type", "link",
+        "--error-message", "error LNK2001: unresolved external symbol __imp_WSAStartup",
+        "--root-cause", "missing ws2_32.lib",
+        "--solution", "link ws2_32.lib",
+        "--solution-steps", '["open","add lib"]',
+        "--language", "c++",
+        "--project-type", "vs",
+        "--tags", "linker,windows",
+    ], db_file)
+    assert add.returncode == 0, add.stderr
+    new = json.loads(add.stdout)
+    bug_id = new["id"]
+
+    s = _run(["search", "--query", "LNK2001 unresolved external symbol", "--language", "c++"], db_file)
+    assert s.returncode == 0
+    obj = json.loads(s.stdout)
+    assert any(r["id"] == bug_id for r in obj["results"])
+
+
+def test_cli_update(tmp_path):
+    db_file = tmp_path / "u.db"
+    add = _run([
+        "add", "--error-type", "compile",
+        "--error-message", "msg",
+        "--root-cause", "rc", "--solution", "sol",
+    ], db_file)
+    bug_id = json.loads(add.stdout)["id"]
+    u = _run(["update", "--id", str(bug_id), "--solution", "new sol", "--confidence", "70"], db_file)
+    assert u.returncode == 0
+    g = _run(["get", "--id", str(bug_id)], db_file)
+    obj = json.loads(g.stdout)
+    assert obj["solution"] == "new sol"
+    assert obj["confidence"] == 70
+
+
+def test_cli_delete_soft_and_restore(tmp_path):
+    db_file = tmp_path / "d.db"
+    add = _run([
+        "add", "--error-type", "compile",
+        "--error-message", "msg",
+        "--root-cause", "rc", "--solution", "sol",
+    ], db_file)
+    bug_id = json.loads(add.stdout)["id"]
+    _run(["delete", "--id", str(bug_id)], db_file)
+    g = _run(["get", "--id", str(bug_id)], db_file)
+    assert json.loads(g.stdout)["status"] == "archived"
+    _run(["restore", "--id", str(bug_id)], db_file)
+    g = _run(["get", "--id", str(bug_id)], db_file)
+    assert json.loads(g.stdout)["status"] == "active"
+
+
+def test_cli_feedback(tmp_path):
+    db_file = tmp_path / "f.db"
+    add = _run([
+        "add", "--error-type", "compile",
+        "--error-message", "msg",
+        "--root-cause", "rc", "--solution", "sol",
+    ], db_file)
+    bug_id = json.loads(add.stdout)["id"]
+    _run(["feedback", "--id", str(bug_id), "--result", "success"], db_file)
+    g = _run(["get", "--id", str(bug_id)], db_file)
+    obj = json.loads(g.stdout)
+    assert obj["usage_count"] == 1
+    assert obj["success_count"] == 1

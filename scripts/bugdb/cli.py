@@ -19,6 +19,7 @@ if str(_PARENT) not in sys.path:
 from bugdb import formatters, search as search_mod  # noqa: E402
 from bugdb.db import BugDB  # noqa: E402
 from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
+from bugdb.models import BugRecord, ErrorType  # noqa: E402
 
 
 def _print(payload: str) -> None:
@@ -85,6 +86,85 @@ def cmd_stats(args, db: BugDB) -> int:
     return 0
 
 
+def cmd_add(args, db: BugDB) -> int:
+    """add 子命令处理函数：构造 BugRecord 并写入。"""
+    from bugdb import normalizer, utils as _utils
+    steps = _utils.safe_json_loads(args.solution_steps) or []
+    if not isinstance(steps, list):
+        sys.stderr.write("error: --solution-steps must be a JSON array\n")
+        return 2
+    pattern = args.error_pattern or normalizer.normalize(args.error_message)
+    if not pattern:
+        sys.stderr.write("error: error_pattern is empty (provide --error-pattern or non-empty --error-message)\n")
+        return 2
+    rec = BugRecord(
+        error_type=ErrorType(args.error_type),
+        error_pattern=pattern,
+        error_message=args.error_message,
+        root_cause=args.root_cause,
+        solution=args.solution,
+        solution_steps=steps,
+        language=args.language,
+        project_type=args.project_type,
+        tags=_utils.comma_split(args.tags),
+        confidence=args.confidence,
+        valid_for=args.valid_for,
+    )
+    saved = db.add(rec)
+    _output(saved, 'record', args.format)
+    return 0
+
+
+def cmd_update(args, db: BugDB) -> int:
+    """update 子命令处理函数：仅覆盖显式给出的字段。"""
+    from bugdb import utils as _utils
+    rec = db.get(args.id)
+    if args.solution is not None:
+        rec.solution = args.solution
+    if args.root_cause is not None:
+        rec.root_cause = args.root_cause
+    if args.solution_steps is not None:
+        steps = _utils.safe_json_loads(args.solution_steps)
+        if not isinstance(steps, list):
+            sys.stderr.write("error: --solution-steps must be a JSON array\n")
+            return 2
+        rec.solution_steps = steps
+    if args.tags is not None:
+        rec.tags = _utils.comma_split(args.tags)
+    if args.valid_for is not None:
+        rec.valid_for = args.valid_for
+    if args.confidence is not None:
+        rec.confidence = args.confidence
+    if args.language is not None:
+        rec.language = args.language
+    if args.project_type is not None:
+        rec.project_type = args.project_type
+    updated = db.update(rec)
+    _output(updated, 'record', args.format)
+    return 0
+
+
+def cmd_delete(args, db: BugDB) -> int:
+    """delete 子命令处理函数：--hard 表示物理删。"""
+    db.delete(args.id, hard=args.hard)
+    _output({'deleted': args.id, 'hard': args.hard}, 'stats', args.format)
+    return 0
+
+
+def cmd_restore(args, db: BugDB) -> int:
+    """restore 子命令处理函数：从 archived 恢复为 active。"""
+    rec = db.restore(args.id)
+    _output(rec, 'record', args.format)
+    return 0
+
+
+def cmd_feedback(args, db: BugDB) -> int:
+    """feedback 子命令处理函数：成功/失败反馈，驱动 confidence 衰减。"""
+    rec = db.feedback(args.id, success=(args.result == 'success'))
+    _output(rec, 'record', args.format)
+    return 0
+
+
 def _add_common(p: argparse.ArgumentParser) -> None:
     """所有子命令共用的参数。"""
     p.add_argument('--format', choices=['json', 'text'], default='json')
@@ -117,6 +197,54 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser('stats', help='数据库统计信息')
     _add_common(p)
 
+    # add
+    p = sub.add_parser('add', help='录入新记录')
+    p.add_argument('--error-type', required=True,
+                   choices=[e.value for e in ErrorType])
+    p.add_argument('--error-pattern', default=None,
+                   help='缺省时由 normalize(error_message) 自动生成')
+    p.add_argument('--error-message', default='')
+    p.add_argument('--root-cause', required=True)
+    p.add_argument('--solution', required=True)
+    p.add_argument('--solution-steps', default='[]',
+                   help='JSON 数组字符串')
+    p.add_argument('--language', default='any')
+    p.add_argument('--project-type', default='any')
+    p.add_argument('--tags', default='')
+    p.add_argument('--confidence', type=int, default=100)
+    p.add_argument('--valid-for', default=None)
+    _add_common(p)
+
+    # update
+    p = sub.add_parser('update', help='更新已有记录')
+    p.add_argument('--id', type=int, required=True)
+    p.add_argument('--solution', default=None)
+    p.add_argument('--root-cause', default=None)
+    p.add_argument('--solution-steps', default=None)
+    p.add_argument('--tags', default=None)
+    p.add_argument('--valid-for', default=None)
+    p.add_argument('--confidence', type=int, default=None)
+    p.add_argument('--language', default=None)
+    p.add_argument('--project-type', default=None)
+    _add_common(p)
+
+    # delete
+    p = sub.add_parser('delete', help='删除记录（默认软删除）')
+    p.add_argument('--id', type=int, required=True)
+    p.add_argument('--hard', action='store_true')
+    _add_common(p)
+
+    # restore
+    p = sub.add_parser('restore', help='恢复软删除记录')
+    p.add_argument('--id', type=int, required=True)
+    _add_common(p)
+
+    # feedback
+    p = sub.add_parser('feedback', help='反馈方案有效性')
+    p.add_argument('--id', type=int, required=True)
+    p.add_argument('--result', required=True, choices=['success', 'failure'])
+    _add_common(p)
+
     return parser
 
 
@@ -145,6 +273,14 @@ HANDLERS = {
     'list': cmd_list,
     'stats': cmd_stats,
 }
+
+HANDLERS.update({
+    'add': cmd_add,
+    'update': cmd_update,
+    'delete': cmd_delete,
+    'restore': cmd_restore,
+    'feedback': cmd_feedback,
+})
 
 
 if __name__ == '__main__':
