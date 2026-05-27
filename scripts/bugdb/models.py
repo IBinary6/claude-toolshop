@@ -49,3 +49,5 @@ class BugRecord:
     consecutive_failures: int = 0
     created_at: str = ""
     updated_at: str = ""
+    # 非持久化字段：search() 命中 deprecated 时附加替代记录，DB CRUD 不读写该列。
+    replacement_hint: "BugRecord | None" = None

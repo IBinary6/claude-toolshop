@@ -8,8 +8,14 @@
 deprecated 命中会自动附带 ``replacement_hint`` 属性，指向其替代记录。
 """
 from .db import BugDB
+from .exceptions import RecordNotFound
 from .models import BugRecord, Status
 from . import normalizer
+
+
+# 排序前过取因子：FTS 返回的相关性顺序与最终 confidence/success_count 排序不一致，
+# 取 limit * _OVERFETCH_FACTOR 条参与排序，保证 top-N 质量。
+_OVERFETCH_FACTOR = 3
 
 
 def search(db: BugDB, query: str, language: str | None = None,
@@ -45,7 +51,7 @@ def search(db: BugDB, query: str, language: str | None = None,
         query=keywords,
         statuses=statuses,
         language=language,
-        limit=limit * 3,
+        limit=limit * _OVERFETCH_FACTOR,
     )
 
     # 第二轮：全文回退
@@ -55,7 +61,7 @@ def search(db: BugDB, query: str, language: str | None = None,
             query=normalized,
             statuses=statuses,
             language=language,
-            limit=limit * 3,
+            limit=limit * _OVERFETCH_FACTOR,
         )
 
     # 排序：confidence DESC, success_count DESC
@@ -66,7 +72,7 @@ def search(db: BugDB, query: str, language: str | None = None,
         if r.status == Status.DEPRECATED and r.replaces_id:
             try:
                 r.replacement_hint = db.get(r.replaces_id)
-            except Exception:
+            except RecordNotFound:
                 r.replacement_hint = None
 
     return results[:limit]
