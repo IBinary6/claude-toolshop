@@ -37,6 +37,18 @@
 
 该命令自动完成 Python 包安装、CLAUDE.md 触发规则追加、安装验证。
 
+#### 升级（方式一）
+
+仓库发布新版后：
+
+```
+/plugin marketplace update claude-toolshop
+```
+
+然后**完全退出 Claude Code 再重新打开**——skill description、hook 配置、command 在 Claude Code 启动时一次性加载到内存，仅 `marketplace update` 拉取了最新代码但运行期不会重读，必须重启才能生效。
+
+如果 `bugdb/` 下的 Python 代码也有更新，重启后第一次跑命令前再执行一次 `/bugdb-setup` 即可重新 `pip install -e`。
+
 ### 方式二：手动安装
 
 详见 [docs/MANUAL_INSTALL.md](./docs/MANUAL_INSTALL.md)。
