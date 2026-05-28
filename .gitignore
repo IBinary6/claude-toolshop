@@ -11,3 +11,57 @@ venv/
 *.egg-info/
 .DS_Store
 Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sw?
+.project
+.classpath
+.settings/
+
+# OS generated
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn/
+
+# Python
+*.py[cod]
+dist/
+
+# Build output
+[Bb]uild/
+out/
+*.obj
+*.o
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+
+# Secrets / Environment
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Logs
+*.log
+logs/
+
+# Claude Code
+.claude/sessions/
+.claude/todos/
