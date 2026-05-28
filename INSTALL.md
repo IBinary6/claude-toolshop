@@ -14,8 +14,8 @@
 | `commands/bugfix.md` | `~/.claude/commands/bugfix.md` |
 | `commands/bugsearch.md` | `~/.claude/commands/bugsearch.md` |
 | `hooks/js/bugdb_check/bugdb_check.js` | `~/.claude/hooks/js/bugdb_check/bugdb_check.js` |
-
-Skills 已直接落在仓库根 `D:/AI/cc-swtich/ccswitch-self/skills/bugdb-lookup/` 和 `.../bugdb-record/`，无需移动。
+| `skills/bugdb-lookup/SKILL.md` | `~/.claude/skills/bugdb-lookup/SKILL.md` |
+| `skills/bugdb-record/SKILL.md` | `~/.claude/skills/bugdb-record/SKILL.md` |
 
 数据库 `~/.claude/bugs.db` 由 CLI 首次执行时自动建表。
 
