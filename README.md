@@ -7,7 +7,7 @@
 在 Claude Code 中执行：
 
 ```
-/plugin marketplace add ibinary/claude-toolshop
+/plugin marketplace add IBinary6/claude-toolshop
 /plugin install bugdb-knowledge@claude-toolshop
 ```
 
