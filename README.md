@@ -1,6 +1,22 @@
-# BugDB 实现目录
+# claude-toolshop
 
-BugDB 知识库系统的实现代码。
+为 Claude Code 增强本地工程能力的插件集合（Plugin Marketplace）。
 
-- Spec: `D:/AI/cc-swtich/ccswitch-self/docs/2026-05-27-bugdb-knowledge-system-design.md`
-- Plan: `D:/AI/cc-swtich/ccswitch-self/docs/plans/2026-05-27-bugdb-implementation-plan.md`
+## 安装
+
+在 Claude Code 中执行：
+
+```
+/plugin marketplace add ibinary/claude-toolshop
+/plugin install bugdb-knowledge@claude-toolshop
+```
+
+## 插件列表
+
+| 插件 | 简介 |
+|------|------|
+| [bugdb-knowledge](./plugins/bugdb-knowledge) | 本地 Bug 知识库：SQLite + FTS5，Hook 自动查询，Skill 标准化录入 |
+
+## 协议
+
+MIT
