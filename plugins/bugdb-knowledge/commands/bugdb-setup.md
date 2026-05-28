@@ -1,63 +1,55 @@
 # /bugdb-setup — 一键完成插件配置
 
-安装 bugdb-knowledge 插件后，执行此命令完成剩余配置。
+安装 bugdb-knowledge 插件后执行此命令，自动完成环境检测、Python 包安装、CLAUDE.md 触发规则追加。
 
-## 前置依赖（用户机器上必须满足）
+## 执行流程
 
-- **Python ≥ 3.11**，且 `python` 在 PATH 上能直接调起（不是 Windows Store stub、不是失效 shim）
-- **pip 可用**（`python -m pip --version` 能输出版本）
-- 写入 `~/.claude/CLAUDE.md`、`~/.claude/bugdb/` 的权限
+按以下步骤依次执行。**遇到决策点必须使用 AskUserQuestion 工具询问用户，不要假设**。
 
-不满足任一条会在 Step 0 被检测出来并停下，不会出现"装到一半烂在中间"的状态。
+### Step 1: 检测 Python
 
-## 流程
-
-按以下步骤依次执行，每步汇报结果。**前置检查不过必须停下提示用户修复，不得带病往后跑**。
-
-### Step 0: 环境前置检查（任一不过立即停下）
-
-#### 0.1 Python 可执行性
+执行：
 
 ```bash
-python --version
+python -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}')"
 ```
 
-- 退出码非 0、出现 `0xffffffff` / `was not found` / `is not recognized` → PATH 上没有 Python，或指向失效 shim（常见于卸载残留的 chocolatey `python3.14.exe`、Windows Store stub `python.exe`）。
-- 报告检测到的现象，给用户修复路径（任选其一），**不要替用户执行安装命令**：
-  - Windows：`scoop install python`（推荐，自带 pip + Scripts 目录）/ `winget install Python.Python.3.11` / 从 https://www.python.org/downloads/ 下载，安装时勾选 "Add Python to PATH"
-  - macOS：`brew install python@3.11`
-  - Linux：发行版包管理器或 `pyenv install 3.11`
-- Windows 失效 shim 残留 → 提示用户清理（如 `choco uninstall python3` 或手动删除指向不存在路径的 `.exe`），然后重跑 `/bugdb-setup`。
+根据结果分三种情况：
 
-#### 0.2 Python 版本 ≥ 3.11
+- **退出码非 0 / 命令找不到** → Python 不可用，跳到 Step 2
+- **输出版本但 < 3.11** → Python 版本不够，跳到 Step 2
+- **输出版本且 ≥ 3.11** → 直接跳到 Step 3
 
-```bash
-python -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}'); assert v >= (3, 11), 'need >=3.11'"
-```
+### Step 2: 引导安装 Python（仅 Step 1 失败时进入）
 
-- 失败 → 报告检测到的具体版本，按 0.1 渠道让用户升级。
-- 插件依赖 3.11+ 语法，**不要建议改 `pyproject.toml` 降版本**，运行时会崩。
+**必须用 AskUserQuestion 工具询问用户**，给出两个选项：
 
-#### 0.3 pip 可用
+- 选项 A：「让 Claude 自动帮我装」
+- 选项 B：「我自己装，装完再重跑 /bugdb-setup」
 
-```bash
-python -m pip --version
-```
+#### 用户选 A（自动安装）
 
-- 失败 → 先试 `python -m ensurepip --upgrade`，仍失败则停下让用户修复。
-- 全程用 `python -m pip` 而不是裸 `pip`，避免 PATH 上挂着失效 pip shim 的情况。
+根据当前平台执行：
 
-### Step 1: 安装 Python 包
+- **Windows**：先试 `winget install -e --id Python.Python.3.11 --scope user`；winget 不可用则退回 `scoop install python`（若两者均无，转选项 B 并提示用户先装 winget 或 scoop）
+- **macOS**：`brew install python@3.11`（无 brew 则转选项 B 并提示用户先装 brew）
+- **Linux**：**不要替用户跑** `apt`/`dnf`/`pacman`（需要 sudo）。改为打印发行版对应命令让用户复制执行，然后停下等用户装完再让用户重跑 `/bugdb-setup`
+
+装完后**重新执行 Step 1** 验证。若 `python` 仍不在 PATH 上（新装的可执行文件未刷新 PATH），提示用户重开终端 / Claude Code 再跑 `/bugdb-setup`，然后停下。
+
+#### 用户选 B（自己装）
+
+输出一句话提示「装完后重新执行 `/bugdb-setup`」，停下。**不要继续往后跑**。
+
+### Step 3: 安装 Python 包
 
 ```bash
 python -m pip install -e "${CLAUDE_PLUGIN_ROOT}"
 ```
 
-失败时按 stderr 报告，不要静默跳过。常见错误：
-- `Package 'bugdb' requires a different Python` → 当前 python 实际版本 < 3.11，回 Step 0.2
-- `Permission denied` / 写入系统目录失败 → 提示用户改用用户级 Python（scoop / 用户目录安装）而非系统 Python
+失败按 stderr 报告并停止。若提示权限问题（写入系统目录失败），追加 `--user` 重试一次。
 
-### Step 2: 验证 CLI 可用
+### Step 4: 验证 CLI
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats --format text
@@ -65,12 +57,12 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats --format text
 
 失败则报告错误并停止。
 
-### Step 3: 追加 CLAUDE.md 触发规则
+### Step 5: 追加 CLAUDE.md 触发规则
 
-检查 `~/.claude/CLAUDE.md` 是否已包含 `bugdb-lookup` 关键词。
+检查 `~/.claude/CLAUDE.md` 是否已包含 `bugdb-lookup` 关键词：
 
-- **已存在** → 跳过，告知用户"触发规则已配置"
-- **不存在** → 在文件末尾追加以下内容：
+- **已包含** → 跳过
+- **不包含 / 文件不存在** → 追加（或创建）以下内容到文件末尾：
 
 ```markdown
 
@@ -88,50 +80,24 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats --format text
 跨语言错误以报错栈顶语言为准。
 ```
 
-- **文件不存在** → 创建文件并写入上述内容
+### Step 6: 汇报结果
 
-### Step 4: 汇报结果
-
-输出安装摘要：
+简短输出（不超过 5 行）：
 
 ```
 bugdb-setup 完成：
-  ✓ Python <版本> 已就绪
-  ✓ Python 包已安装（pip install -e ${CLAUDE_PLUGIN_ROOT}）
-  ✓ 数据库路径：<db_path>
+  ✓ Python <版本>
+  ✓ Python 包已安装
   ✓ CLAUDE.md 触发规则已配置
-  
-  使用 /bugsearch <关键词> 搜索知识库
-  使用 /bugfix 交互式录入知识条目
-```
 
-附加提示（独立信息，告知用户但不要阻塞）：
-
-```
-[提示] 直接在 shell 里敲 `bugdb` 命令需要 Python 的 Scripts/bin 目录在 PATH 上：
-  - scoop python：H:\Scoop\apps\python\current\Scripts
-  - python.org 安装：<install_dir>\Scripts
-  - macOS/Linux：通常已在 PATH
-
-skill / hook / 斜杠命令均通过 `python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" ...`
-绝对路径调用，不依赖 PATH，可放心使用。
-```
-
-并附上**升级提示**（首次安装也输出，让用户知道未来怎么升级）：
-
-```
-后续插件升级（仓库发布了新 SKILL.md / hook / Python 代码时）：
-  1. /plugin marketplace update claude-toolshop      # 拉最新代码到本地 cache
-  2. 完全退出 Claude Code 再重新打开                  # 让 skill 元数据从磁盘重新加载
-  
-  仅 git pull 而不重启 Claude Code 不会生效——
-  skill description / hook 配置在启动时加载到内存，运行期间不会重读。
+使用 /bugsearch <关键词> 搜索，/bugfix 手动录入。
+后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code。
 ```
 
 ## 约束
 
-- 不得修改用户 CLAUDE.md 中已有的内容
-- 追加时必须在文件末尾，用空行分隔
-- 任何步骤失败必须明确报告，不得静默跳过
-- **不得替用户执行系统级安装命令**（`scoop install`、`winget install`、`brew install` 等），只汇报检测结果与修复路径，等用户自己装完再让用户重跑 `/bugdb-setup`
-- **不得为了"绕开版本检查"而修改插件 `pyproject.toml` 或 `requires-python`**，会留下运行时崩溃隐患
+- 决策点必须用 AskUserQuestion 工具，不得自作主张
+- 不得替用户执行需要 sudo / 管理员权限的命令
+- 不得修改插件 `pyproject.toml` 的 `requires-python`
+- 任一步骤失败必须明确报告，不得静默跳过
+- 不得修改用户 CLAUDE.md 中已有的内容，只追加
