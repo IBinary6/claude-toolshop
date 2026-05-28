@@ -11,7 +11,14 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" find-similar \
   --threshold 0.7
 ```
 
-若有相似记录 → 用 `bugdb update` 更新已有，不新增。
+`find-similar` 覆盖**全部状态**（active / deprecated / obsolete / archived），按命中记录的 `status` 选择动作：
+
+| 命中 status | 动作 |
+|------------|------|
+| `active`     | 用 `bugdb update` 增强已有，不新增 |
+| `deprecated` | 沿 `replaced_by_id` 链找最新方案；若仍不适用再考虑新增（用 `--valid-for` 区分场景） |
+| `obsolete`   | 旧方案确认失效，新增并在 `cause` 写明与旧记录的差异 |
+| `archived`   | 用 `bugdb restore --id <id>` 恢复，再 `update` 补充内容，**不要重复新增** |
 
 ## Step 2: 录入
 

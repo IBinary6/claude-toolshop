@@ -5,14 +5,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[2]
-CLI = str(SCRIPTS_DIR / "bugdb" / "cli.py")
+PLUGIN_DIR = Path(__file__).resolve().parents[2]
+CLI = str(PLUGIN_DIR / "bugdb" / "cli.py")
 
 
 def _run(args, home_dir):
     env = os.environ.copy()
     env["BUGDB_HOME"] = str(home_dir)
-    env["PYTHONPATH"] = str(SCRIPTS_DIR) + os.pathsep + env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(PLUGIN_DIR) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
         [sys.executable, CLI, *args],

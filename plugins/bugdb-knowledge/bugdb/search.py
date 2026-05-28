@@ -67,7 +67,10 @@ def search(db: BugDB, query: str, language: str | None = None,
 
 
 def find_similar(db: BugDB, pattern: str, threshold: float = 0.7, limit: int = 5) -> list:
-    """去重检查辅助函数。基于 ``key_pattern``/``context`` 列的 FTS5 命中。"""
+    """去重检查辅助函数。基于 ``key_pattern``/``context`` 列的 FTS5 命中。
+
+    覆盖所有状态（含 archived/obsolete），避免重复录入已软删除的相同记录。
+    """
     if not pattern or not pattern.strip():
         return []
     normalized = normalizer.normalize(pattern)
@@ -75,7 +78,7 @@ def find_similar(db: BugDB, pattern: str, threshold: float = 0.7, limit: int = 5
     rows = db.fts_search(
         columns=["key_pattern", "context"],
         query=keywords,
-        statuses=['active', 'deprecated'],
+        statuses=['active', 'deprecated', 'obsolete', 'archived'],
         limit=limit,
     )
     return rows

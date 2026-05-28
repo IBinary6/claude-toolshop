@@ -1,61 +1,94 @@
+#!/usr/bin/env node
 // bugdb_check.js
-// PostToolUse:Bash 钩子。检测错误关键词后查询 BugDB，命中时注入 [BUGDB_MATCH] 提示。
-// 失败静默：任何异常都不阻塞主流程。
+// PostToolUse:Bash 钩子。Claude Code 通过 stdin 传入 JSON，hook 命中后向 stdout
+// 写 hookSpecificOutput.additionalContext 将 [BUGDB_MATCH] 提示注入到模型上下文。
+// 失败一律静默退出 0，不阻塞主流程。
 
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
+    || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
 const CLI_PATH = path.join(PLUGIN_ROOT, 'bugdb', 'cli.py');
 
 // 智能预过滤：99% Bash 调用零开销
 const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
 
-function runSearch(errorLine) {
-    // 用 base64 包装传参，彻底避免引号/换行/反斜杠注入
-    // 不传 --language：Hook 无法可靠推断错误语言，让 CLI 默认跨语言搜索
-    const payload = Buffer.from(errorLine, 'utf-8').toString('base64');
-    return execSync(
-        `python "${CLI_PATH}" search --query-b64 ${payload} --format json`,
-        { timeout: 4000, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }
-    );
+function readStdinSync() {
+    // 同步读 stdin，避免 async 与 Claude Code hook 的早退竞争。
+    try {
+        return require('fs').readFileSync(0, 'utf-8');
+    } catch (e) {
+        return '';
+    }
 }
 
-module.exports = async function bugdbCheck(context) {
+function runSearch(errorLine) {
+    // base64 包装传参，避免引号/换行/反斜杠注入到 shell。
+    const payload = Buffer.from(errorLine, 'utf-8').toString('base64');
+    const py = process.env.BUGDB_PYTHON || 'python';
+    const res = spawnSync(py, [CLI_PATH, 'search', '--query-b64', payload, '--format', 'json'], {
+        timeout: 4000,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    if (res.status !== 0 || !res.stdout) {
+        return null;
+    }
+    return res.stdout;
+}
+
+function buildContext(top) {
+    const stepsJson = JSON.stringify(top.action_steps || []);
+    let ctx = `[BUGDB_MATCH] id=${top.id} confidence=${top.confidence} status=${top.status}\n`;
+    ctx += `entry_kind=${top.entry_kind}\n`;
+    ctx += `category=${top.category}\n`;
+    ctx += `content=${String(top.content || '').replace(/\r?\n/g, ' ')}\n`;
+    ctx += `steps=${stepsJson}\n`;
+    if (top.replacement_id) {
+        ctx += `replacement_id=${top.replacement_id}\n`;
+    }
+    ctx += `hint=如方案无效，忽略此提示继续正常排查`;
+    return ctx;
+}
+
+function main() {
     try {
-        const { stdout = '', stderr = '' } = (context && context.toolResult) || {};
-        const output = String(stdout) + String(stderr);
+        const raw = readStdinSync();
+        if (!raw || !raw.trim()) {
+            return;
+        }
+        const input = JSON.parse(raw);
+        // Claude Code PostToolUse 标准字段：tool_response 内含 stdout/stderr。
+        const resp = (input && input.tool_response) || {};
+        const output = String(resp.stdout || '') + String(resp.stderr || '');
 
         if (!ERROR_PATTERN.test(output)) {
-            return { continue: true };
+            return;
         }
-
         const errorLine = output.split('\n').find(line => ERROR_PATTERN.test(line)) || '';
         if (!errorLine.trim()) {
-            return { continue: true };
+            return;
         }
-
-        const raw = runSearch(errorLine);
-        const data = JSON.parse(raw);
+        const cliOut = runSearch(errorLine);
+        if (!cliOut) {
+            return;
+        }
+        const data = JSON.parse(cliOut);
         if (!data.results || data.results.length === 0) {
-            return { continue: true };
+            return;
         }
-
-        const top = data.results[0];
-        const stepsJson = JSON.stringify(top.action_steps || []);
-        let out = `[BUGDB_MATCH] id=${top.id} confidence=${top.confidence} status=${top.status}\n`;
-        out += `entry_kind=${top.entry_kind}\n`;
-        out += `category=${top.category}\n`;
-        out += `content=${String(top.content || '').replace(/\r?\n/g, ' ')}\n`;
-        out += `steps=${stepsJson}\n`;
-        if (top.replacement_id) {
-            out += `replacement_id=${top.replacement_id}\n`;
-        }
-        out += `hint=如方案无效，忽略此提示继续正常排查`;
-        return { continue: true, output: out };
+        const additionalContext = buildContext(data.results[0]);
+        process.stdout.write(JSON.stringify({
+            hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                additionalContext,
+            },
+        }));
     } catch (e) {
-        // 静默：Python 缺失 / 超时 / DB 不存在 / CLI 报错 / JSON 解析失败
-        return { continue: true };
+        // 静默：stdin 无数据 / Python 缺失 / 超时 / DB 不存在 / CLI 报错 / JSON 解析失败
     }
-};
+}
+
+main();
