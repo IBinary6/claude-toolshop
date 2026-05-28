@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bugdb"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+bugdb = "bugdb.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bugdb"]
+
+[tool.pytest.ini_options]
+testpaths = ["bugdb/tests"]

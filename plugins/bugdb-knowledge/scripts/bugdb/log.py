@@ -44,7 +44,7 @@ def get_logger(name: str = 'bugdb') -> logging.Logger:
 
     # stderr handler — 始终添加
     stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setLevel(logging.DEBUG)
+    stderr_handler.setLevel(logging.WARNING)
     stderr_handler.setFormatter(formatter)
     logger.addHandler(stderr_handler)
 

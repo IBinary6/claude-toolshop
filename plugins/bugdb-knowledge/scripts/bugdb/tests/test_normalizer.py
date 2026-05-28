@@ -46,6 +46,14 @@ def test_uuid_stripped():
     assert "550e8400" not in out
 
 
+def test_bare_filename_stripped():
+    """裸文件名（如 main.cpp）应被清洗掉。"""
+    raw = "main.cpp: error C2065"
+    out = normalize(raw)
+    assert "main.cpp" not in out
+    assert "C2065" in out
+
+
 def test_whitespace_compressed():
     raw = "error    LNK2001   unresolved"
     assert "    " not in normalize(raw)

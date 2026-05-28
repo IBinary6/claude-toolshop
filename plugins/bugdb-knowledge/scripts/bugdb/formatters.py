@@ -1,22 +1,20 @@
-"""序列化 BugRecord 为 JSON / 人类可读纯文本。"""
+"""序列化 KnowledgeRecord 为 JSON / 人类可读纯文本。"""
 import json
-from .models import BugRecord
+from .models import KnowledgeRecord
 
 
-def record_to_dict(r: BugRecord) -> dict:
-    """将 BugRecord 转为 JSON 友好的 dict（公开 API）。
-
-    Enum 字段使用 ``.value`` 字符串化；solution_steps / tags 转为 list；
-    replacement_hint 若存在则展开为 replacement_id / replacement_solution。
-    """
+def record_to_dict(r: KnowledgeRecord) -> dict:
+    """将 KnowledgeRecord 转为 JSON 友好的 dict。"""
     d = {
         'id': r.id,
-        'error_type': r.error_type.value,
-        'error_pattern': r.error_pattern,
-        'error_message': r.error_message,
-        'root_cause': r.root_cause,
-        'solution': r.solution,
-        'solution_steps': list(r.solution_steps),
+        'entry_kind': r.entry_kind.value,
+        'category': r.category.value,
+        'key_pattern': r.key_pattern,
+        'context': r.context,
+        'cause': r.cause,
+        'content': r.content,
+        'action_steps': list(r.action_steps),
+        'title': r.title,
         'language': r.language,
         'project_type': r.project_type,
         'tags': list(r.tags),
@@ -24,7 +22,7 @@ def record_to_dict(r: BugRecord) -> dict:
         'usage_count': r.usage_count,
         'success_count': r.success_count,
         'status': r.status.value,
-        'replaces_id': r.replaces_id,
+        'replaced_by_id': r.replaced_by_id,
         'valid_for': r.valid_for,
         'deprecation_note': r.deprecation_note,
         'created_at': r.created_at,
@@ -33,114 +31,57 @@ def record_to_dict(r: BugRecord) -> dict:
     hint = r.replacement_hint
     if hint is not None:
         d['replacement_id'] = hint.id
-        d['replacement_solution'] = hint.solution
+        d['replacement_content'] = hint.content
     return d
 
 
-# 内部别名，保留模块内既有调用点的命名风格
-_record_to_dict = record_to_dict
-
-
-def record_to_json(r: BugRecord) -> str:
-    """单条记录序列化为 JSON 字符串。
-
-    # Example
-    ```python
-    >>> import json
-    >>> from bugdb.models import BugRecord, ErrorType, Status
-    >>> r = BugRecord(id=1, error_type=ErrorType.LINK, error_pattern="LNK2001",
-    ...               error_message="x", root_cause="y", solution="z",
-    ...               language="c++", project_type="vs", confidence=90,
-    ...               status=Status.ACTIVE)
-    >>> json.loads(record_to_json(r))['id']
-    1
-    ```
-    """
-    return json.dumps(_record_to_dict(r), ensure_ascii=False, indent=2)
+def record_to_json(r: KnowledgeRecord) -> str:
+    """单条记录序列化为 JSON 字符串。"""
+    return json.dumps(record_to_dict(r), ensure_ascii=False, indent=2)
 
 
 def results_to_json(results: list) -> str:
-    """搜索结果列表序列化为 ``{"results": [...]}`` JSON。
-
-    # Example
-    ```python
-    >>> import json
-    >>> json.loads(results_to_json([]))
-    {'results': []}
-    ```
-    """
+    """搜索结果列表序列化为 ``{"results": [...]}`` JSON。"""
     return json.dumps(
-        {'results': [_record_to_dict(r) for r in results]},
+        {'results': [record_to_dict(r) for r in results]},
         ensure_ascii=False,
         indent=2,
     )
 
 
 def results_to_text(results: list) -> str:
-    """搜索结果列表序列化为人类可读纯文本。
-
-    # Example
-    ```python
-    >>> results_to_text([])
-    '(no results)'
-    ```
-    """
+    """搜索结果列表序列化为人类可读纯文本。"""
     if not results:
         return "(no results)"
     lines = []
     for r in results:
-        et = r.error_type.value
+        cat = r.category.value
         st = r.status.value
-        lines.append(f"#{r.id} [{et}] confidence={r.confidence} status={st}")
-        lines.append(f"  pattern: {r.error_pattern}")
-        lines.append(f"  solution: {r.solution}")
-        if r.solution_steps:
-            for i, step in enumerate(r.solution_steps, 1):
+        kind = r.entry_kind.value
+        lines.append(f"#{r.id} [{kind}/{cat}] confidence={r.confidence} status={st}")
+        lines.append(f"  pattern: {r.key_pattern}")
+        lines.append(f"  content: {r.content}")
+        if r.action_steps:
+            for i, step in enumerate(r.action_steps, 1):
                 lines.append(f"    {i}. {step}")
         hint = r.replacement_hint
         if hint is not None:
-            lines.append(f"  -> replaced by #{hint.id}: {hint.solution}")
+            lines.append(f"  -> replaced by #{hint.id}: {hint.content}")
         lines.append("")
     return '\n'.join(lines)
 
 
-def record_to_text(r: BugRecord) -> str:
-    """单条记录序列化为人类可读纯文本。
-
-    # Example
-    ```python
-    >>> from bugdb.models import BugRecord, ErrorType, Status
-    >>> r = BugRecord(id=7, error_type=ErrorType.LINK, error_pattern="P",
-    ...               error_message="m", root_cause="rc", solution="sol",
-    ...               language="c++", project_type="vs", confidence=80,
-    ...               status=Status.ACTIVE)
-    >>> "#7" in record_to_text(r)
-    True
-    ```
-    """
+def record_to_text(r: KnowledgeRecord) -> str:
+    """单条记录序列化为人类可读纯文本。"""
     return results_to_text([r])
 
 
 def stats_to_json(stats: dict) -> str:
-    """stats 字典序列化为 JSON。
-
-    # Example
-    ```python
-    >>> stats_to_json({"total": 10})
-    '{\\n  "total": 10\\n}'
-    ```
-    """
+    """stats 字典序列化为 JSON。"""
     return json.dumps(stats, ensure_ascii=False, indent=2)
 
 
 def stats_to_text(stats: dict) -> str:
-    """stats 字典序列化为人类可读纯文本（按 key 字母序排序，输出确定化）。
-
-    # Example
-    ```python
-    >>> stats_to_text({"total": 10, "active": 8})
-    'active: 8\\ntotal: 10'
-    ```
-    """
+    """stats 字典序列化为人类可读纯文本。"""
     lines = [f"{k}: {v}" for k, v in sorted(stats.items())]
     return '\n'.join(lines)

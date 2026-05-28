@@ -2,44 +2,28 @@
 
 所有外部调用方（Hook/Skill/Command）通过此模块。默认输出 JSON；
 ``--format text`` 切换为人类可读。
-
-Example:
-    >>> # python -m bugdb.cli search --query "LNK2001" --language c++
-    >>> # python -m bugdb.cli stats --format text
 """
 import argparse
 import json
 import sys
 from pathlib import Path
 
-# 允许直接以脚本方式调用：把父目录加入 sys.path
-_PARENT = Path(__file__).resolve().parent.parent
-if str(_PARENT) not in sys.path:
-    sys.path.insert(0, str(_PARENT))
-
-from bugdb import formatters, search as search_mod  # noqa: E402
-from bugdb import utils as _utils  # noqa: E402
-from bugdb.db import BugDB  # noqa: E402
-from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
-from bugdb.models import BugRecord, ErrorType, Status  # noqa: E402
-from bugdb.paths import get_db_path, get_log_path, get_bugdb_home  # noqa: E402
-from bugdb.paths import _CONFIG_FILE, _read_config  # noqa: E402
+from bugdb import formatters, search as search_mod
+from bugdb import utils as _utils
+from bugdb.db import BugDB
+from bugdb.exceptions import BugDBError, RecordNotFound
+from bugdb.models import Category, EntryKind, KnowledgeRecord, Status
+from bugdb.paths import get_db_path, get_log_path, get_bugdb_home
+from bugdb.paths import get_config_file, read_config
 
 
 def _parse_steps(raw: str) -> list | None:
-    """解析 --solution-steps JSON 数组字符串。
+    """解析 --action-steps JSON 数组字符串。
 
     None 表示解析失败或非 list（调用方应 exit 2）；空字符串视为 []。
-
-    Example:
-        >>> _parse_steps('["a","b"]') == ['a', 'b']
-        True
-        >>> _parse_steps('null') is None
-        True
     """
     parsed = _utils.safe_json_loads(raw)
     if parsed is None:
-        # 区分：raw 是 "[]" 默认值（合法空列表） vs "null"（明确错误）
         if (raw or '').strip() == '[]':
             return []
         return None
@@ -56,11 +40,7 @@ def _print(payload: str) -> None:
 
 
 def _output(obj, kind: str, fmt: str) -> None:
-    """根据 fmt + kind 选择 formatter 并写出。
-
-    Example:
-        >>> # _output(results, 'results', 'json')
-    """
+    """根据 fmt + kind 选择 formatter 并写出。"""
     if fmt == 'text':
         if kind == 'results':
             _print(formatters.results_to_text(obj))
@@ -113,23 +93,25 @@ def cmd_stats(args, db: BugDB) -> int:
 
 
 def cmd_add(args, db: BugDB) -> int:
-    """add 子命令处理函数：构造 BugRecord 并写入。"""
+    """add 子命令处理函数：构造 KnowledgeRecord 并写入。"""
     from bugdb import normalizer
-    steps = _parse_steps(args.solution_steps)
+    steps = _parse_steps(args.action_steps)
     if steps is None:
-        sys.stderr.write("error: --solution-steps must be a JSON array\n")
+        sys.stderr.write("error: --action-steps must be a JSON array\n")
         return 2
-    pattern = args.error_pattern or normalizer.normalize(args.error_message)
+    pattern = args.key_pattern or normalizer.normalize(args.context)
     if not pattern:
-        sys.stderr.write("error: error_pattern is empty (provide --error-pattern or non-empty --error-message)\n")
+        sys.stderr.write("error: key_pattern is empty (provide --key-pattern or non-empty --context)\n")
         return 2
-    rec = BugRecord(
-        error_type=ErrorType(args.error_type),
-        error_pattern=pattern,
-        error_message=args.error_message,
-        root_cause=args.root_cause,
-        solution=args.solution,
-        solution_steps=steps,
+    rec = KnowledgeRecord(
+        entry_kind=EntryKind(args.entry_kind),
+        category=Category(args.category),
+        key_pattern=pattern,
+        context=args.context,
+        cause=args.cause,
+        content=args.content,
+        action_steps=steps,
+        title=args.title,
         language=args.language,
         project_type=args.project_type,
         tags=_utils.comma_split(args.tags),
@@ -144,16 +126,16 @@ def cmd_add(args, db: BugDB) -> int:
 def cmd_update(args, db: BugDB) -> int:
     """update 子命令处理函数：仅覆盖显式给出的字段。"""
     rec = db.get(args.id)
-    if args.solution is not None:
-        rec.solution = args.solution
-    if args.root_cause is not None:
-        rec.root_cause = args.root_cause
-    if args.solution_steps is not None:
-        steps = _parse_steps(args.solution_steps)
+    if args.content is not None:
+        rec.content = args.content
+    if args.cause is not None:
+        rec.cause = args.cause
+    if args.action_steps is not None:
+        steps = _parse_steps(args.action_steps)
         if steps is None:
-            sys.stderr.write("error: --solution-steps must be a JSON array\n")
+            sys.stderr.write("error: --action-steps must be a JSON array\n")
             return 2
-        rec.solution_steps = steps
+        rec.action_steps = steps
     if args.tags is not None:
         rec.tags = _utils.comma_split(args.tags)
     if args.valid_for is not None:
@@ -164,6 +146,8 @@ def cmd_update(args, db: BugDB) -> int:
         rec.language = args.language
     if args.project_type is not None:
         rec.project_type = args.project_type
+    if args.title is not None:
+        rec.title = args.title
     updated = db.update(rec)
     _output(updated, 'record', args.format)
     return 0
@@ -195,7 +179,7 @@ def cmd_deprecate(args, db: BugDB) -> int:
     rec = db.get(args.id)
     rec.status = Status.DEPRECATED
     if args.replace_with is not None:
-        rec.replaces_id = args.replace_with
+        rec.replaced_by_id = args.replace_with
     if args.reason:
         rec.deprecation_note = args.reason
     updated = db.update(rec)
@@ -239,7 +223,7 @@ def cmd_export(args, db: BugDB) -> int:
     """export 子命令处理：全量导出到 JSON 文件。"""
     records = db.list_all(status='all')
     payload = {
-        'version': 1,
+        'version': 2,
         'records': [formatters.record_to_dict(r) for r in records],
     }
     Path(args.output).write_text(json.dumps(payload, ensure_ascii=False, indent=2),
@@ -249,12 +233,7 @@ def cmd_export(args, db: BugDB) -> int:
 
 
 def _load_import_payload(path: Path) -> list[dict]:
-    """读取并校验 import JSON。
-
-    错误时抛 ValueError（消息已是人类可读）；成功返回 records 列表。
-    校验项：JSON 可解析、顶层为 dict、含 records 键、records 为 list、
-    单条为 dict 且含 error_type 与 error_pattern。
-    """
+    """读取并校验 import JSON。"""
     raw = path.read_text(encoding='utf-8')
     try:
         payload = json.loads(raw)
@@ -270,10 +249,13 @@ def _load_import_payload(path: Path) -> list[dict]:
     for idx, item in enumerate(records):
         if not isinstance(item, dict):
             raise ValueError(f"records[{idx}] must be an object")
-        if not item.get('error_type'):
-            raise ValueError(f"records[{idx}] missing field: error_type")
-        if not item.get('error_pattern'):
-            raise ValueError(f"records[{idx}] missing field: error_pattern")
+        # 兼容 v1 (error_type/error_pattern) 和 v2 (category/key_pattern) 格式
+        cat = item.get('category') or item.get('error_type')
+        pat = item.get('key_pattern') or item.get('error_pattern')
+        if not cat:
+            raise ValueError(f"records[{idx}] missing field: category (or error_type)")
+        if not pat:
+            raise ValueError(f"records[{idx}] missing field: key_pattern (or error_pattern)")
     return records
 
 
@@ -286,13 +268,15 @@ def cmd_import(args, db: BugDB) -> int:
         return 2
     imported = 0
     for d in records:
-        rec = BugRecord(
-            error_type=ErrorType(d.get('error_type', 'compile')),
-            error_pattern=d.get('error_pattern', ''),
-            error_message=d.get('error_message', ''),
-            root_cause=d.get('root_cause', ''),
-            solution=d.get('solution', ''),
-            solution_steps=list(d.get('solution_steps') or []),
+        rec = KnowledgeRecord(
+            entry_kind=EntryKind(d.get('entry_kind', 'bug')),
+            category=Category(d.get('category') or d.get('error_type', 'compile')),
+            key_pattern=d.get('key_pattern') or d.get('error_pattern', ''),
+            context=d.get('context') or d.get('error_message', ''),
+            cause=d.get('cause') or d.get('root_cause', ''),
+            content=d.get('content') or d.get('solution', ''),
+            action_steps=list(d.get('action_steps') or d.get('solution_steps') or []),
+            title=d.get('title', ''),
             language=d.get('language', 'any'),
             project_type=d.get('project_type', 'any'),
             tags=list(d.get('tags') or []),
@@ -300,7 +284,7 @@ def cmd_import(args, db: BugDB) -> int:
             usage_count=int(d.get('usage_count', 0)),
             success_count=int(d.get('success_count', 0)),
             status=Status(d.get('status', 'active')),
-            replaces_id=d.get('replaces_id'),
+            replaced_by_id=d.get('replaced_by_id') or d.get('replaces_id'),
             valid_for=d.get('valid_for'),
             deprecation_note=d.get('deprecation_note'),
         )
@@ -311,20 +295,17 @@ def cmd_import(args, db: BugDB) -> int:
 
 
 def cmd_config(args) -> int:
-    """config 子命令处理函数（不需要 BugDB 实例）。
-
-    子操作：path / get / set / init。
-    """
+    """config 子命令处理函数（不需要 BugDB 实例）。"""
     action = args.config_action
     fmt = args.format
+    config_file = get_config_file()
 
     if action == 'path':
-        # 输出当前生效的路径（来自 paths.py 解析结果，不只是 config.json）
         info = {
             'db_path': str(get_db_path()),
             'log_path': str(get_log_path()),
             'bugdb_home': str(get_bugdb_home()),
-            'config_file': str(_CONFIG_FILE),
+            'config_file': str(config_file),
         }
         if fmt == 'text':
             for k, v in info.items():
@@ -338,7 +319,7 @@ def cmd_config(args) -> int:
         if key is None:
             sys.stderr.write("error: config get 需要 <key> 参数\n")
             return 2
-        cfg = _read_config()
+        cfg = read_config()
         value = cfg.get(key)
         if fmt == 'text':
             if value is None:
@@ -355,15 +336,15 @@ def cmd_config(args) -> int:
         if key is None or value is None:
             sys.stderr.write("error: config set 需要 <key> <value> 参数\n")
             return 2
-        # 读取现有配置（文件不存在则为空 dict）
-        cfg = _read_config()
+        cfg = read_config()
         cfg[key] = value
-        # 确保目录存在
-        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CONFIG_FILE.write_text(
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text(
             json.dumps(cfg, ensure_ascii=False, indent=2) + '\n',
             encoding='utf-8',
         )
+        from bugdb.paths import _clear_config_cache
+        _clear_config_cache()
         if fmt == 'text':
             _print(f"{key} = {value}")
         else:
@@ -371,32 +352,30 @@ def cmd_config(args) -> int:
         return 0
 
     if action == 'init':
-        if _CONFIG_FILE.exists():
-            msg = f"config.json 已存在: {_CONFIG_FILE}"
+        if config_file.exists():
+            msg = f"config.json 已存在: {config_file}"
             if fmt == 'text':
                 _print(msg)
             else:
-                _print(json.dumps({'exists': True, 'path': str(_CONFIG_FILE)},
+                _print(json.dumps({'exists': True, 'path': str(config_file)},
                                   ensure_ascii=False, indent=2))
             return 0
-        # 创建默认配置
         default_cfg = {
             'db_path': str(get_bugdb_home() / 'bugs.db'),
             'log_path': str(get_bugdb_home() / 'bugdb.log'),
         }
-        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _CONFIG_FILE.write_text(
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text(
             json.dumps(default_cfg, ensure_ascii=False, indent=2) + '\n',
             encoding='utf-8',
         )
         if fmt == 'text':
-            _print(f"已创建: {_CONFIG_FILE}")
+            _print(f"已创建: {config_file}")
         else:
-            _print(json.dumps({'created': True, 'path': str(_CONFIG_FILE)},
+            _print(json.dumps({'created': True, 'path': str(config_file)},
                               ensure_ascii=False, indent=2))
         return 0
 
-    # 不应到达此处（argparse 已限制 choices）
     sys.stderr.write(f"error: unknown config action: {action}\n")
     return 2
 
@@ -411,7 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='bugdb', description='BugDB CLI')
     sub = parser.add_subparsers(dest='command', required=True)
 
-    p = sub.add_parser('search', help='搜索 bug 记录')
+    p = sub.add_parser('search', help='搜索知识记录')
     p.add_argument('--query', default='')
     p.add_argument('--query-b64', dest='query_b64', default=None,
                    help='base64-encoded query (Hook 用，避免 shell 注入)')
@@ -435,15 +414,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     # add
     p = sub.add_parser('add', help='录入新记录')
-    p.add_argument('--error-type', required=True,
-                   choices=[e.value for e in ErrorType])
-    p.add_argument('--error-pattern', default=None,
-                   help='缺省时由 normalize(error_message) 自动生成')
-    p.add_argument('--error-message', default='')
-    p.add_argument('--root-cause', required=True)
-    p.add_argument('--solution', required=True)
-    p.add_argument('--solution-steps', default='[]',
+    p.add_argument('--entry-kind', dest='entry_kind', default='bug',
+                   choices=[e.value for e in EntryKind])
+    p.add_argument('--category', required=True,
+                   help='知识分类')
+    p.add_argument('--key-pattern', dest='key_pattern', default=None,
+                   help='缺省时由 normalize(context) 自动生成')
+    p.add_argument('--context', default='')
+    p.add_argument('--cause', required=True)
+    p.add_argument('--content', required=True)
+    p.add_argument('--action-steps', dest='action_steps', default='[]',
                    help='JSON 数组字符串')
+    p.add_argument('--title', default='')
     p.add_argument('--language', default='any')
     p.add_argument('--project-type', default='any')
     p.add_argument('--tags', default='')
@@ -454,14 +436,15 @@ def build_parser() -> argparse.ArgumentParser:
     # update
     p = sub.add_parser('update', help='更新已有记录')
     p.add_argument('--id', type=int, required=True)
-    p.add_argument('--solution', default=None)
-    p.add_argument('--root-cause', default=None)
-    p.add_argument('--solution-steps', default=None)
+    p.add_argument('--content', default=None)
+    p.add_argument('--cause', default=None)
+    p.add_argument('--action-steps', dest='action_steps', default=None)
     p.add_argument('--tags', default=None)
     p.add_argument('--valid-for', default=None)
     p.add_argument('--confidence', type=int, default=None)
     p.add_argument('--language', default=None)
     p.add_argument('--project-type', default=None)
+    p.add_argument('--title', default=None)
     _add_common(p)
 
     # delete
@@ -516,7 +499,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--input', required=True)
     _add_common(p)
 
-    # config（不需要 BugDB 实例）
+    # config
     p = sub.add_parser('config', help='查看/修改 BugDB 配置')
     p.add_argument('config_action', choices=['path', 'get', 'set', 'init'],
                    help='path=显示路径 | get=读取配置项 | set=设置配置项 | init=创建默认配置')
@@ -534,7 +517,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        # config 子命令不需要 BugDB 实例
         if args.command == 'config':
             return cmd_config(args)
         db = BugDB()
@@ -556,17 +538,11 @@ HANDLERS = {
     'get': cmd_get,
     'list': cmd_list,
     'stats': cmd_stats,
-}
-
-HANDLERS.update({
     'add': cmd_add,
     'update': cmd_update,
     'delete': cmd_delete,
     'restore': cmd_restore,
     'feedback': cmd_feedback,
-})
-
-HANDLERS.update({
     'deprecate': cmd_deprecate,
     'obsolete': cmd_obsolete,
     'find-similar': cmd_find_similar,
@@ -574,7 +550,7 @@ HANDLERS.update({
     'export': cmd_export,
     'import': cmd_import,
     'config': cmd_config,
-})
+}
 
 
 if __name__ == '__main__':

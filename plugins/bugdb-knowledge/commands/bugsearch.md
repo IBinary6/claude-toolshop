@@ -1,4 +1,4 @@
-# /bugsearch — 直接查询 Bug 知识库
+# /bugsearch — 直接查询知识库
 
 ## 用法
 

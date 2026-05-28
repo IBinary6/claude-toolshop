@@ -4,7 +4,7 @@
 - get_bugdb_home(): 默认路径 / BUGDB_HOME 覆盖
 - get_db_path(): 完整优先级链 explicit > BUGDB_HOME > config.json > default
 - get_log_path(): 优先级链 BUGDB_HOME > config.json > default
-- _read_config(): 文件不存在 / 非法 JSON / 正常读取
+- read_config(): 文件不存在 / 非法 JSON / 正常读取
 """
 import json
 from pathlib import Path
@@ -13,30 +13,39 @@ import pytest
 
 from bugdb import paths
 from bugdb.paths import (
-    _read_config,
+    _clear_config_cache,
+    read_config,
     get_bugdb_home,
     get_db_path,
     get_log_path,
 )
 
 
-# ---------- _read_config ----------
+@pytest.fixture(autouse=True)
+def _reset_cache():
+    """每个测试前后清除配置缓存，避免跨测试污染。"""
+    _clear_config_cache()
+    yield
+    _clear_config_cache()
+
+
+# ---------- read_config ----------
 
 
 class TestReadConfig:
-    """_read_config 读取 config.json 的行为。"""
+    """read_config 读取 config.json 的行为。"""
 
     def test_file_not_exist(self, tmp_path, monkeypatch):
         """config.json 不存在时返回空 dict。"""
         monkeypatch.setattr(paths, "_CONFIG_FILE", tmp_path / "nonexistent.json")
-        assert _read_config() == {}
+        assert read_config() == {}
 
     def test_invalid_json(self, tmp_path, monkeypatch):
         """config.json 包含非法 JSON 时返回空 dict。"""
         bad_file = tmp_path / "config.json"
         bad_file.write_text("{invalid", encoding="utf-8")
         monkeypatch.setattr(paths, "_CONFIG_FILE", bad_file)
-        assert _read_config() == {}
+        assert read_config() == {}
 
     def test_valid_json(self, tmp_path, monkeypatch):
         """config.json 正常读取。"""
@@ -44,7 +53,7 @@ class TestReadConfig:
         data = {"db_path": "/custom/bugs.db", "log_path": "/custom/bugdb.log"}
         cfg_file.write_text(json.dumps(data), encoding="utf-8")
         monkeypatch.setattr(paths, "_CONFIG_FILE", cfg_file)
-        assert _read_config() == data
+        assert read_config() == data
 
 
 # ---------- get_bugdb_home ----------

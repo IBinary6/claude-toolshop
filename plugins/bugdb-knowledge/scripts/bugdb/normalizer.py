@@ -12,6 +12,7 @@ RULES = [
     (re.compile(r'/[\w/.\-]+\.\w+'), ''),
     (re.compile(r'\d{4}[-/]\d{2}[-/]\d{2}[T ]\d{2}:\d{2}[:\d.]*'), ''),
     (re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'), ''),
+    (re.compile(r'\b[A-Za-z_][\w\-]*\.[a-zA-Z]{1,5}\b'), ''),
     (re.compile(r'[:(]\d+[,:\d]*[):]?'), ''),
     (re.compile(r'\bline\s+\d+', re.IGNORECASE), ''),
     (re.compile(r'0x[0-9A-Fa-f]{4,16}'), ''),
@@ -37,7 +38,7 @@ def normalize(raw: str) -> str:
     >>> normalize("C:/proj/x.cpp(42): error LNK2001: unresolved")
     'error LNK2001 unresolved'
     >>> normalize("main.rs:10:5 error[E0308] at 0xDEADBEEF")
-    'main error[E0308] at'
+    'error[E0308] at'
     >>> normalize("2024-01-15T10:30:00 panic at line 42")
     'panic at'
     ```

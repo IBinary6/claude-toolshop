@@ -43,10 +43,11 @@ module.exports = async function bugdbCheck(context) {
         }
 
         const top = data.results[0];
-        const stepsJson = JSON.stringify(top.solution_steps || []);
+        const stepsJson = JSON.stringify(top.action_steps || []);
         let out = `[BUGDB_MATCH] id=${top.id} confidence=${top.confidence} status=${top.status}\n`;
-        out += `error_type=${top.error_type}\n`;
-        out += `solution=${String(top.solution || '').replace(/\r?\n/g, ' ')}\n`;
+        out += `entry_kind=${top.entry_kind}\n`;
+        out += `category=${top.category}\n`;
+        out += `content=${String(top.content || '').replace(/\r?\n/g, ' ')}\n`;
         out += `steps=${stepsJson}\n`;
         if (top.replacement_id) {
             out += `replacement_id=${top.replacement_id}\n`;

@@ -1,17 +1,18 @@
 import json
-from bugdb.models import BugRecord, ErrorType, Status
+from bugdb.models import KnowledgeRecord, Category, EntryKind, Status
 from bugdb import formatters
 
 
-def _rec() -> BugRecord:
-    return BugRecord(
+def _rec() -> KnowledgeRecord:
+    return KnowledgeRecord(
         id=42,
-        error_type=ErrorType.LINK,
-        error_pattern="LNK2001",
-        error_message="error LNK2001: unresolved",
-        root_cause="missing lib",
-        solution="link lib",
-        solution_steps=["a", "b"],
+        entry_kind=EntryKind.BUG,
+        category=Category.LINK,
+        key_pattern="LNK2001",
+        context="error LNK2001: unresolved",
+        cause="missing lib",
+        content="link lib",
+        action_steps=["a", "b"],
         language="c++",
         project_type="vs",
         tags=["linker"],
@@ -24,7 +25,7 @@ def test_to_json_results():
     data = formatters.results_to_json([_rec()])
     obj = json.loads(data)
     assert obj['results'][0]['id'] == 42
-    assert obj['results'][0]['solution_steps'] == ["a", "b"]
+    assert obj['results'][0]['action_steps'] == ["a", "b"]
     assert obj['results'][0]['tags'] == ["linker"]
     assert obj['results'][0]['status'] == "active"
 
@@ -33,7 +34,8 @@ def test_to_json_record():
     data = formatters.record_to_json(_rec())
     obj = json.loads(data)
     assert obj['id'] == 42
-    assert obj['error_type'] == "link"
+    assert obj['entry_kind'] == "bug"
+    assert obj['category'] == "link"
 
 
 def test_to_text_results():
@@ -59,14 +61,14 @@ def test_record_to_json_with_replacement_hint():
 
 
 def test_record_to_text_single():
-    """单条 text 输出必须包含 id/error_type/confidence/status/pattern/solution/编号步骤。"""
+    """单条 text 输出必须包含 id/entry_kind/category/confidence/status/pattern/content/编号步骤。"""
     txt = formatters.record_to_text(_rec())
     assert "#42" in txt
-    assert "[link]" in txt
+    assert "[bug/link]" in txt
     assert "confidence=95" in txt
     assert "status=active" in txt
     assert "pattern: LNK2001" in txt
-    assert "solution: link lib" in txt
+    assert "content: link lib" in txt
     assert "1. a" in txt
     assert "2. b" in txt
 
@@ -81,7 +83,7 @@ def test_results_to_text_with_replacement_hint():
     r = _rec()
     repl = _rec()
     repl.id = 55
-    repl.solution = "link lib"
+    repl.content = "link lib"
     r.replacement_hint = repl
     txt = formatters.results_to_text([r])
     assert "-> replaced by #55: link lib" in txt

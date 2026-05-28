@@ -1,10 +1,20 @@
-"""Bug 记录数据模型与状态枚举。零依赖，纯 dataclass。"""
+"""知识记录数据模型与状态枚举。零依赖，纯 dataclass。"""
 from dataclasses import dataclass, field
 from enum import Enum
 
 
-class ErrorType(str, Enum):
-    """错误大类。"""
+class EntryKind(str, Enum):
+    """条目类型：区分知识库中不同性质的记录。"""
+    BUG = "bug"
+    PRACTICE = "practice"
+    TOOL = "tool"
+    DECISION = "decision"
+    WORKFLOW = "workflow"
+
+
+class Category(str, Enum):
+    """知识分类。保留所有 bug 相关旧值，新增知识类别。"""
+    # bug 相关
     COMPILE = "compile"
     LINK = "link"
     RUNTIME = "runtime"
@@ -12,6 +22,11 @@ class ErrorType(str, Enum):
     IMPORT = "import"
     BUILD = "build"
     CONFIG = "config"
+    # 知识条目相关
+    PRACTICE = "practice"
+    TOOL = "tool"
+    DECISION = "decision"
+    WORKFLOW = "workflow"
 
 
 class Status(str, Enum):
@@ -23,19 +38,20 @@ class Status(str, Enum):
 
 
 @dataclass
-class BugRecord:
-    """单条 Bug 记录。字段顺序对应 SQLite 列。
+class KnowledgeRecord:
+    """单条知识记录。字段顺序对应 SQLite 列。
 
     confidence: 0-100 整数百分比（100=最高，0=完全失效）。
-    spec 第 11 节衰减公式使用整数，DB schema 对应 INTEGER 列。
     """
-    error_type: ErrorType = ErrorType.COMPILE
-    error_pattern: str = ""
-    root_cause: str = ""
-    solution: str = ""
+    entry_kind: EntryKind = EntryKind.BUG
+    category: Category = Category.COMPILE
+    key_pattern: str = ""
+    cause: str = ""
+    content: str = ""
     id: int | None = None
-    error_message: str = ""
-    solution_steps: list[str] = field(default_factory=list)
+    context: str = ""
+    action_steps: list[str] = field(default_factory=list)
+    title: str = ""
     language: str = "any"
     project_type: str = "any"
     tags: list[str] = field(default_factory=list)
@@ -43,11 +59,16 @@ class BugRecord:
     usage_count: int = 0
     success_count: int = 0
     status: Status = Status.ACTIVE
-    replaces_id: int | None = None
+    replaced_by_id: int | None = None
     valid_for: str | None = None
     deprecation_note: str | None = None
     consecutive_failures: int = 0
     created_at: str = ""
     updated_at: str = ""
-    # 非持久化字段：search() 命中 deprecated 时附加替代记录，DB CRUD 不读写该列。
-    replacement_hint: "BugRecord | None" = None
+    # 非持久化字段：search() 命中 deprecated 时附加替代记录
+    replacement_hint: "KnowledgeRecord | None" = None
+
+
+# 向后兼容别名（deprecated，后续版本移除）
+ErrorType = Category
+BugRecord = KnowledgeRecord

@@ -31,11 +31,11 @@ def test_e2e_full_lifecycle(tmp_path):
 
     # 2. add
     add = _run([
-        "add", "--error-type", "link",
-        "--error-message", "main.cpp(10): error LNK2001: unresolved external symbol __imp_WSAStartup",
-        "--root-cause", "missing ws2_32.lib in linker input",
-        "--solution", "add ws2_32.lib to linker additional dependencies",
-        "--solution-steps", '["open project props","Linker > Input","add ws2_32.lib"]',
+        "add", "--category", "link",
+        "--context", "main.cpp(10): error LNK2001: unresolved external symbol __imp_WSAStartup",
+        "--cause", "missing ws2_32.lib in linker input",
+        "--content", "add ws2_32.lib to linker additional dependencies",
+        "--action-steps", '["open project props","Linker > Input","add ws2_32.lib"]',
         "--language", "c++", "--project-type", "vs", "--tags", "linker,windows",
     ], home)
     assert add.returncode == 0, add.stderr
@@ -59,10 +59,10 @@ def test_e2e_full_lifecycle(tmp_path):
 
     # 5. add 替代方案 + deprecate 旧
     new_add = _run([
-        "add", "--error-type", "link",
-        "--error-message", "LNK2001 unresolved external symbol __imp_WSAStartup",
-        "--root-cause", "missing lib via cmake",
-        "--solution", "target_link_libraries(target ws2_32)",
+        "add", "--category", "link",
+        "--context", "LNK2001 unresolved external symbol __imp_WSAStartup",
+        "--cause", "missing lib via cmake",
+        "--content", "target_link_libraries(target ws2_32)",
         "--language", "c++", "--project-type", "cmake",
     ], home)
     assert new_add.returncode == 0

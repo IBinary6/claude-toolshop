@@ -1,4 +1,4 @@
-# /bugfix — 交互式录入 Bug 知识库
+# /bugfix — 交互式录入知识库
 
 引用 bugdb-record Skill 规范，确保手动录入也遵循统一标准。
 
@@ -15,17 +15,18 @@
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" add \
-  --error-type <type> \
-  --error-message "<原始错误>" \
-  --root-cause "<根因>" \
-  --solution "<方案>" \
-  --solution-steps '["步骤1","步骤2"]' \
+  --entry-kind bug \
+  --category <type> \
+  --context "<原始错误>" \
+  --cause "<根因>" \
+  --content "<方案>" \
+  --action-steps '["步骤1","步骤2"]' \
   --language <lang> \
   --project-type <project> \
   --tags "<tags>"
 ```
 
-9. 录入后调用 `bugdb search --query <error_message>` 验证可搜到
+9. 录入后调用 `bugdb search --query <context>` 验证可搜到
 
 ## 注意
 
