@@ -29,11 +29,13 @@
 /plugin install bugdb-knowledge@claude-toolshop
 ```
 
-安装后还需执行 Python 包安装：
+安装后执行一键配置：
 
-```bash
-pip install -e ~/.claude/plugins/bugdb-knowledge/scripts/
 ```
+/bugdb-setup
+```
+
+该命令自动完成 Python 包安装、CLAUDE.md 触发规则追加、安装验证。
 
 ### 方式二：手动安装
 
@@ -46,7 +48,7 @@ pip install -e ~/.claude/plugins/bugdb-knowledge/scripts/
 bugdb --help
 
 # 或直接调用
-python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" stats
+python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
 ```
 
 ### 前置依赖
@@ -57,9 +59,11 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" stats
 | Node.js | 18+ | PostToolUse Hook 运行时 |
 | pip | — | 安装 Python 包 |
 
-### CLAUDE.md 配置（重要）
+### CLAUDE.md 配置
 
-在 `~/.claude/CLAUDE.md` 中追加以下片段，让 Claude 知道何时触发知识库：
+> 如果使用 `/bugdb-setup` 命令安装，CLAUDE.md 配置会自动追加，无需手动操作。
+
+手动追加时，在 `~/.claude/CLAUDE.md` 文末加入：
 
 ```markdown
 ## Bug 知识库触发规则
@@ -501,7 +505,20 @@ bugdb config set db_path /data/my-knowledge-base/bugs.db
 plugins/bugdb-knowledge/
 ├── .claude-plugin/
 │   └── plugin.json          # 插件元数据
+├── bugdb/                    # Python 包（CLI + 数据库 + 搜索引擎）
+│   ├── cli.py               # CLI 入口（所有外部调用的统一接口）
+│   ├── db.py                # 数据访问层（Schema + CRUD + FTS5）
+│   ├── models.py            # 数据模型（KnowledgeRecord, Category, EntryKind）
+│   ├── search.py            # 搜索引擎（两轮策略 + 替代链）
+│   ├── normalizer.py        # 错误消息归一化
+│   ├── formatters.py        # 输出格式化（JSON / 纯文本）
+│   ├── paths.py             # 路径解析（BUGDB_HOME / config.json）
+│   ├── log.py               # 日志（rotating file + stderr）
+│   ├── utils.py             # 工具函数
+│   ├── exceptions.py        # 异常定义
+│   └── tests/               # 测试套件（137 tests）
 ├── commands/
+│   ├── bugdb-setup.md       # /bugdb-setup 一键配置命令
 │   ├── bugfix.md            # /bugfix 斜杠命令
 │   └── bugsearch.md         # /bugsearch 斜杠命令
 ├── docs/
@@ -515,21 +532,8 @@ plugins/bugdb-knowledge/
 │   │   └── SKILL.md         # 查询知识库 Skill
 │   └── bugdb-record/
 │       └── SKILL.md         # 录入知识 Skill
-├── scripts/
-│   ├── pyproject.toml       # Python 包配置
-│   └── bugdb/
-│       ├── cli.py           # CLI 入口（所有外部调用的统一接口）
-│       ├── db.py            # 数据访问层（Schema + CRUD + FTS5）
-│       ├── models.py        # 数据模型（KnowledgeRecord, Category, EntryKind）
-│       ├── search.py        # 搜索引擎（两轮策略 + 替代链）
-│       ├── normalizer.py    # 错误消息归一化
-│       ├── formatters.py    # 输出格式化（JSON / 纯文本）
-│       ├── paths.py         # 路径解析（BUGDB_HOME / config.json）
-│       ├── log.py           # 日志（rotating file + stderr）
-│       ├── utils.py         # 工具函数
-│       ├── exceptions.py    # 异常定义
-│       └── tests/           # 测试套件（137 tests）
-└── README.md                # 本文件
+├── pyproject.toml            # Python 包配置
+└── README.md                 # 本文件
 ```
 
 ---
@@ -538,7 +542,7 @@ plugins/bugdb-knowledge/
 
 ```bash
 # 安装为可编辑包
-cd plugins/bugdb-knowledge/scripts
+cd plugins/bugdb-knowledge
 pip install -e .
 
 # 运行全部测试

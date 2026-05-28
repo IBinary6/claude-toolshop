@@ -10,13 +10,13 @@
 
 | 依赖 | 最低版本 | 用途 |
 |------|---------|------|
-| Python | 3.10+ | BugDB CLI 核心（数据库、搜索） |
+| Python | 3.11+ | BugDB CLI 核心（数据库、搜索） |
 | Node.js | 18+ | PostToolUse Hook 运行时 |
 
 验证：
 
 ```bash
-python --version   # >= 3.10
+python --version   # >= 3.11
 node --version     # >= 18
 ```
 
@@ -28,9 +28,11 @@ node --version     # >= 18
 
 | 源（本仓库 `plugins/bugdb-knowledge/`） | 目标 |
 |---|---|
-| `scripts/bugdb/` | `~/.claude/scripts/bugdb/` |
+| `bugdb/` | `~/.claude/plugins/bugdb-knowledge/bugdb/` |
+| `pyproject.toml` | `~/.claude/plugins/bugdb-knowledge/pyproject.toml` |
 | `commands/bugfix.md` | `~/.claude/commands/bugfix.md` |
 | `commands/bugsearch.md` | `~/.claude/commands/bugsearch.md` |
+| `commands/bugdb-setup.md` | `~/.claude/commands/bugdb-setup.md` |
 | `hooks/js/bugdb_check/bugdb_check.js` | `~/.claude/hooks/js/bugdb_check/bugdb_check.js` |
 | `skills/bugdb-lookup/SKILL.md` | `~/.claude/skills/bugdb-lookup/SKILL.md` |
 | `skills/bugdb-record/SKILL.md` | `~/.claude/skills/bugdb-record/SKILL.md` |
@@ -39,15 +41,21 @@ node --version     # >= 18
 
 ```bash
 REPO="/path/to/bugdb-impl/plugins/bugdb-knowledge"
+DEST="$HOME/.claude/plugins/bugdb-knowledge"
 
-# 脚本
-mkdir -p ~/.claude/scripts/bugdb
-cp -r "$REPO"/scripts/bugdb/*.py ~/.claude/scripts/bugdb/
+# Python 包
+mkdir -p "$DEST/bugdb"
+cp -r "$REPO"/bugdb/*.py "$DEST/bugdb/"
+cp "$REPO"/pyproject.toml "$DEST/"
+
+# 安装 Python 包
+pip install -e "$DEST"
 
 # 斜杠命令
 mkdir -p ~/.claude/commands
 cp "$REPO"/commands/bugfix.md   ~/.claude/commands/
 cp "$REPO"/commands/bugsearch.md ~/.claude/commands/
+cp "$REPO"/commands/bugdb-setup.md ~/.claude/commands/
 
 # Hook
 mkdir -p ~/.claude/hooks/js/bugdb_check
@@ -73,27 +81,6 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
     {
       "type": "command",
       "command": "node -e \"H=require('os').homedir();const p=require('path');const{execSync}=require('child_process');const m=require(p.join(H,'.claude','hooks','js','bugdb_check','bugdb_check.js'));m({toolName:'Bash',toolInput:process.env.CLAUDE_TOOL_INPUT||'',toolResult:{stdout:process.env.CLAUDE_TOOL_STDOUT||'',stderr:process.env.CLAUDE_TOOL_STDERR||''}})\"",
-      "timeout": 5000,
-      "async": true
-    }
-  ]
-}
-```
-
-> **重要**：手动安装时 hook 内部的 `CLAUDE_PLUGIN_ROOT` 不可用。`bugdb_check.js` 会回退到 `~/.claude/plugins/bugdb-knowledge/scripts/bugdb/cli.py`，但手动安装的 CLI 位于 `~/.claude/scripts/bugdb/cli.py`。如果你只做手动部署（不拷贝到 `plugins/` 目录），需要确保 hook 能找到 CLI。有两种方式：
->
-> 1. **推荐**：在 settings.json hook command 前设置环境变量覆盖路径（见下方替代写法）。
-> 2. **替代**：在 `~/.claude/plugins/bugdb-knowledge/scripts/bugdb/` 也放一份 CLI（即同时拷贝到 plugins 目录）。
-
-替代 hook command（显式指定 CLI 路径）：
-
-```json
-{
-  "matcher": "Bash",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "node -e \"process.env.BUGDB_CLI_PATH=require('path').join(require('os').homedir(),'.claude','scripts','bugdb','cli.py');H=require('os').homedir();require(require('path').join(H,'.claude','hooks','js','bugdb_check','bugdb_check.js'))({toolName:'Bash',toolInput:'',toolResult:{stdout:process.env.CLAUDE_TOOL_STDOUT||'',stderr:process.env.CLAUDE_TOOL_STDERR||''}})\"",
       "timeout": 5000,
       "async": true
     }
@@ -140,20 +127,20 @@ python -c "import json; json.load(open('$HOME/.claude/settings.json', encoding='
 
 ```bash
 # 1. CLI 状态检查
-python ~/.claude/scripts/bugdb/cli.py stats
+bugdb stats
 
 # 2. 录入一条测试记录
-python ~/.claude/scripts/bugdb/cli.py add \
-  --error-type link \
-  --error-message "error LNK2001: unresolved external symbol __imp_WSAStartup" \
-  --root-cause "missing ws2_32.lib" \
-  --solution "link ws2_32.lib" \
-  --solution-steps '["target_link_libraries(... ws2_32)"]' \
+bugdb add \
+  --entry-kind bug \
+  --category link \
+  --context "error LNK2001: unresolved external symbol __imp_WSAStartup" \
+  --cause "missing ws2_32.lib" \
+  --content "link ws2_32.lib" \
+  --action-steps '["target_link_libraries(... ws2_32)"]' \
   --language c++ --project-type vs --tags "linker"
 
 # 3. 搜索验证
-python ~/.claude/scripts/bugdb/cli.py search \
-  --query "LNK2001 __imp_WSAStartup" --language c++
+bugdb search --query "LNK2001 __imp_WSAStartup" --language c++
 
 # 4. Hook 加载检查
 node -e "
@@ -172,12 +159,12 @@ node -e "
 
 ## 六、卸载
 
-删除已部署的文件即可：
-
 ```bash
-rm -rf ~/.claude/scripts/bugdb
+pip uninstall bugdb
+rm -rf ~/.claude/plugins/bugdb-knowledge
 rm -f  ~/.claude/commands/bugfix.md
 rm -f  ~/.claude/commands/bugsearch.md
+rm -f  ~/.claude/commands/bugdb-setup.md
 rm -rf ~/.claude/hooks/js/bugdb_check
 rm -rf ~/.claude/skills/bugdb-lookup
 rm -rf ~/.claude/skills/bugdb-record

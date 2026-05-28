@@ -7,7 +7,7 @@ const os = require('os');
 const { execSync } = require('child_process');
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
-const CLI_PATH = path.join(PLUGIN_ROOT, 'scripts', 'bugdb', 'cli.py');
+const CLI_PATH = path.join(PLUGIN_ROOT, 'bugdb', 'cli.py');
 
 // 智能预过滤：99% Bash 调用零开销
 const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
