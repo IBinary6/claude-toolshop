@@ -6,6 +6,24 @@ claude-toolshop 提供一组可独立安装的插件，通过 Hook、Skill、Com
 
 ## 安装
 
+### 前置依赖
+
+| 依赖 | 最低版本 | 检测命令 |
+|------|---------|----------|
+| Python | 3.11+ | `python --version` |
+| Node.js | 18+ | `node --version` |
+| pip | — | `python -m pip --version` |
+
+`python` 和 `node` 必须在 **PATH** 上能直接调起。Windows 用户注意：Windows Store 的 `python.exe` 是引导 stub 而非真 Python；卸载残留可能留下 `0xffffffff` 的失效 shim。`/bugdb-setup` 会先做这套环境检测，不满足会停下提示，不会盲装。
+
+未装 Python 3.11+ 时任选：
+
+- Windows：`scoop install python` / `winget install Python.Python.3.11` / [python.org](https://www.python.org/downloads/)（勾选 "Add Python to PATH"）
+- macOS：`brew install python@3.11`
+- Linux：发行版包管理器或 `pyenv install 3.11`
+
+### 步骤
+
 在 Claude Code 中**逐条**执行（每条独立按回车，不要一次性粘贴多行斜杠命令）：
 
 ```

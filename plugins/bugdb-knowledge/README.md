@@ -65,11 +65,25 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
 
 ### 前置依赖
 
-| 依赖 | 最低版本 | 用途 |
-|------|---------|------|
-| Python | 3.11+ | CLI 核心（数据库、搜索、归一化） |
-| Node.js | 18+ | PostToolUse Hook 运行时 |
-| pip | — | 安装 Python 包 |
+| 依赖 | 最低版本 | 用途 | 检测方式 |
+|------|---------|------|----------|
+| Python | 3.11+ | CLI 核心（数据库、搜索、归一化） | `python --version` |
+| Node.js | 18+ | PostToolUse Hook 运行时 | `node --version` |
+| pip | — | 安装 Python 包 | `python -m pip --version` |
+
+**关键要求**：`python` 和 `node` 必须在 **PATH** 上能直接调起。常见踩坑：
+
+- Windows Store 的 `python.exe` 是引导用户去商店的 stub，不是真 Python
+- chocolatey / 卸载残留可能留下指向不存在路径的失效 shim（`python --version` 返回 `0xffffffff`）
+- 通过 conda env / venv 进入项目目录后，要保证激活的环境里有 `python ≥ 3.11`
+
+`/bugdb-setup` 命令的 Step 0 会自动检测以上情况并停下提示，不会盲装。
+
+如果当前没装 Python 3.11+，任选其一：
+
+- Windows：`scoop install python` / `winget install Python.Python.3.11` / [python.org](https://www.python.org/downloads/) 安装包（勾选 "Add Python to PATH"）
+- macOS：`brew install python@3.11`
+- Linux：发行版包管理器或 `pyenv install 3.11`
 
 ### CLAUDE.md 配置
 
