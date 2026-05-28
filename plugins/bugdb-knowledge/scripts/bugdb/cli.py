@@ -22,6 +22,8 @@ from bugdb import utils as _utils  # noqa: E402
 from bugdb.db import BugDB  # noqa: E402
 from bugdb.exceptions import BugDBError, RecordNotFound  # noqa: E402
 from bugdb.models import BugRecord, ErrorType, Status  # noqa: E402
+from bugdb.paths import get_db_path, get_log_path, get_bugdb_home  # noqa: E402
+from bugdb.paths import _CONFIG_FILE, _read_config  # noqa: E402
 
 
 def _parse_steps(raw: str) -> list | None:
@@ -308,6 +310,97 @@ def cmd_import(args, db: BugDB) -> int:
     return 0
 
 
+def cmd_config(args) -> int:
+    """config 子命令处理函数（不需要 BugDB 实例）。
+
+    子操作：path / get / set / init。
+    """
+    action = args.config_action
+    fmt = args.format
+
+    if action == 'path':
+        # 输出当前生效的路径（来自 paths.py 解析结果，不只是 config.json）
+        info = {
+            'db_path': str(get_db_path()),
+            'log_path': str(get_log_path()),
+            'bugdb_home': str(get_bugdb_home()),
+            'config_file': str(_CONFIG_FILE),
+        }
+        if fmt == 'text':
+            for k, v in info.items():
+                _print(f"{k}: {v}")
+        else:
+            _print(json.dumps(info, ensure_ascii=False, indent=2))
+        return 0
+
+    if action == 'get':
+        key = args.key
+        if key is None:
+            sys.stderr.write("error: config get 需要 <key> 参数\n")
+            return 2
+        cfg = _read_config()
+        value = cfg.get(key)
+        if fmt == 'text':
+            if value is None:
+                _print(f"{key}: (未设置)")
+            else:
+                _print(f"{key}: {value}")
+        else:
+            _print(json.dumps({key: value}, ensure_ascii=False, indent=2))
+        return 0
+
+    if action == 'set':
+        key = args.key
+        value = args.value
+        if key is None or value is None:
+            sys.stderr.write("error: config set 需要 <key> <value> 参数\n")
+            return 2
+        # 读取现有配置（文件不存在则为空 dict）
+        cfg = _read_config()
+        cfg[key] = value
+        # 确保目录存在
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(
+            json.dumps(cfg, ensure_ascii=False, indent=2) + '\n',
+            encoding='utf-8',
+        )
+        if fmt == 'text':
+            _print(f"{key} = {value}")
+        else:
+            _print(json.dumps({'key': key, 'value': value}, ensure_ascii=False, indent=2))
+        return 0
+
+    if action == 'init':
+        if _CONFIG_FILE.exists():
+            msg = f"config.json 已存在: {_CONFIG_FILE}"
+            if fmt == 'text':
+                _print(msg)
+            else:
+                _print(json.dumps({'exists': True, 'path': str(_CONFIG_FILE)},
+                                  ensure_ascii=False, indent=2))
+            return 0
+        # 创建默认配置
+        default_cfg = {
+            'db_path': str(get_bugdb_home() / 'bugs.db'),
+            'log_path': str(get_bugdb_home() / 'bugdb.log'),
+        }
+        _CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CONFIG_FILE.write_text(
+            json.dumps(default_cfg, ensure_ascii=False, indent=2) + '\n',
+            encoding='utf-8',
+        )
+        if fmt == 'text':
+            _print(f"已创建: {_CONFIG_FILE}")
+        else:
+            _print(json.dumps({'created': True, 'path': str(_CONFIG_FILE)},
+                              ensure_ascii=False, indent=2))
+        return 0
+
+    # 不应到达此处（argparse 已限制 choices）
+    sys.stderr.write(f"error: unknown config action: {action}\n")
+    return 2
+
+
 def _add_common(p: argparse.ArgumentParser) -> None:
     """所有子命令共用的参数。"""
     p.add_argument('--format', choices=['json', 'text'], default='json')
@@ -423,6 +516,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--input', required=True)
     _add_common(p)
 
+    # config（不需要 BugDB 实例）
+    p = sub.add_parser('config', help='查看/修改 BugDB 配置')
+    p.add_argument('config_action', choices=['path', 'get', 'set', 'init'],
+                   help='path=显示路径 | get=读取配置项 | set=设置配置项 | init=创建默认配置')
+    p.add_argument('key', nargs='?', default=None,
+                   help='配置项名称（get/set 时必须）')
+    p.add_argument('value', nargs='?', default=None,
+                   help='配置项值（set 时必须）')
+    _add_common(p)
+
     return parser
 
 
@@ -431,6 +534,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        # config 子命令不需要 BugDB 实例
+        if args.command == 'config':
+            return cmd_config(args)
         db = BugDB()
         handler = HANDLERS[args.command]
         return handler(args, db)
@@ -467,6 +573,7 @@ HANDLERS.update({
     'normalize': cmd_normalize,
     'export': cmd_export,
     'import': cmd_import,
+    'config': cmd_config,
 })
 
 
