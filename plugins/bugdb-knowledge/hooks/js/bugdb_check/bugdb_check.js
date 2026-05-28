@@ -1,4 +1,4 @@
-// ~/.claude/hooks/js/bugdb_check/bugdb_check.js
+// bugdb_check.js
 // PostToolUse:Bash 钩子。检测错误关键词后查询 BugDB，命中时注入 [BUGDB_MATCH] 提示。
 // 失败静默：任何异常都不阻塞主流程。
 
@@ -6,8 +6,8 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 
-const HOMEDIR = os.homedir();
-const CLI_PATH = path.join(HOMEDIR, '.claude', 'scripts', 'bugdb', 'cli.py');
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
+const CLI_PATH = path.join(PLUGIN_ROOT, 'scripts', 'bugdb', 'cli.py');
 
 // 智能预过滤：99% Bash 调用零开销
 const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
