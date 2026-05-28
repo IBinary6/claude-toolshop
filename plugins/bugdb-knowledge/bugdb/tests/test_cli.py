@@ -277,3 +277,63 @@ def test_cli_search_b64_invalid_falls_back(tmp_path):
     """无效 base64 不应崩溃 CLI。"""
     r = _run(["search", "--query-b64", "!!!not-base64!!!"], tmp_path)
     assert r.returncode in (0, 1, 2, 3)
+
+
+def test_cli_add_rejects_mismatched_kind_category(tmp_path):
+    """entry_kind=practice 不能配 category=runtime —— 边界校验必须挡住。"""
+    r = _run([
+        "add", "--entry-kind", "practice", "--category", "runtime",
+        "--context", "some practice text",
+        "--cause", "n/a",
+        "--content", "n/a",
+    ], tmp_path)
+    assert r.returncode == 2
+    assert "entry_kind=practice" in r.stderr
+    assert "category=runtime" in r.stderr
+
+
+def test_cli_add_rejects_bug_with_knowledge_category(tmp_path):
+    """entry_kind=bug 配 category=practice 也必须被拒。"""
+    r = _run([
+        "add", "--entry-kind", "bug", "--category", "practice",
+        "--context", "error LNK2001",
+        "--cause", "x",
+        "--content", "y",
+    ], tmp_path)
+    assert r.returncode == 2
+    assert "entry_kind=bug" in r.stderr
+
+
+def test_cli_add_accepts_matched_knowledge_pair(tmp_path):
+    """entry_kind=tool + category=tool 合法组合必须通过。"""
+    r = _run([
+        "add", "--entry-kind", "tool", "--category", "tool",
+        "--context", "ripgrep -F 用于禁用正则",
+        "--cause", "默认 rg 把 pattern 当 regex",
+        "--content", "加 -F 走字面匹配",
+    ], tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["entry_kind"] == "tool"
+
+
+def test_cli_import_rejects_invalid_combination_atomically(tmp_path):
+    """import 含一条非法组合 → 整批失败，不留半残数据。"""
+    payload = {
+        "version": 2,
+        "records": [
+            {"entry_kind": "bug", "category": "link", "key_pattern": "ok1",
+             "context": "c1", "cause": "x", "content": "y"},
+            {"entry_kind": "practice", "category": "runtime", "key_pattern": "bad",
+             "context": "c2", "cause": "x", "content": "y"},
+        ],
+    }
+    import_file = tmp_path / "bad.json"
+    import_file.write_text(json.dumps(payload), encoding="utf-8")
+    r = _run(["import", "--input", str(import_file)], tmp_path)
+    assert r.returncode == 2
+    assert "record #1" in r.stderr
+
+    # 数据库必须为空 —— 第一条不能因为本身合法就漏进去
+    lst = _run(["list", "--status", "all"], tmp_path)
+    assert lst.returncode == 0
+    assert json.loads(lst.stdout)["results"] == []

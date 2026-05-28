@@ -1,0 +1,6 @@
+# 评估临时输出（每次 run_eval 重新生成）
+result_*.json
+result_*.stderr.log
+
+# sanity 试验文件
+_mini*.json

@@ -72,3 +72,34 @@ class KnowledgeRecord:
 # 向后兼容别名（deprecated，后续版本移除）
 ErrorType = Category
 BugRecord = KnowledgeRecord
+
+
+# entry_kind × category 合法组合矩阵。
+# bug 类支持原有 7 个错误分类；其它 4 类 kind 必须配同名 category，避免出现
+# "entry_kind=practice, category=runtime" 这种语义自相矛盾的记录。
+_KIND_CATEGORY_RULES: dict[EntryKind, frozenset[Category]] = {
+    EntryKind.BUG: frozenset({
+        Category.COMPILE, Category.LINK, Category.RUNTIME, Category.TYPE,
+        Category.IMPORT, Category.BUILD, Category.CONFIG,
+    }),
+    EntryKind.PRACTICE: frozenset({Category.PRACTICE}),
+    EntryKind.TOOL: frozenset({Category.TOOL}),
+    EntryKind.DECISION: frozenset({Category.DECISION}),
+    EntryKind.WORKFLOW: frozenset({Category.WORKFLOW}),
+}
+
+
+def validate_kind_category(kind: EntryKind, category: Category) -> str | None:
+    """校验 entry_kind 与 category 是否兼容。
+
+    返回 ``None`` 表示通过；否则返回面向用户的错误描述字符串，调用方可直接
+    写入 stderr。设计为纯函数，无副作用，便于 CLI add / import 等边界处复用。
+    """
+    allowed = _KIND_CATEGORY_RULES.get(kind)
+    if allowed is None:
+        return f"unknown entry_kind: {kind}"
+    if category not in allowed:
+        allowed_str = '/'.join(sorted(c.value for c in allowed))
+        return (f"entry_kind={kind.value} 不允许 category={category.value}；"
+                f"允许的 category：{allowed_str}")
+    return None

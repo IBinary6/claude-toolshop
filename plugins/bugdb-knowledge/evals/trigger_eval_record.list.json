@@ -1,0 +1,82 @@
+[
+  {
+    "query": "搞定了，刚才那个 LNK2001 是因为 vcxproj 里没把 ws2_32.lib 加到 AdditionalDependencies，我加进去就过了",
+    "should_trigger": true
+  },
+  {
+    "query": "终于跑通了！cmake 里用 target_link_libraries(foo PRIVATE OpenSSL::SSL) 比手动写 -lssl 干净多了",
+    "should_trigger": true
+  },
+  {
+    "query": "刚发现 rg 加 -F 可以禁用正则，直接字面匹配，挺好用的记一下",
+    "should_trigger": true
+  },
+  {
+    "query": "之前那个 unique_ptr 跨 DLL 析构 access violation，我们决定改用 shared_ptr + custom deleter 解决了",
+    "should_trigger": true
+  },
+  {
+    "query": "团队讨论之后微服务这边决定就用 K8s + Istio，gateway 走 Envoy，先这样定下来",
+    "should_trigger": true
+  },
+  {
+    "query": "CI 终于绿了，问题在 pyproject.toml 的 build-backend 我写成 setuptools.build_meta:__legacy__ 了",
+    "should_trigger": true
+  },
+  {
+    "query": "我们组的发布流程定下来了：feature branch → main → staging → prod 灰度 5% → 全量，每步要 PR review",
+    "should_trigger": true
+  },
+  {
+    "query": "经过两天的排查终于定位到这个 bug 是 producer/consumer 之间漏了一个 memory barrier，加 std::atomic_thread_fence 就稳了",
+    "should_trigger": true
+  },
+  {
+    "query": "cargo nextest 比 cargo test 快不少，并发跑测试，输出也清晰，以后默认用它",
+    "should_trigger": true
+  },
+  {
+    "query": "刚发现 pip install -e . --no-build-isolation 可以省掉一次 PEP517 sandbox 创建，本地迭代快很多",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我看下这段 C++ 代码有没有内存泄漏",
+    "should_trigger": false
+  },
+  {
+    "query": "我现在遇到 LNK2001 unresolved external symbol __imp_WSAStartup 怎么办",
+    "should_trigger": false
+  },
+  {
+    "query": "把这个 numpy array 转成 pandas DataFrame",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我搜下最近一年 Rust 异步运行时的对比文章",
+    "should_trigger": false
+  },
+  {
+    "query": "教我下 git rebase --onto 的用法",
+    "should_trigger": false
+  },
+  {
+    "query": "解释下 C++ template 里 SFINAE 是怎么工作的",
+    "should_trigger": false
+  },
+  {
+    "query": "vim 里怎么快速跳到匹配的括号",
+    "should_trigger": false
+  },
+  {
+    "query": "推荐个 Python 的 HTTP 客户端库，httpx 怎么样",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我把这个 JSON 里所有 timestamp 字段转成 ISO8601",
+    "should_trigger": false
+  },
+  {
+    "query": "我想学下 K8s，有什么入门资料推荐吗",
+    "should_trigger": false
+  }
+]

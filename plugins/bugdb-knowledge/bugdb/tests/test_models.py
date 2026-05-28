@@ -1,4 +1,4 @@
-from bugdb.models import Category, EntryKind, KnowledgeRecord, Status
+from bugdb.models import Category, EntryKind, KnowledgeRecord, Status, validate_kind_category
 
 
 def test_category_str_enum():
@@ -68,3 +68,44 @@ def test_default_factory_isolation():
     r1.action_steps.append('x')
     assert r2.action_steps == []
     assert r1.tags is not r2.tags
+
+
+# ---------- validate_kind_category ----------
+
+import pytest
+
+
+@pytest.mark.parametrize("category", [
+    Category.COMPILE, Category.LINK, Category.RUNTIME,
+    Category.TYPE, Category.IMPORT, Category.BUILD, Category.CONFIG,
+])
+def test_validate_bug_allows_all_bug_categories(category):
+    """entry_kind=bug 允许所有 7 个 bug 类别。"""
+    assert validate_kind_category(EntryKind.BUG, category) is None
+
+
+@pytest.mark.parametrize("kind,category", [
+    (EntryKind.PRACTICE, Category.PRACTICE),
+    (EntryKind.TOOL, Category.TOOL),
+    (EntryKind.DECISION, Category.DECISION),
+    (EntryKind.WORKFLOW, Category.WORKFLOW),
+])
+def test_validate_knowledge_kind_matches_same_category(kind, category):
+    """非 bug 的 4 类 kind 必须配同名 category。"""
+    assert validate_kind_category(kind, category) is None
+
+
+@pytest.mark.parametrize("kind,category", [
+    (EntryKind.BUG, Category.PRACTICE),
+    (EntryKind.BUG, Category.TOOL),
+    (EntryKind.PRACTICE, Category.RUNTIME),
+    (EntryKind.TOOL, Category.COMPILE),
+    (EntryKind.DECISION, Category.WORKFLOW),
+    (EntryKind.WORKFLOW, Category.DECISION),
+])
+def test_validate_rejects_mismatched_combinations(kind, category):
+    """语义自相矛盾的组合必须被拒绝，错误信息要包含 entry_kind/category 让人能定位。"""
+    err = validate_kind_category(kind, category)
+    assert err is not None
+    assert kind.value in err
+    assert category.value in err

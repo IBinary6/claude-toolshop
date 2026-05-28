@@ -64,6 +64,17 @@ bugdb-setup 完成：
   使用 /bugfix 交互式录入知识条目
 ```
 
+并附上**升级提示**（首次安装也输出，让用户知道未来怎么升级）：
+
+```
+后续插件升级（仓库发布了新 SKILL.md / hook / Python 代码时）：
+  1. /plugin marketplace update claude-toolshop      # 拉最新代码到本地 cache
+  2. 完全退出 Claude Code 再重新打开                  # 让 skill 元数据从磁盘重新加载
+  
+  仅 git pull 而不重启 Claude Code 不会生效——
+  skill description / hook 配置在启动时加载到内存，运行期间不会重读。
+```
+
 ## 约束
 
 - 不得修改用户 CLAUDE.md 中已有的内容

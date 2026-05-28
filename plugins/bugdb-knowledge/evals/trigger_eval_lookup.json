@@ -1,0 +1,26 @@
+{
+  "skill_name": "bugdb-lookup",
+  "description": "任何涉及编译、链接、运行时或构建错误的场景都先调用：无论错误来自工具执行的输出，还是用户在对话中提及、描述、贴出的错误信息。先查本地知识库再排查，避免重复试错。",
+  "evals": [
+    {"query": "刚才跑 cmake -B build 一堆 linker errors，主要是 boost::asio 相关的 unresolved external", "should_trigger": true},
+    {"query": "VS2022 编译我那个 dx12 项目报 error C2065 'D3D12_HEAP_PROPERTIES': undeclared identifier", "should_trigger": true},
+    {"query": "我 pip install -e . 装好了，import mypkg 还是 ModuleNotFoundError: No module named 'mypkg'", "should_trigger": true},
+    {"query": "Rust 编译报 error[E0308]: mismatched types, expected `&str` found `String`，我刚改了 fn 签名", "should_trigger": true},
+    {"query": "我那个 C++ 项目链接 libcmtd.lib 时报 LNK2001，搞不清是 runtime library 设置问题还是别的", "should_trigger": true},
+    {"query": "licmtd 编译出错怎么办", "should_trigger": true},
+    {"query": "我那个 PyTorch 训练脚本跑着跑着 segfault 了，stack trace 里指向 libc10.so", "should_trigger": true},
+    {"query": "ninja: error: 'src/foo.cpp.obj', needed by 'foo.exe', missing and no known rule to make it", "should_trigger": true},
+    {"query": "我编了个 cuda kernel，nvcc 说 fatal error C1083: 无法打开包含文件 cuda_runtime.h", "should_trigger": true},
+    {"query": "我把 release build 改成 debug 之后程序启动就 access violation 在 std::vector 析构里", "should_trigger": true},
+    {"query": "帮我写一个用尾递归实现的 fibonacci 函数，要 O(1) 空间", "should_trigger": false},
+    {"query": "你能解释下 C++ 里 RAII 的设计动机吗，最好结合 unique_ptr 举例", "should_trigger": false},
+    {"query": "帮我把这段代码用 clang-format google 风格格式化一下", "should_trigger": false},
+    {"query": "git rebase -i HEAD~5 之后怎么调整 commit 顺序", "should_trigger": false},
+    {"query": "推荐几本现代 C++ 的入门书，最好覆盖到 C++20", "should_trigger": false},
+    {"query": "我想给我的 Rust 项目加个 license，MIT 和 Apache 2.0 选哪个比较好", "should_trigger": false},
+    {"query": "帮我把这段 nginx access log 按 status code 分组统计一下", "should_trigger": false},
+    {"query": "vim 里我编辑了个文件忘记保存就 :q 了，能恢复吗", "should_trigger": false},
+    {"query": "我那个 GitHub Action workflow 一直 pending 不跑，看起来是 runner 没分配过来", "should_trigger": false},
+    {"query": "把这个 markdown 表格转成 LaTeX 的 tabular 环境", "should_trigger": false}
+  ]
+}

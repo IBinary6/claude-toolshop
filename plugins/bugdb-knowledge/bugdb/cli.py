@@ -12,7 +12,7 @@ from bugdb import formatters, search as search_mod
 from bugdb import utils as _utils
 from bugdb.db import BugDB
 from bugdb.exceptions import BugDBError, RecordNotFound
-from bugdb.models import Category, EntryKind, KnowledgeRecord, Status
+from bugdb.models import Category, EntryKind, KnowledgeRecord, Status, validate_kind_category
 from bugdb.paths import get_db_path, get_log_path, get_bugdb_home
 from bugdb.paths import get_config_file, read_config
 
@@ -103,9 +103,15 @@ def cmd_add(args, db: BugDB) -> int:
     if not pattern:
         sys.stderr.write("error: key_pattern is empty (provide --key-pattern or non-empty --context)\n")
         return 2
+    kind_enum = EntryKind(args.entry_kind)
+    cat_enum = Category(args.category)
+    err = validate_kind_category(kind_enum, cat_enum)
+    if err:
+        sys.stderr.write(f"error: {err}\n")
+        return 2
     rec = KnowledgeRecord(
-        entry_kind=EntryKind(args.entry_kind),
-        category=Category(args.category),
+        entry_kind=kind_enum,
+        category=cat_enum,
         key_pattern=pattern,
         context=args.context,
         cause=args.cause,
@@ -260,17 +266,31 @@ def _load_import_payload(path: Path) -> list[dict]:
 
 
 def cmd_import(args, db: BugDB) -> int:
-    """import 子命令处理：从 JSON 文件批量导入。"""
+    """import 子命令处理：从 JSON 文件批量导入。
+
+    先全量校验（含 kind×category 组合）再统一写入，避免部分成功部分失败
+    留下半残状态。
+    """
     try:
         records = _load_import_payload(Path(args.input))
     except (ValueError, OSError) as e:
         sys.stderr.write(f"import error: {e}\n")
         return 2
-    imported = 0
-    for d in records:
-        rec = KnowledgeRecord(
-            entry_kind=EntryKind(d.get('entry_kind', 'bug')),
-            category=Category(d.get('category') or d.get('error_type', 'compile')),
+    pending: list[KnowledgeRecord] = []
+    for idx, d in enumerate(records):
+        try:
+            kind_enum = EntryKind(d.get('entry_kind', 'bug'))
+            cat_enum = Category(d.get('category') or d.get('error_type', 'compile'))
+        except ValueError as e:
+            sys.stderr.write(f"import error at record #{idx}: {e}\n")
+            return 2
+        err = validate_kind_category(kind_enum, cat_enum)
+        if err:
+            sys.stderr.write(f"import error at record #{idx}: {err}\n")
+            return 2
+        pending.append(KnowledgeRecord(
+            entry_kind=kind_enum,
+            category=cat_enum,
             key_pattern=d.get('key_pattern') or d.get('error_pattern', ''),
             context=d.get('context') or d.get('error_message', ''),
             cause=d.get('cause') or d.get('root_cause', ''),
@@ -287,10 +307,10 @@ def cmd_import(args, db: BugDB) -> int:
             replaced_by_id=d.get('replaced_by_id') or d.get('replaces_id'),
             valid_for=d.get('valid_for'),
             deprecation_note=d.get('deprecation_note'),
-        )
+        ))
+    for rec in pending:
         db.add(rec)
-        imported += 1
-    _output({'imported': imported, 'path': args.input}, 'stats', args.format)
+    _output({'imported': len(pending), 'path': args.input}, 'stats', args.format)
     return 0
 
 
