@@ -7,6 +7,6 @@ from bugdb.db import BugDB
 def db(tmp_path, monkeypatch):
     """每个测试一个干净的 DB（用临时文件，避开 :memory: WAL 限制）。"""
     db_file = tmp_path / "test_bugs.db"
-    monkeypatch.setenv("BUGDB_PATH", str(db_file))
+    monkeypatch.setenv("BUGDB_HOME", str(tmp_path))
     instance = BugDB(db_path=db_file)
     yield instance

@@ -4,8 +4,6 @@
 1. 环境变量 BUGDB_HOME → 该目录下的 bugs.db / bugdb.log
 2. ~/.claude/bugdb/config.json 中的 db_path / log_path 字段
 3. 默认 ~/.claude/bugdb/bugs.db 和 ~/.claude/bugdb/bugdb.log
-
-向后兼容：环境变量 BUGDB_PATH 作为 BUGDB_HOME 的备选（直接指向 db 文件路径）。
 """
 import json
 import os
@@ -45,9 +43,8 @@ def get_db_path(explicit: Path | str | None = None) -> Path:
     优先级：
     1. explicit 参数（非空）
     2. BUGDB_HOME 环境变量 → $BUGDB_HOME/bugs.db
-    3. BUGDB_PATH 环境变量（向后兼容，直接指向 db 文件）
-    4. config.json 中的 db_path
-    5. 默认 ~/.claude/bugdb/bugs.db
+    3. config.json 中的 db_path
+    4. 默认 ~/.claude/bugdb/bugs.db
 
     空字符串视为未提供，回退到下一级来源。
 
@@ -65,18 +62,13 @@ def get_db_path(explicit: Path | str | None = None) -> Path:
     if bugdb_home and bugdb_home.strip():
         return Path(bugdb_home).expanduser() / 'bugs.db'
 
-    # 3. BUGDB_PATH 环境变量（向后兼容）
-    bugdb_path = os.environ.get('BUGDB_PATH')
-    if bugdb_path and bugdb_path.strip():
-        return Path(bugdb_path).expanduser()
-
-    # 4. config.json
+    # 3. config.json
     cfg = _read_config()
     db_path = cfg.get('db_path')
     if db_path and str(db_path).strip():
         return Path(db_path).expanduser()
 
-    # 5. 默认路径
+    # 4. 默认路径
     return _DEFAULT_DIR / 'bugs.db'
 
 
