@@ -1,15 +1,12 @@
-"""数据库路径解析。优先级：显式参数 > BUGDB_PATH 环境变量 > 默认 ~/.claude/bugs.db"""
-import os
+"""数据库路径解析。薄代理层，实际逻辑在 paths.py。
+
+保留本模块的公开接口 get_db_path 以兼容现有 import。
+"""
 from pathlib import Path
 
-def get_db_path(explicit: Path | str | None = None) -> Path:
-    """解析 BugDB SQLite 路径。
+from . import paths
 
-    空字符串视为未提供（大声报错原则），回退到下一级来源。
-    """
-    if explicit is not None and explicit != "":
-        return Path(explicit).expanduser()
-    env = os.environ.get('BUGDB_PATH')
-    if env is not None and env != "":
-        return Path(env).expanduser()
-    return Path.home() / '.claude' / 'bugs.db'
+
+def get_db_path(explicit: Path | str | None = None) -> Path:
+    """解析 BugDB SQLite 路径。转发到 paths.get_db_path。"""
+    return paths.get_db_path(explicit)
