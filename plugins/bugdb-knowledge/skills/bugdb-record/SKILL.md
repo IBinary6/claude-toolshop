@@ -6,7 +6,7 @@ description: 将已解决的 bug 按规范录入 Bug 知识库。确保去重检
 ## Step 1: 去重检查
 
 ```
-python ~/.claude/scripts/bugdb/cli.py find-similar \
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" find-similar \
   --pattern "<错误关键词>" \
   --threshold 0.7
 ```
@@ -16,7 +16,7 @@ python ~/.claude/scripts/bugdb/cli.py find-similar \
 ## Step 2: 录入
 
 ```
-python ~/.claude/scripts/bugdb/cli.py add \
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" add \
   --error-type <compile|link|runtime|type|import|build|config> \
   --error-message "<原始完整错误>" \
   --root-cause "<根因>" \
@@ -32,7 +32,7 @@ python ~/.claude/scripts/bugdb/cli.py add \
 ## Step 3: 录入后验证
 
 ```
-python ~/.claude/scripts/bugdb/cli.py search --query "<error_message>" --language <语言>
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" search --query "<error_message>" --language <语言>
 ```
 
 若搜不到自己刚录入的 → 报告问题（可能是 normalizer 过度清洗，需调整规则）。

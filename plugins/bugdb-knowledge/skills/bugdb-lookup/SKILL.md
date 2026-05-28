@@ -8,7 +8,7 @@ description: 遇到编译/链接/运行时/构建错误时，优先查询本地 
 ### Step 1: 查询知识库（normalize 由 CLI 自动处理）
 
 ```
-python ~/.claude/scripts/bugdb/cli.py search \
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" search \
   --query "<原始错误信息>" \
   --language <当前语言> \
   --format json
@@ -24,8 +24,8 @@ python ~/.claude/scripts/bugdb/cli.py search \
 
 按 solution_steps 数组逐项执行，验证（重新编译/运行）。
 
-- 成功 → `python ~/.claude/scripts/bugdb/cli.py feedback --id <id> --result success`
-- 失败 → `python ~/.claude/scripts/bugdb/cli.py feedback --id <id> --result failure`，进入 Step 4
+- 成功 → `python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" feedback --id <id> --result success`
+- 失败 → `python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" feedback --id <id> --result failure`，进入 Step 4
 
 ### Step 4: 降级处理（必须遵守）
 

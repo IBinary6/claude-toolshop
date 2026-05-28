@@ -10,11 +10,11 @@
 4. 询问语言（c++ / rust / python / go / js / any）
 5. 询问项目类型（vs / cmake / cargo / npm / makefile / any）
 6. 询问 tags（逗号分隔，可选）
-7. 调用 `python ~/.claude/scripts/bugdb/cli.py find-similar --pattern "<关键词>"` 去重
+7. 调用 `python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" find-similar --pattern "<关键词>"` 去重
 8. 若无相似记录，调用：
 
 ```bash
-python ~/.claude/scripts/bugdb/cli.py add \
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" add \
   --error-type <type> \
   --error-message "<原始错误>" \
   --root-cause "<根因>" \

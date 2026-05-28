@@ -9,7 +9,7 @@
 调用：
 
 ```bash
-python ~/.claude/scripts/bugdb/cli.py search \
+python "${CLAUDE_PLUGIN_ROOT}/scripts/bugdb/cli.py" search \
   --query "<用户输入>" \
   --format text
 ```
