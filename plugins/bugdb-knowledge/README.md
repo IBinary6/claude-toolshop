@@ -47,7 +47,7 @@
 
 然后**完全退出 Claude Code 再重新打开**——skill description、hook 配置、command 在 Claude Code 启动时一次性加载到内存，仅 `marketplace update` 拉取了最新代码但运行期不会重读，必须重启才能生效。
 
-如果 `bugdb/` 下的 Python 代码也有更新，重启后第一次跑命令前再执行一次 `/bugdb-setup` 即可重新 `pip install -e`。
+CLI（`bugdb/cli.py`）自带 sys.path 自举，**无需 `pip install`**——拉取最新代码 + 重启 Claude Code 即视为升级完成。如有疑虑可重跑一次 `/bugdb-setup` 走 Step 3 验证 CLI 状态。
 
 ### 方式二：手动安装
 

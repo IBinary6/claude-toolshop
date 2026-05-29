@@ -8,6 +8,12 @@ import json
 import sys
 from pathlib import Path
 
+# 自举：把脚本所在目录的父目录塞进 sys.path，使得 `python cli.py` 直接可用，
+# 不再依赖 `pip install -e`。版本升级/卸载重装都不会破。
+_PKG_PARENT = str(Path(__file__).resolve().parent.parent)
+if _PKG_PARENT not in sys.path:
+    sys.path.insert(0, _PKG_PARENT)
+
 from bugdb import formatters, search as search_mod
 from bugdb import utils as _utils
 from bugdb.db import BugDB

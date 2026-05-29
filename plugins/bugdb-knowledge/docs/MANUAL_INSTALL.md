@@ -48,8 +48,9 @@ mkdir -p "$DEST/bugdb"
 cp -r "$REPO"/bugdb/*.py "$DEST/bugdb/"
 cp "$REPO"/pyproject.toml "$DEST/"
 
-# 安装 Python 包
-pip install -e "$DEST"
+# 安装 Python 包（可选——cli.py 自带 sys.path 自举，无需 pip install 即可工作；
+# 只有想用 `bugdb` 命令行 console script 时才需要执行下面这行）
+# pip install -e "$DEST"
 
 # 斜杠命令
 mkdir -p ~/.claude/commands

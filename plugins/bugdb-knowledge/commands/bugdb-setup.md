@@ -41,23 +41,15 @@ python -c "import sys; v=sys.version_info; print(f'{v.major}.{v.minor}.{v.micro}
 
 输出一句话提示「装完后重新执行 `/bugdb-setup`」，停下。**不要继续往后跑**。
 
-### Step 3: 安装 Python 包
-
-```bash
-python -m pip install -e "${CLAUDE_PLUGIN_ROOT}"
-```
-
-失败按 stderr 报告并停止。若提示权限问题（写入系统目录失败），追加 `--user` 重试一次。
-
-### Step 4: 验证 CLI
+### Step 3: 验证 CLI
 
 ```bash
 python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats --format text
 ```
 
-失败则报告错误并停止。
+cli.py 自带 sys.path 自举，不需要 `pip install`。跑通即视为安装完成。失败则报告 stderr 并停止。
 
-### Step 5: 追加 CLAUDE.md 触发规则
+### Step 4: 追加 CLAUDE.md 触发规则
 
 检查 `~/.claude/CLAUDE.md` 是否已包含 `bugdb-lookup` 关键词：
 
@@ -80,18 +72,18 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats --format text
 跨语言错误以报错栈顶语言为准。
 ```
 
-### Step 6: 汇报结果
+### Step 5: 汇报结果
 
 简短输出（不超过 5 行）：
 
 ```
 bugdb-setup 完成：
   ✓ Python <版本>
-  ✓ Python 包已安装
+  ✓ CLI 可用（cli.py 自举，无需 pip install）
   ✓ CLAUDE.md 触发规则已配置
 
 使用 /bugsearch <关键词> 搜索，/bugfix 手动录入。
-后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code。
+后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可，无需重跑本命令。
 ```
 
 ## 约束

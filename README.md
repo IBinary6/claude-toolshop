@@ -28,7 +28,7 @@ claude-toolshop 提供一组可独立安装的插件，通过 Hook、Skill、Com
 /bugdb-setup
 ```
 
-> 第三步 `/bugdb-setup` 会执行 `pip install -e` 安装 Python 依赖，并向 `~/.claude/CLAUDE.md` 追加触发规则，是插件正常工作的必要步骤，不可省略。
+> 第三步 `/bugdb-setup` 会检测 Python 环境、验证 CLI 可用，并向 `~/.claude/CLAUDE.md` 追加触发规则。CLI 自带 sys.path 自举，**无需 `pip install`**，因此版本升级或卸载重装后不会失效。
 
 > **手动安装**：如果无法使用 Plugin Marketplace，参见 [plugins/bugdb-knowledge/docs/MANUAL_INSTALL.md](./plugins/bugdb-knowledge/docs/MANUAL_INSTALL.md)。
 
