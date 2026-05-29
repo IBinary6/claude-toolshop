@@ -1,13 +1,16 @@
-[
-  {
-    "event": "PostToolUse",
-    "matcher": "Bash",
-    "hooks": [
+{
+  "hooks": {
+    "PostToolUse": [
       {
-        "type": "command",
-        "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/bugdb_check/bugdb_check.js\"",
-        "timeout": 5000
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/bugdb_check/bugdb_check.js\"",
+            "timeout": 5000
+          }
+        ]
       }
     ]
   }
-]
+}
