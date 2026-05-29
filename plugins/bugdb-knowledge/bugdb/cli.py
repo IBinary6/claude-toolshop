@@ -58,7 +58,12 @@ def _output(obj, kind: str, fmt: str) -> None:
 
 
 def cmd_search(args, db: BugDB) -> int:
-    """search 子命令处理函数。"""
+    """search 子命令处理函数。
+
+    主搜索 0 结果时，除非 ``--no-fallback``，会附加 fallback 邻区摘要
+    （JSON: ``fallback_results``；text: ``[BUGDB_FALLBACK]``）。
+    hook 只读 ``results``，不消费 fallback，行为保持不变。
+    """
     query = args.query
     if args.query_b64:
         import base64
@@ -67,7 +72,36 @@ def cmd_search(args, db: BugDB) -> int:
         db, query=query, language=args.language,
         include_deprecated=args.include_deprecated, limit=args.limit,
     )
-    _output(results, 'results', args.format)
+    fallback: list = []
+    if not results and not args.no_fallback:
+        fallback = search_mod.fallback_neighborhood(
+            db, query=query, language=args.language, limit=5,
+        )
+    if args.format == 'text':
+        _print(formatters.search_results_to_text(results, fallback=fallback or None))
+    else:
+        _print(formatters.search_results_to_json(results, fallback=fallback or None))
+    return 0
+
+
+def cmd_explore(args, db: BugDB) -> int:
+    """explore 子命令处理函数：自由文本联想 + 多过滤检索。"""
+    tags = _utils.comma_split(args.tags) if args.tags else None
+    filters = {
+        'language': args.language,
+        'category': args.category,
+        'entry_kind': args.entry_kind,
+        'tags': tags,
+    }
+    results = search_mod.explore(
+        db, query=args.query or '',
+        language=args.language, category=args.category,
+        entry_kind=args.entry_kind, tags=tags, limit=args.limit,
+    )
+    if args.format == 'text':
+        _print(formatters.explore_to_text(results, query=args.query or '', filters=filters))
+    else:
+        _print(formatters.explore_to_json(results, query=args.query or '', filters=filters))
     return 0
 
 
@@ -417,6 +451,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--language', default=None)
     p.add_argument('--include-deprecated', action='store_true')
     p.add_argument('--limit', type=int, default=3)
+    p.add_argument('--no-fallback', dest='no_fallback', action='store_true',
+                   help='禁用 0 结果时的邻区兜底，回到旧的空 results 语义')
+    _add_common(p)
+
+    # explore：自由文本联想检索
+    p = sub.add_parser('explore', help='自由文本联想检索（FTS5 OR + LIKE 双路）')
+    p.add_argument('--query', default='', help='自由文本（可空，留空则按 filter 列）')
+    p.add_argument('--language', default=None)
+    p.add_argument('--category', default=None)
+    p.add_argument('--tags', default=None, help='逗号分隔，命中任一即可')
+    p.add_argument('--entry-kind', dest='entry_kind', default=None)
+    p.add_argument('--limit', type=int, default=20)
     _add_common(p)
 
     p = sub.add_parser('get', help='按 ID 查询单条记录')
@@ -555,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
 
 HANDLERS = {
     'search': cmd_search,
+    'explore': cmd_explore,
     'get': cmd_get,
     'list': cmd_list,
     'stats': cmd_stats,

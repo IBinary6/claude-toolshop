@@ -274,7 +274,28 @@ bugdb find-similar --pattern "LNK2001" --threshold 0.7
 # 错误消息归一化（调试用）
 bugdb normalize --input "C:/proj/main.cpp(42): error LNK2001"
 # → {"normalized": "error LNK2001", "keywords": "LNK2001"}
+
+# 自由文本联想检索（不要求关键词精确匹配）
+bugdb explore --query "winsock unresolved" --language c++
+bugdb explore --category link --tags "linker,windows" --limit 10
+bugdb explore --entry-kind practice --language python
 ```
+
+### 搜索策略
+
+`bugdb search` 走三层兜底：
+
+1. **精确**：在 `key_pattern` 上做 FTS5 BM25 匹配（关键词重叠才命中）。
+2. **全文**：上一步空时，在 `context/cause/content` 上做全文回退。
+3. **邻区**：仍空时，列同 category/language 下 top 5 活跃记录（按 confidence DESC 排），
+   JSON 里走独立的 `fallback: true` + `fallback_results` 字段，text 输出加
+   `[BUGDB_FALLBACK]` 标记。`--no-fallback` 可关闭。
+
+PostToolUse hook 只读 `results`，不消费 fallback —— 即邻区兜底是
+给手动调用者/Claude 的提示，hook 行为不变。
+
+`bugdb explore` 不做断言、不报"找不到"：FTS5 OR + LIKE 子串双路合并，
+配合 `--language/--category/--tags/--entry-kind` 过滤，让调用方自己联想。
 
 ### 录入
 

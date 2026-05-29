@@ -85,3 +85,89 @@ def stats_to_text(stats: dict) -> str:
     """stats 字典序列化为人类可读纯文本。"""
     lines = [f"{k}: {v}" for k, v in sorted(stats.items())]
     return '\n'.join(lines)
+
+
+def record_to_summary(r: KnowledgeRecord, content_limit: int = 80) -> dict:
+    """精简摘要：用于 search fallback / explore 列表展示。
+
+    字段精简到 id/entry_kind/category/key_pattern/content[:N]/confidence/
+    language/tags，避免长记录撑爆上下文。
+    """
+    content = (r.content or '')
+    if len(content) > content_limit:
+        content = content[:content_limit] + '...'
+    return {
+        'id': r.id,
+        'entry_kind': r.entry_kind.value,
+        'category': r.category.value,
+        'key_pattern': r.key_pattern,
+        'content': content,
+        'confidence': r.confidence,
+        'language': r.language,
+        'tags': list(r.tags),
+    }
+
+
+def search_results_to_json(results: list, fallback: list | None = None) -> str:
+    """search 结果序列化为 JSON；可选附带 fallback 邻区摘要。
+
+    - 主结果在 ``results``（命中时非空）
+    - fallback 命中时附加 ``fallback: true`` + ``fallback_results: [...]``
+    - 两者不相互替代；hook 只读 ``results``，fallback 是给 Claude 看的兜底
+    """
+    payload: dict = {'results': [record_to_dict(r) for r in results]}
+    if fallback:
+        payload['fallback'] = True
+        payload['fallback_results'] = [record_to_summary(r) for r in fallback]
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def search_results_to_text(results: list, fallback: list | None = None) -> str:
+    """search 结果序列化为人类可读纯文本；可选附带 fallback 邻区摘要。"""
+    if results:
+        return results_to_text(results)
+    if fallback:
+        lines = [
+            "[BUGDB_FALLBACK] 没有精确命中，以下是同分类下的历史记录（可能相关）：",
+            "",
+        ]
+        for r in fallback:
+            s = record_to_summary(r)
+            lines.append(
+                f"#{s['id']} [{s['entry_kind']}/{s['category']}] "
+                f"confidence={s['confidence']} language={s['language']}"
+            )
+            lines.append(f"  pattern: {s['key_pattern']}")
+            lines.append(f"  content: {s['content']}")
+            lines.append("")
+        return '\n'.join(lines)
+    return "(no results)"
+
+
+def explore_to_json(results: list, query: str, filters: dict) -> str:
+    """explore 结果序列化为 JSON。"""
+    payload = {
+        'total': len(results),
+        'query': query,
+        'filters': filters,
+        'results': [record_to_summary(r, content_limit=120) for r in results],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def explore_to_text(results: list, query: str, filters: dict) -> str:
+    """explore 结果序列化为人类可读纯文本。"""
+    if not results:
+        return "(no results)"
+    lines = [f"# explore query={query!r} filters={filters} total={len(results)}", ""]
+    for r in results:
+        s = record_to_summary(r, content_limit=120)
+        lines.append(
+            f"#{s['id']} [{s['entry_kind']}/{s['category']}] "
+            f"confidence={s['confidence']} language={s['language']} "
+            f"tags={','.join(s['tags']) if s['tags'] else '-'}"
+        )
+        lines.append(f"  pattern: {s['key_pattern']}")
+        lines.append(f"  content: {s['content']}")
+        lines.append("")
+    return '\n'.join(lines)

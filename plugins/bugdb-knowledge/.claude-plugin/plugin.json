@@ -1,6 +1,6 @@
 {
   "name": "bugdb-knowledge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "本地 Bug 知识库 —— SQLite + FTS5，PostToolUse Hook 在 Bash 报错时自动查询知识库；bugdb-lookup / bugdb-record Skill 提供标准化的查/录流程；/bugfix /bugsearch 命令供手动使用。",
   "author": {
     "name": "IBinary6"

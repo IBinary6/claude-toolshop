@@ -525,3 +525,56 @@ class BugDB:
         except Exception:
             rows = self._like_fallback(columns, safe_query, statuses, language, limit)
         return [self._row_to_record(r) for r in rows]
+
+    def like_search(self, columns: list, query: str,
+                    statuses: list | None = None,
+                    language: str | None = None,
+                    limit: int = 20) -> list:
+        """对外暴露 LIKE 子串搜索：用于 explore 子命令的双路合并。
+
+        与 fts_search 区别：不走 FTS5、不需要分词重叠，只做子串匹配，
+        适合自由文本联想检索。返回 KnowledgeRecord 列表。
+        """
+        rows = self._like_fallback(columns, query or '', statuses, language, limit)
+        return [self._row_to_record(r) for r in rows]
+
+    def list_by_filters(self, category: str | None = None,
+                        language: str | None = None,
+                        entry_kind: str | None = None,
+                        tags_any: list | None = None,
+                        statuses: list | None = None,
+                        limit: int = 20) -> list:
+        """按 category/language/entry_kind/tags 多条件列出记录。
+
+        ``tags_any`` 表示标签命中任一即满足（OR 语义，子串匹配）。
+        ``statuses`` 缺省为 ``['active']``。结果按 confidence DESC,
+        success_count DESC 排序。
+        """
+        statuses = statuses or ['active']
+        sql = f"SELECT {_COLUMNS} FROM knowledge WHERE 1=1"
+        params: list = []
+        placeholders = ','.join('?' * len(statuses))
+        sql += f" AND status IN ({placeholders})"
+        params.extend(statuses)
+        if category:
+            sql += " AND category=?"
+            params.append(category)
+        if language:
+            sql += " AND (language=? OR language='any')"
+            params.append(language)
+        if entry_kind:
+            sql += " AND entry_kind=?"
+            params.append(entry_kind)
+        if tags_any:
+            tag_clauses = []
+            for t in tags_any:
+                tag_clauses.append("tags LIKE ? ESCAPE '\\'")
+                escaped = t.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+                params.append(f"%{escaped}%")
+            if tag_clauses:
+                sql += " AND (" + " OR ".join(tag_clauses) + ")"
+        sql += " ORDER BY confidence DESC, success_count DESC, id DESC LIMIT ?"
+        params.append(limit)
+        with self._connection() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [self._row_to_record(r) for r in rows]
