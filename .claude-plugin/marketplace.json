@@ -13,6 +13,11 @@
       "name": "bugdb-knowledge",
       "source": "./plugins/bugdb-knowledge",
       "description": "本地 Bug 知识库：SQLite + FTS5，Hook 自动查询，Skill 标准化录入"
+    },
+    {
+      "name": "codemap-boost",
+      "source": "./plugins/codemap-boost",
+      "description": "自动维护 code-review-graph / graphify 代码结构图：SessionStart 智能初始化、PostToolUse 增量更新、PreToolUse:Grep 提示优先用图谱搜索。所有 hook 在依赖工具缺失时静默降级。"
     }
   ]
 }

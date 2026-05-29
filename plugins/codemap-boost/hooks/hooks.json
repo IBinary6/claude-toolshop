@@ -1,0 +1,53 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/claudemd_inject/claudemd_inject.js\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js\"",
+            "timeout": 10,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/graphify_build/graphify_build.js\"",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_update/crg_update.js\"",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

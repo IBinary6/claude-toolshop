@@ -69,6 +69,7 @@ claude-toolshop 提供一组可独立安装的插件，通过 Hook、Skill、Com
 | 插件 | 简介 |
 |------|------|
 | [bugdb-knowledge](./plugins/bugdb-knowledge) | 本地 Bug 知识库：SQLite + FTS5，Hook 自动查询，Skill 标准化录入 |
+| [codemap-boost](./plugins/codemap-boost) | 自动维护 code-review-graph / graphify 代码结构图：SessionStart 智能初始化、PostToolUse 增量更新、PreToolUse:Grep 引导优先用图谱搜索 |
 
 ## 协议
 
