@@ -6,6 +6,20 @@
 
 ---
 
+## 前置依赖
+
+| 依赖 | 安装 |
+|------|------|
+| Node.js 18+ | `winget install OpenJS.NodeJS.LTS` / `brew install node` / `apt install nodejs` |
+| `code-review-graph` CLI | `pip install code-review-graph` |
+| `graphify` CLI | `pip install graphify` |
+
+三者**全部必需**，缺任一项对应 hook 不会工作。
+
+装插件后跑一次 `/codemap-boost-setup` 即可——它会逐项检测，缺哪个就**问你要不要直接帮你装**：`code-review-graph` / `graphify` 这两个 pip 包同意后可自动安装；Node.js 因需管理员权限只打印命令让你复制（**不会替你跑 sudo / winget**）。
+
+---
+
 ## 安装
 
 ### 方式一：Plugin Marketplace（推荐）
@@ -20,15 +34,11 @@
 /plugin install codemap-boost@claude-toolshop
 ```
 
-装完即生效，CLAUDE.md 触发规则会在首次 SessionStart 自动追加。
-
-如果想确认前置依赖是否齐全，可以再跑一次：
-
 ```
 /codemap-boost-setup
 ```
 
-它只做检测——逐项告诉你 Node / CRG / graphify 是否在 PATH 上，缺哪个就打印对应的安装命令（**不会替你跑 sudo / pip**）。
+第三步会检测前置依赖、缺失时问你是否代装，并确认 hook 文件完好。CLAUDE.md 触发规则会在首次 SessionStart 自动追加。
 
 #### 升级
 
@@ -44,18 +54,6 @@
 
 ---
 
-## 前置依赖
-
-| 依赖 | 安装 |
-|------|------|
-| Node.js 18+ | `winget install OpenJS.NodeJS.LTS` / `brew install node` / `apt install nodejs` |
-| `code-review-graph` CLI | `pip install code-review-graph` |
-| `graphify` CLI | `pip install graphify` |
-
-三者**全部必需**，缺任一项对应 hook 不会工作。`/codemap-boost-setup` 会检测并打印缺失项的安装命令。
-
----
-
 ## 它能做什么？
 
 提供两个自动化能力，让你**不用再手动维护代码结构图**：
@@ -65,7 +63,7 @@
 | **自动构建** | 打开会话时 | 手动跑 `code-review-graph build` / `graphify .` |
 | **增量更新** | 改完文件后 | 手动跑 `code-review-graph update` |
 
-此外还有一个轻量提示 hook，会在 Claude 第一次想用 Grep 时**温柔提醒**它优先调用图谱 MCP 工具（每会话只提示一次）。
+此外还有一个轻量提示 hook，会在 Claude 每次用 Grep 时提醒它优先调用图谱 MCP 工具。
 
 > 装上之后该干啥干啥，图谱会跟着你的代码自动刷新。
 

@@ -1,14 +1,14 @@
-# /codemap-boost-setup — 前置依赖诊断
+# /codemap-boost-setup — 前置依赖检测 + 可选自动安装
 
 **可选命令**。codemap-boost 装好后 CLAUDE.md 触发规则会由 SessionStart hook 自动追加，无需手动跑这个命令。
 
-它只做一件事：**检测前置依赖是否齐全**，缺哪个就打印对应安装命令，方便排查"为什么图谱没构建"。
+它做两件事：**检测前置依赖是否齐全**；缺失时**询问你是否让我直接帮你装**（pip 包可自动装，需管理员的只打印命令）。
 
 ## 执行流程
 
 按以下步骤依次执行。**遇到决策点必须使用 AskUserQuestion 工具询问用户，不要假设**。
 
-> 前置依赖（Node.js / code-review-graph / graphify）**全部必需**，缺任一项对应 hook 不会工作。本命令只检测并打印安装命令，**不主动替用户执行 sudo / pip / winget / apt**。
+> 前置依赖（Node.js / code-review-graph / graphify）**全部必需**，缺任一项对应 hook 不会工作。
 
 ### Step 1: 检测 Node.js
 
@@ -24,26 +24,22 @@ node --version
 
 ### Step 2: 引导安装 Node.js（仅 Step 1 失败时进入）
 
+Node.js 安装通常需要管理员权限（winget / brew / apt），**不替用户执行**，只打印命令。
+
 **必须用 AskUserQuestion 工具询问用户**，给出两个选项：
 
 - 选项 A：「打印安装命令给我，我自己复制运行」
 - 选项 B：「我自己装，装完再重跑 /codemap-boost-setup」
 
-#### 用户选 A（打印命令）
-
-根据当前平台打印对应命令（**不主动执行**，只让用户复制）：
+无论选哪个，都按当前平台打印对应命令（**不主动执行**）：
 
 - **Windows**：`winget install -e --id OpenJS.NodeJS.LTS` 或 `scoop install nodejs-lts`
 - **macOS**：`brew install node@20`
-- **Linux**：发行版对应命令，例如 `sudo apt install nodejs npm` / `sudo dnf install nodejs` / `sudo pacman -S nodejs npm`
+- **Linux**：`sudo apt install nodejs npm` / `sudo dnf install nodejs` / `sudo pacman -S nodejs npm`
 
-明确告诉用户：装完后需要**重开终端 / Claude Code** 让 PATH 刷新，然后重跑 `/codemap-boost-setup`。停下。
+明确告诉用户：装完后需要**重开终端 / Claude Code** 让 PATH 刷新，然后重跑 `/codemap-boost-setup`。停下，**不要继续往后跑**（Node 缺失后续步骤无意义）。
 
-#### 用户选 B
-
-输出一句话提示「装完后重新执行 `/codemap-boost-setup`」，停下。**不要继续往后跑**。
-
-### Step 3: 检测 code-review-graph CLI
+### Step 3: 检测 code-review-graph CLI（pip 包，可自动装）
 
 执行：
 
@@ -51,10 +47,12 @@ node --version
 code-review-graph --version
 ```
 
-- **找不到命令** → 打印安装命令 `pip install code-review-graph`（**不主动执行**），告知用户：这是必需依赖，装完后重开 Claude Code 让 PATH 生效。停下。
 - **存在** → 继续 Step 4
+- **找不到命令** → **必须用 AskUserQuestion** 询问用户：
+  - 选项 A：「帮我装」→ 先确认 Python/pip 可用（`python -m pip --version`，失败则 `python3 -m pip --version`），然后执行 `python -m pip install code-review-graph`（用实际可用的解释器）。装完复跑 `code-review-graph --version` 验证；成功继续 Step 4，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install code-review-graph`，告知装完重开 Claude Code，停下。
 
-### Step 4: 检测 graphify CLI
+### Step 4: 检测 graphify CLI（pip 包，可自动装）
 
 执行：
 
@@ -62,8 +60,10 @@ code-review-graph --version
 graphify --version
 ```
 
-- **找不到命令** → 打印安装命令 `pip install graphify`（**不主动执行**），告知用户：这是必需依赖，装完后重开 Claude Code 让 PATH 生效。停下。
 - **存在** → 继续 Step 5
+- **找不到命令** → **必须用 AskUserQuestion** 询问用户：
+  - 选项 A：「帮我装」→ 执行 `python -m pip install graphify`（用 Step 3 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install graphify`，告知装完重开 Claude Code，停下。
 
 ### Step 5: 验证 hook 文件可被 Node 解析
 
@@ -82,25 +82,27 @@ node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
 
 ### Step 6: 汇报结果
 
-简短输出（不超过 8 行）。根据前面步骤检测结果，**显式列出**前置依赖状态：
+简短输出（不超过 8 行）。根据前面步骤检测/安装结果，**显式列出**前置依赖状态：
 
 ```
-codemap-boost-setup 检测完成：
+codemap-boost-setup 完成：
   ✓ Node.js <版本>
-  ✓ code-review-graph CLI
-  ✓ graphify CLI
+  ✓ code-review-graph CLI<（本次自动安装）>
+  ✓ graphify CLI<（本次自动安装）>
   ✓ hook 文件 node --check 通过
 
 CLAUDE.md 触发规则由 SessionStart hook 自动维护，无需手动配置。
 后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
 ```
 
-若有依赖缺失，汇报中应明确标 ✗ 并复述对应安装命令。
+若有依赖缺失或安装失败，汇报中应明确标 ✗ 并复述对应安装命令。
 
 ## 约束
 
 - 决策点必须用 AskUserQuestion 工具，不得自作主张
-- **不得替用户执行** `pip install` / `npm install -g` / `sudo apt` 等需要管理员或污染全局环境的命令；只打印命令让用户复制
-- 前置依赖**全部必需**，缺任一项必须明确告知用户去装，不再提供"跳过"选项
+- **pip 包（code-review-graph / graphify）经用户同意后可自动执行** `python -m pip install`；安装前先确认 Python/pip 可用，安装后必须复跑 `--version` 验证
+- **不得替用户执行** 需要管理员 / 污染全局环境的命令（`npm install -g` / `winget` / `sudo apt` / `brew`）；Node.js 一律只打印命令
+- 全程用 `python -m pip` 而非裸 `pip`，规避 PATH 上失效 shim 残留
+- 前置依赖**全部必需**，缺任一项必须明确告知用户或代装，不提供"跳过"选项
 - 任一步骤失败必须明确报告，不得静默跳过
 - 不修改用户 CLAUDE.md —— 该工作由 `claudemd_inject` SessionStart hook 自动完成且已幂等
