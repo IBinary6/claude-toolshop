@@ -64,6 +64,23 @@ claude-toolshop 提供一组可独立安装的插件，通过 Hook、Skill、Com
 
 然后**完全退出 Claude Code 再打开**——skill / hook 元数据只在启动时加载，仅 `git pull` 不会生效。
 
+## 故障排查：插件升级后变回"未安装"
+
+如果你用 **cc-switch** 等工具管理多份 `settings.json`，可能遇到：每次切换配置或 bump 插件版本后，本仓库插件变回"未安装/未启用"，要重新 enable。
+
+**原因**：Claude Code 的插件启用状态记录在 `~/.claude/settings.json` 的 `enabledPlugins` 里（键为 `<插件名>@claude-toolshop`）。cc-switch 切换时会整份重写 settings.json，而它的配置模板通常不含 `enabledPlugins`，于是这个字段被覆盖丢失。
+
+**修复**：在 `~/.claude/settings.json` 的 `enabledPlugins` 中**显式**加上：
+
+```json
+"enabledPlugins": {
+  "bugdb-knowledge@claude-toolshop": true,
+  "codemap-boost@claude-toolshop": true
+}
+```
+
+并把这两行**同步进 cc-switch 对应 profile 的模板**，否则下次切换仍会被覆盖。键不含版本号，加一次后版本 bump / marketplace update 都不再掉。
+
 ## 插件列表
 
 | 插件 | 简介 |
