@@ -1,0 +1,81 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+
+const isWindows = process.platform === 'win32';
+
+function gitDir(filePath) {
+  try {
+    return fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()
+      ? filePath : path.dirname(filePath);
+  } catch (_) {
+    return path.dirname(filePath);
+  }
+}
+
+/**
+ * 从文件向上找 git 仓库根。非 git 仓库返回 null。
+ * @param {string} filePath
+ * @returns {string|null}
+ */
+function repoRoot(filePath) {
+  const r = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: gitDir(filePath), stdio: 'pipe', timeout: 3000, windowsHide: isWindows,
+  });
+  if (r.status !== 0) return null;
+  return (r.stdout || Buffer.alloc(0)).toString('utf-8').trim() || null;
+}
+
+/**
+ * 文件是否被 git 跟踪。root 为 null 时返回 false。
+ * @param {string} filePath
+ * @param {string|null} root
+ * @returns {boolean}
+ */
+function isTracked(filePath, root) {
+  if (!root) return false;
+  const r = spawnSync('git', ['ls-files', '--error-unmatch', filePath], {
+    cwd: root, stdio: 'pipe', timeout: 3000, windowsHide: isWindows,
+  });
+  return r.status === 0;
+}
+
+/**
+ * 新文件判定：!isTracked。非 git 仓库(root=null) → true（视为新）。
+ * @param {string} filePath
+ * @param {string|null} root
+ * @returns {boolean}
+ */
+function isNew(filePath, root) {
+  if (!root) return true;
+  return !isTracked(filePath, root);
+}
+
+/**
+ * 工作区+暂存区相对 HEAD 的改动行范围 [[start,end],...]。失败返回 null。
+ * @param {string} filePath
+ * @param {string|null} root
+ * @returns {Array<[number,number]>|null}
+ */
+function changedLineRanges(filePath, root) {
+  if (!root) return null;
+  const r = spawnSync('git', ['diff', '-U0', 'HEAD', '--', filePath], {
+    cwd: root, stdio: 'pipe', timeout: 5000, windowsHide: isWindows,
+  });
+  if (r.status !== 0) return null;
+  const out = (r.stdout || Buffer.alloc(0)).toString('utf-8');
+  const re = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm;
+  const ranges = [];
+  let m;
+  while ((m = re.exec(out)) !== null) {
+    const start = parseInt(m[1], 10);
+    const len = m[2] !== undefined ? parseInt(m[2], 10) : 1;
+    if (len === 0) continue;
+    ranges.push([start, start + len - 1]);
+  }
+  return ranges;
+}
+
+module.exports = { repoRoot, isTracked, isNew, changedLineRanges };
