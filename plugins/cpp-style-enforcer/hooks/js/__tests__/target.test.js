@@ -26,4 +26,24 @@ assert.strictEqual(shouldHandle('/p/build/a.cpp'), false, 'build 跳过');
 assert.ok(CPP_EXTENSIONS.has('.hpp'), '.hpp 在扩展名集');
 assert.ok(EXCLUDED_DIRS.has('node_modules'), 'node_modules 在排除集');
 assert.ok(SKIPPED_FILES.has('resource.h'), 'resource.h 在跳过集');
+
+// 回归：子串目录不误判（mybuild/buildtools 含 'build' 子串但非排除目录本身）
+assert.strictEqual(shouldHandle('/proj/mybuild/a.cpp'), true, 'mybuild 非排除目录');
+assert.strictEqual(shouldHandle('/proj/buildtools/a.cpp'), true, 'buildtools 非排除目录');
+assert.strictEqual(shouldHandle('/proj/build/a.cpp'), false, 'build 排除目录');
+
+// 回归：扩展名大小写不敏感
+assert.strictEqual(shouldHandle('/p/a.CPP'), true, '.CPP 大小写不敏感命中');
+assert.strictEqual(shouldHandle('/p/a.Hpp'), true, '.Hpp 大小写不敏感命中');
+// 回归：Windows 反斜杠路径 + 排除目录大小写不敏感
+assert.strictEqual(shouldHandle('C:\\proj\\BUILD\\a.cpp'), false, 'BUILD 大小写不敏感排除');
+
+// 回归：resolveFilePath 各形态
+assert.strictEqual(
+  resolveFilePath({ file_path: '/top/a.cpp' }), '/top/a.cpp', '顶层 input.file_path 回退');
+assert.strictEqual(
+  resolveFilePath({ tool_input: { path: '/p/b.cc' } }), '/p/b.cc', 'tool_input.path 分支');
+assert.strictEqual(
+  resolveFilePath({ tool_input: {} }), null, 'tool_input 缺失字段返回 null');
+
 console.log('target.test.js PASS');
