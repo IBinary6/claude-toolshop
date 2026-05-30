@@ -36,9 +36,11 @@ async function main() {
   const applyTriple = mode === 'full' || (mode === 'incremental' && fileIsNew !== false);
   const isCMake = step('isCMake', () => isCMakeProject(filePath)) === true;
 
-  // 1. clang-format（仅全套文件）
-  if (applyTriple && checks.clangFormat) {
-    step('clang_format', () => applyClangFormat(filePath));
+  // 1. clang-format（对所有 clangFormat 文件都跑，新老用不同模式）
+  //    新文件/full → 整文件全格；老文件(incremental && !isNew) → 仅格改动行 + include 不排序
+  if (checks.clangFormat) {
+    const clangIsNew = applyTriple; // full 或 新文件 → 整文件模式；否则老文件改动行模式
+    step('clang_format', () => applyClangFormat(filePath, { isNew: clangIsNew, root }));
   }
 
   // 2. BOM（独立于 mode；CMake 项目跳过）
