@@ -299,9 +299,56 @@ async function main() {
   // 解析配置, 决定三件套(clang-format/copyright/cpplint)是否作用于本文件:
   //   - full 模式: 所有文件
   //   - incremental 模式: 仅"基线 commit 之后新增"的文件, 老文件只补 BOM
-  //   - null (未决定): 三件套都不做
+  //   - null (未决定): 三件套都不做, 但 BOM 仍按 checks.bom 执行
   // BOM 补头独立于 mode, 由 checks.bom 控制, 对所有文件生效.
   const { mode, baseline, root, checks, copyrightInfo } = getCppStyleMode(filePath);
+
+  // 兜底检测：编辑了 C++ 文件但该仓库还没有 .claude-cpp-style 配置
+  // SessionStart 可能因为启动目录 ≠ 工作目录而漏掉，这里补上
+  if (mode === null && root) {
+    const flagFile = path.join(root, '.claude-cpp-style');
+    if (!fs.existsSync(flagFile)) {
+      const { ensureUserTemplate, readUserTemplate } = require('../lib/utils');
+      const PLUGIN_DEFAULT_TEMPLATE = path.join(__dirname, '..', '..', '..', 'templates', 'cpp-style-template.default.json');
+      ensureUserTemplate(PLUGIN_DEFAULT_TEMPLATE);
+      const tpl = readUserTemplate() || {};
+      const defaultChecks = tpl.checks || { clangFormat: true, copyright: true, cpplint: true, bom: true };
+      const copyrightInfoTpl = tpl.copyrightInfo || null;
+
+      const headProbe = spawnSync('git', ['rev-parse', 'HEAD'], {
+        cwd: root, stdio: 'pipe', timeout: 3000, windowsHide: isWindows,
+      });
+      const headHash = headProbe.status === 0
+        ? (headProbe.stdout || Buffer.alloc(0)).toString('utf-8').trim() : null;
+
+      const fullCfg = { mode: 'full', checks: defaultChecks };
+      if (copyrightInfoTpl) fullCfg.copyrightInfo = copyrightInfoTpl;
+      const incrCfg = { mode: 'incremental', baseline: headHash || '', checks: defaultChecks };
+      if (copyrightInfoTpl) incrCfg.copyrightInfo = copyrightInfoTpl;
+
+      console.log(JSON.stringify({
+        reason: [
+          `[CPP_STYLE_ENFORCER] 编辑了 C++ 文件（${path.basename(filePath)}），但该项目尚未配置风格检查模式。`,
+          '',
+          '请使用 AskUserQuestion 工具询问用户：',
+          '  问题："检测到正在编辑 C++ 文件，请选择代码风格检查模式"',
+          '  选项 1："新项目 — 所有文件启用完整检查"（clang-format + copyright + cpplint + BOM）',
+          '  选项 2："老项目 — 仅新文件完整检查"（已有文件只补 BOM；基线之后新增的文件走完整流程）',
+          '',
+          `用户选择后，用 Write 工具创建 ${flagFile}（JSON 格式），内容如下：`,
+          '',
+          '  选项 1 写入：',
+          JSON.stringify(fullCfg, null, 2).split('\n').map(l => '    ' + l).join('\n'),
+          '',
+          '  选项 2 写入：',
+          JSON.stringify(incrCfg, null, 2).split('\n').map(l => '    ' + l).join('\n'),
+          '',
+          '注意：选项 2 的 baseline 已填入当前 HEAD，请原样写入。',
+        ].join('\n'),
+      }));
+    }
+  }
+
   let applyTriple = false;
   if (mode === 'full') {
     applyTriple = true;
