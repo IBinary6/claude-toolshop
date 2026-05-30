@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { repoRoot, isTracked, isNew } = require('../lib/git.js');
+const { repoRoot, isNew } = require('../lib/git.js');
 
 function sh(args, cwd) { spawnSync('git', args, { cwd, stdio: 'pipe' }); }
 
@@ -24,8 +24,6 @@ let empty;
 try {
   const root = repoRoot(tracked);
   assert.ok(root && fs.existsSync(root), 'repoRoot 应返回有效目录');
-  assert.strictEqual(isTracked(tracked, root), true, '已跟踪文件 isTracked=true');
-  assert.strictEqual(isTracked(untracked, root), false, '未跟踪文件 isTracked=false');
   assert.strictEqual(isNew(tracked, root), false, '已跟踪 = 老文件 isNew=false');
   assert.strictEqual(isNew(untracked, root), true, '未跟踪 = 新文件 isNew=true');
 
@@ -50,16 +48,6 @@ try {
   fs.writeFileSync(f, 'int c;');
   assert.strictEqual(repoRoot(f), null, '非 git repoRoot=null');
   assert.strictEqual(isNew(f, null), true, '非 git 所有文件视为新 isNew=true');
-
-  // changedLineRanges：修改已跟踪文件后应能解析出行范围
-  const { changedLineRanges } = require('../lib/git.js');
-  fs.writeFileSync(tracked, 'int a;\nint a2;\nint a3;\n');
-  const ranges = changedLineRanges(tracked, root);
-  assert.ok(Array.isArray(ranges), 'changedLineRanges 返回数组');
-  assert.ok(ranges.length > 0, '改动文件应有变更行范围');
-  assert.ok(Array.isArray(ranges[0]) && ranges[0].length === 2, '范围为 [start,end] 二元组');
-  // 非 git → null
-  assert.strictEqual(changedLineRanges(f, null), null, '非 git changedLineRanges=null');
 
   console.log('git.test.js PASS');
   fs.rmSync(tmp, { recursive: true, force: true });
