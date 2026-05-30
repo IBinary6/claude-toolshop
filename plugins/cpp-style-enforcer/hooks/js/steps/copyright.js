@@ -81,9 +81,9 @@ function applyCopyright(filePath, copyrightInfo) {
   const hasHeader = /^\s*\/\/ Copyright/.test(text);
   let newText;
   if (hasHeader) {
-    // 去掉文件开头的旧版权注释块（连续 // 行 + 紧随空行）
-    newText = text.replace(/^(?:\/\/.*\n)+(?:\n)?/, '');
-    newText = header + newText;
+    // 仅剥离版权语义行（Copyright/Author/Date + 紧随 Date 的单个文件名行），
+    // 遇普通注释/空行/代码即停，避免误删与版权块零空行粘连的用户注释
+    newText = header + stripHeaderBlock(text);
   } else {
     newText = header + text;
   }
@@ -95,6 +95,41 @@ function applyCopyright(filePath, copyrightInfo) {
   } catch (_) {
     return false;
   }
+}
+
+/**
+ * 剥离文件开头的旧版权语义行块，返回剩余文本。
+ * 仅纳入 `// Copyright` / `// Author` / `// Date` 行，以及紧随 Date 行之后
+ * 出现的单个文件名行（`// xxx.ext`）；遇到第一个非版权语义行（普通注释、
+ * 空行、代码）即停。其后紧随的一个空行（版权头与正文的分隔）一并吃掉。
+ * @param {string} text
+ * @returns {string}
+ */
+function stripHeaderBlock(text) {
+  const lines = text.split('\n');
+  let i = 0;
+  let lastWasDate = false;
+  let fileNameTaken = false;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\/\/ Copyright\b/.test(line) || /^\/\/ Author\b/.test(line)) {
+      lastWasDate = false;
+      i += 1;
+    } else if (/^\/\/ Date\b/.test(line)) {
+      lastWasDate = true;
+      i += 1;
+    } else if (lastWasDate && !fileNameTaken && /^\/\/ \S+\.\w+\s*$/.test(line)) {
+      // 紧随 Date 之后、仅出现一次的文件名行视作版权头一部分
+      fileNameTaken = true;
+      lastWasDate = false;
+      i += 1;
+    } else {
+      break;
+    }
+  }
+  // 吃掉版权块后紧随的单个空行分隔
+  if (i < lines.length && lines[i] === '') i += 1;
+  return lines.slice(i).join('\n');
 }
 
 module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex };

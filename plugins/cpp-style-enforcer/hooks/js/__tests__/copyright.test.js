@@ -66,6 +66,25 @@ try {
   assert.ok(t7.includes(`Date ${yyyy}/${mm}/${dd}`), '跨天 → Date 更新为今天');
   assert.ok(!t7.includes('2000/01/01'), '旧 Date 被替换');
 
+  // 旧版权块与用户普通注释零空行粘连：更新时只替换版权语义行，普通注释保留
+  const glued = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n// 这是用户自己的说明注释\nint h;\n`;
+  const f8 = write('h.cpp', Buffer.from(glued, 'utf-8'));
+  applyCopyright(f8, info());
+  const t8 = fs.readFileSync(f8, 'utf-8');
+  assert.ok(t8.includes('// 这是用户自己的说明注释'), '粘连的用户普通注释不被误删');
+  assert.ok(t8.includes(`Date ${yyyy}/${mm}/${dd}`), '版权头 Date 更新为今天');
+  assert.ok(!t8.includes('2000/01/01'), '旧版权 Date 被替换');
+  assert.ok(/int h;/.test(t8), '原代码保留');
+
+  // 含 BOM 且粘连普通注释：BOM 仍首字节，注释保留
+  const gluedBom = Buffer.concat([BOM, Buffer.from(glued.replace('int h;', 'int i;'), 'utf-8')]);
+  const f9 = write('i.cpp', gluedBom);
+  applyCopyright(f9, info());
+  const b9 = fs.readFileSync(f9);
+  assert.ok(b9.slice(0, 3).equals(BOM), '更新含 BOM 文件后 BOM 仍首字节');
+  assert.ok(!b9.slice(3, 6).equals(BOM), 'BOM 不重复');
+  assert.ok(b9.slice(3).toString('utf-8').includes('// 这是用户自己的说明注释'), 'BOM 文件中用户注释保留');
+
   console.log('copyright.test.js PASS');
 } finally {
   for (const p of created) { try { fs.unlinkSync(p); } catch (_) {} }
