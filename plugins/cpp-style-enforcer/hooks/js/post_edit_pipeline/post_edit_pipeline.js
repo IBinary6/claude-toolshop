@@ -312,8 +312,12 @@ async function main() {
       const PLUGIN_DEFAULT_TEMPLATE = path.join(__dirname, '..', '..', '..', 'templates', 'cpp-style-template.default.json');
       ensureUserTemplate(PLUGIN_DEFAULT_TEMPLATE);
       const tpl = readUserTemplate() || {};
-      const defaultChecks = tpl.checks || { clangFormat: true, copyright: true, cpplint: true, bom: true };
-      const copyrightInfoTpl = tpl.copyrightInfo || null;
+      const c = (tpl.checks && typeof tpl.checks === 'object') ? tpl.checks : {};
+      const defaultChecks = {
+        clangFormat: c.clangFormat !== false, copyright: c.copyright !== false,
+        cpplint: c.cpplint !== false, bom: c.bom !== false,
+      };
+      const ci = (tpl.copyrightInfo && typeof tpl.copyrightInfo === 'object') ? tpl.copyrightInfo : null;
 
       const headProbe = spawnSync('git', ['rev-parse', 'HEAD'], {
         cwd: root, stdio: 'pipe', timeout: 3000, windowsHide: isWindows,
@@ -322,34 +326,29 @@ async function main() {
         ? (headProbe.stdout || Buffer.alloc(0)).toString('utf-8').trim() : null;
 
       const fullCfg = { mode: 'full', checks: defaultChecks };
-      if (copyrightInfoTpl) fullCfg.copyrightInfo = copyrightInfoTpl;
+      if (ci) fullCfg.copyrightInfo = ci;
       const incrCfg = { mode: 'incremental', baseline: headHash || '', checks: defaultChecks };
-      if (copyrightInfoTpl) incrCfg.copyrightInfo = copyrightInfoTpl;
+      if (ci) incrCfg.copyrightInfo = ci;
 
-      // stderr 输出提示（Claude 作为 additional context 可见）
+      // 预生成配置到插件临时目录
+      const tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
+      try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (_) {}
+      const fullPath = path.join(tmpDir, 'config-full.json');
+      const incrPath = path.join(tmpDir, 'config-incremental.json');
+      fs.writeFileSync(fullPath, JSON.stringify(fullCfg, null, 2), 'utf-8');
+      fs.writeFileSync(incrPath, JSON.stringify(incrCfg, null, 2), 'utf-8');
+
       console.error(`\n  ⚠ [cpp-style-enforcer] 编辑了 C++ 文件（${path.basename(filePath)}），但该项目尚未配置风格检查模式。`);
-
-      // stdout JSON 输出指令（Claude 按 reason 字段执行）
       console.log(JSON.stringify({
         decision: 'block',
         reason: [
-          `[CPP_STYLE_ENFORCER] 编辑了 C++ 文件（${path.basename(filePath)}），但该项目尚未配置风格检查模式。`,
-          '',
-          '请使用 AskUserQuestion 工具询问用户：',
-          '  问题："检测到正在编辑 C++ 文件，请选择代码风格检查模式"',
-          '  选项 1："新项目 — 所有文件启用完整检查"（clang-format + copyright + cpplint + BOM）',
-          '  选项 2："老项目 — 仅新文件完整检查"（已有文件只补 BOM；基线之后新增的文件走完整流程）',
-          '',
-          `用户选择后，用 Write 工具创建 ${flagFile}（JSON 格式），内容如下：`,
-          '',
-          '  选项 1 写入：',
-          JSON.stringify(fullCfg, null, 2).split('\n').map(l => '    ' + l).join('\n'),
-          '',
-          '  选项 2 写入：',
-          JSON.stringify(incrCfg, null, 2).split('\n').map(l => '    ' + l).join('\n'),
-          '',
-          '注意：选项 2 的 baseline 已填入当前 HEAD，请原样写入。',
-          '创建完成后请重新编辑该文件以应用风格检查。',
+          `[cpp-style-enforcer] C++ 项目未配置风格检查。`,
+          '用 AskUserQuestion 询问用户："选择风格检查模式"',
+          '  选项 1："新项目 — 全部文件完整检查"',
+          '  选项 2："老项目 — 仅新文件完整检查"',
+          `选项 1 → Bash: cp "${fullPath.replace(/\\/g,'/')}" "${flagFile.replace(/\\/g,'/')}"`,
+          `选项 2 → Bash: cp "${incrPath.replace(/\\/g,'/')}" "${flagFile.replace(/\\/g,'/')}"`,
+          '选择完成后重新编辑该文件以应用风格检查。',
         ].join('\n'),
       }));
       process.exit(2);

@@ -141,36 +141,23 @@ function main() {
     null, 2
   );
 
-  const reason = [
-    `[CPP_STYLE_ENFORCER] 检测到 C++ 项目（${repoRoot}），但尚未配置风格检查模式。`,
-    '',
-    '请使用 AskUserQuestion 工具询问用户：',
-    '  问题："检测到这是一个 C++ 项目，请选择代码风格检查模式"',
-    '  选项 1："新项目 — 所有文件启用完整检查"（clang-format + copyright + cpplint + BOM，作用于全部文件）',
-    '  选项 2："老项目 — 仅新文件完整检查"（已有文件只补 BOM 不格式化；本次基线之后新增的文件才走完整流程）',
-    '',
-    `用户选择后，用 Write 工具创建 ${flagFile}（JSON 格式），内容如下：`,
-    '',
-    '  选项 1 写入：',
-    fullJson.split('\n').map(l => '    ' + l).join('\n'),
-    '',
-    '  选项 2 写入：',
-    incrementalJson.split('\n').map(l => '    ' + l).join('\n'),
-    '',
-    '注意：',
-    '  - 选项 2 的 baseline 已填入当前 HEAD，请原样写入，不要修改 hash。',
-    '  - 上述内容已继承用户模板 ~/.claude/cpp-style-template.json（含 checks 与 copyrightInfo，',
-    '    其中可能含公司名/作者）。用户改一次用户模板，之后新项目自动继承，无需逐项目重填。',
-    '  - copyrightInfo.company 为空时不写版权头（无归属的版权头无意义），cpplint 也会同步屏蔽 legal/copyright。',
-    '  - 各 checks 开关与 copyrightInfo 字段含义见同目录 readme.txt。',
-  ].join('\n');
+  // 预生成两份配置到插件临时目录，Claude 选完直接 cp
+  const tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
+  try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (_) {}
+  const fullPath = path.join(tmpDir, 'config-full.json');
+  const incrPath = path.join(tmpDir, 'config-incremental.json');
+  fs.writeFileSync(fullPath, fullJson, 'utf-8');
+  fs.writeFileSync(incrPath, incrementalJson, 'utf-8');
 
-  // SessionStart stdout 作为 additional context 注入对话，不支持 block 语义
-  // 用纯文本输出指令，Claude 在对话开头看到后优先执行
+  // stdout 精简指令（约 300 字节）
   console.log([
-    '[IMPORTANT] [cpp-style-enforcer] 在回复用户之前，你必须先处理以下配置请求：',
-    '',
-    reason,
+    `[IMPORTANT] [cpp-style-enforcer] C++ 项目（${repoRoot}）未配置风格检查。`,
+    '在回复用户之前，先用 AskUserQuestion 询问：',
+    '  问题："检测到 C++ 项目，选择风格检查模式"',
+    '  选项 1："新项目 — 全部文件完整检查"',
+    '  选项 2："老项目 — 仅新文件完整检查"',
+    `选项 1 → Bash: cp "${fullPath.replace(/\\/g,'/')}" "${flagFile.replace(/\\/g,'/')}"`,
+    `选项 2 → Bash: cp "${incrPath.replace(/\\/g,'/')}" "${flagFile.replace(/\\/g,'/')}"`,
   ].join('\n'));
   process.exit(0);
 }
