@@ -21,8 +21,10 @@ function applyBom(filePath, options = {}) {
   }
 
   const enc = detectEncoding(buf);
-  if (enc === 'utf-8-bom') return false;      // 已有 BOM → 不写
-  if (enc === 'utf-16') return false;          // UTF-16 → 跳过
+  // 不动：已有 BOM / UTF-16 / 无法确证编码（unknown）。
+  // unknown 多为 GBK 但运行时缺 iconv-lite 而降级，若强补 UTF-8 BOM 会产出
+  // EF BB BF + 原字节 的坏文件，破坏原本能正常打开的文件。
+  if (enc === 'utf-8-bom' || enc === 'utf-16' || enc === 'unknown') return false;
 
   if (enc === 'gbk') {
     try {
@@ -36,7 +38,7 @@ function applyBom(filePath, options = {}) {
     }
   }
 
-  // utf-8（无 BOM）或 unknown → 补 BOM
+  // 仅对确证的 utf-8（无 BOM）补 BOM
   try {
     fs.writeFileSync(filePath, Buffer.concat([BOM, buf]));
     return true;

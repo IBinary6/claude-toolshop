@@ -40,20 +40,34 @@ try {
   applyBom(f5, { isCMake: false });
   assert.ok(fs.readFileSync(f5).equals(utf16), 'UTF-16 跳过不动');
 
-  // GBK → 转码加 BOM（iconv-lite 可用时严格断言，缺失时容忍 spec §9）
+  // GBK → iconv 可用时转码加 BOM；iconv 缺失时降级 unknown → 不动（避免坏文件）
   let iconvAvailable = false;
   try { require('iconv-lite'); iconvAvailable = true; } catch (_) {}
   const gbk = Buffer.from([0xC4, 0xE3, 0xBA, 0xC3]); // "你好" GBK
   const f6 = write('f.cpp', gbk);
-  applyBom(f6, { isCMake: false });
+  const ret6 = applyBom(f6, { isCMake: false });
   const b6 = fs.readFileSync(f6);
   if (iconvAvailable) {
     assert.ok(b6.slice(0, 3).equals(BOM), 'GBK → 加 BOM');
     const iconv = require('iconv-lite');
     assert.strictEqual(b6.slice(3).toString('utf-8'), iconv.decode(gbk, 'gbk'), 'GBK → 转码为 UTF-8');
   } else {
-    // spec §9：iconv 缺失 → detectEncoding 把 GBK 字节降级为 unknown → 实现补 BOM（前置 BOM，原字节保留）
-    assert.ok(b6.equals(Buffer.concat([BOM, gbk])), 'iconv 缺失 → GBK 降级 unknown → 补 BOM (spec §9)');
+    // iconv 缺失 → detectEncoding 把 GBK 字节降级为 unknown → 不补 BOM、保持原样
+    // （旧行为前置 UTF-8 BOM 会产出 EF BB BF + GBK 的坏文件，破坏原本能正常打开的 GBK 文件）
+    assert.strictEqual(ret6, false, 'iconv 缺失 → GBK 降级 unknown → return false');
+    assert.ok(b6.equals(gbk), 'iconv 缺失 → GBK 文件字节不变（不补 BOM）');
+  }
+
+  // unknown 编码 → 不补 BOM、保持原样（字节不变、return false）
+  // 构造既非合法 UTF-8、iconv 缺失时又无法判定 GBK 的字节序列
+  const raw = Buffer.from([0xC4, 0xE3, 0xBA, 0xC3, 0x80, 0x81]);
+  const f7 = write('g.cpp', raw);
+  const ret7 = applyBom(f7, { isCMake: false });
+  const b7 = fs.readFileSync(f7);
+  if (!iconvAvailable) {
+    // iconv 缺失 → detectEncoding 必然返回 unknown
+    assert.strictEqual(ret7, false, 'unknown 编码 → return false');
+    assert.ok(b7.equals(raw), 'unknown 编码 → 字节不变（不补 BOM）');
   }
 
   console.log('bom.test.js PASS');
