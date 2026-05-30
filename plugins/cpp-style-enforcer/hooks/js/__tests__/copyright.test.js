@@ -76,6 +76,24 @@ try {
   assert.ok(!t8.includes('2000/01/01'), '旧版权 Date 被替换');
   assert.ok(/int h;/.test(t8), '原代码保留');
 
+  // 形似文件名的用户注释（非 C/C++ 源码后缀）紧贴版权块：更新时应保留，不被当文件名行吞掉
+  const gluedMd = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n// 说明.md\nint j;\n`;
+  const f10 = write('j.cpp', Buffer.from(gluedMd, 'utf-8'));
+  applyCopyright(f10, info());
+  const t10 = fs.readFileSync(f10, 'utf-8');
+  assert.ok(t10.includes('// 说明.md'), '形似文件名的用户注释（.md）应保留');
+  assert.ok(t10.includes(`Date ${yyyy}/${mm}/${dd}`), 'Date 更新为今天');
+  assert.ok(!t10.includes('2000/01/01'), '旧 Date 被替换');
+  assert.ok(/int j;/.test(t10), '原代码保留');
+
+  // 真正的 C/C++ 文件名行（.cpp）仍应被吞掉
+  const gluedCpp = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n// k.cpp\nint k;\n`;
+  const f11 = write('k.cpp', Buffer.from(gluedCpp, 'utf-8'));
+  applyCopyright(f11, info());
+  const t11 = fs.readFileSync(f11, 'utf-8');
+  assert.ok(!t11.includes('// k.cpp'), 'C/C++ 源码后缀的文件名行被吞掉');
+  assert.ok(/int k;/.test(t11), '原代码保留');
+
   // 含 BOM 且粘连普通注释：BOM 仍首字节，注释保留
   const gluedBom = Buffer.concat([BOM, Buffer.from(glued.replace('int h;', 'int i;'), 'utf-8')]);
   const f9 = write('i.cpp', gluedBom);

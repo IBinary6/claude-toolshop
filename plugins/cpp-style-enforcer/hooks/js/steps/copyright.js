@@ -5,6 +5,13 @@ const { stripBom, restoreBom } = require('../lib/bom_util.js');
 
 const DEFAULT_DATE_FORMAT = 'YYYY/MM/DD HH:mm';
 
+const MARK_COPYRIGHT = '// Copyright';
+const MARK_AUTHOR = '// Author';
+const MARK_DATE = '// Date';
+
+/** 文件名行白名单：仅 C/C++ 源码后缀（buildHeader 写入的文件名行后缀必属此集） */
+const FILENAME_LINE = /^\/\/ \S+\.(?:c|cc|cpp|cxx|h|hpp|hxx)\s*$/i;
+
 /** dateFormat 必须含 YYYY/MM/DD，否则回退默认 */
 function validateDateFormat(fmt) {
   if (typeof fmt !== 'string') return DEFAULT_DATE_FORMAT;
@@ -37,7 +44,7 @@ function buildDateRegex(fmt) {
     else if (fmt.startsWith('mm', i)) { re += '\\d{2}'; i += 2; }
     else { re += fmt[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); i += 1; }
   }
-  return new RegExp('// Date ' + re);
+  return new RegExp(MARK_DATE + ' ' + re);
 }
 
 /**
@@ -71,14 +78,14 @@ function applyCopyright(filePath, copyrightInfo) {
   }
 
   const header = [
-    `// Copyright (c) ${now.getFullYear()} ${company}`,
-    ...(author ? [`// Author ${author}`] : []),
-    `// Date ${dateStr}`,
+    `${MARK_COPYRIGHT} (c) ${now.getFullYear()} ${company}`,
+    ...(author ? [`${MARK_AUTHOR} ${author}`] : []),
+    `${MARK_DATE} ${dateStr}`,
     '',
   ].join('\n') + '\n';
 
   // 已有版权头（以 // Copyright 开头的连续注释块）→ 替换；否则前置插入
-  const hasHeader = /^\s*\/\/ Copyright/.test(text);
+  const hasHeader = new RegExp('^\\s*' + MARK_COPYRIGHT).test(text);
   let newText;
   if (hasHeader) {
     // 仅剥离版权语义行（Copyright/Author/Date + 紧随 Date 的单个文件名行），
@@ -93,6 +100,7 @@ function applyCopyright(filePath, copyrightInfo) {
     fs.writeFileSync(filePath, restoreBom(hadBom, Buffer.from(newText, 'utf-8')));
     return true;
   } catch (_) {
+    process.stderr.write('[cpp-style-enforcer] 版权头写盘失败，跳过：' + filePath + '\n');
     return false;
   }
 }
@@ -112,14 +120,14 @@ function stripHeaderBlock(text) {
   let fileNameTaken = false;
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\/\/ Copyright\b/.test(line) || /^\/\/ Author\b/.test(line)) {
+    if (line.startsWith(MARK_COPYRIGHT) || line.startsWith(MARK_AUTHOR)) {
       lastWasDate = false;
       i += 1;
-    } else if (/^\/\/ Date\b/.test(line)) {
+    } else if (line.startsWith(MARK_DATE)) {
       lastWasDate = true;
       i += 1;
-    } else if (lastWasDate && !fileNameTaken && /^\/\/ \S+\.\w+\s*$/.test(line)) {
-      // 紧随 Date 之后、仅出现一次的文件名行视作版权头一部分
+    } else if (lastWasDate && !fileNameTaken && FILENAME_LINE.test(line)) {
+      // 紧随 Date 之后、仅出现一次的 C/C++ 源码文件名行视作版权头一部分
       fileNameTaken = true;
       lastWasDate = false;
       i += 1;
