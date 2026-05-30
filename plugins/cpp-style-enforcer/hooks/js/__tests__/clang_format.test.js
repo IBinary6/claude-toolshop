@@ -58,6 +58,78 @@ try {
 
     console.log('clang_format.test.js PASS');
   }
+
+  // ---- 老文件模式：仅格改动行 + include 永不排序 ----
+  if (hasClangFormat) {
+    const gtmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-git-'));
+    function git(args) { spawnSync('git', args, { cwd: gtmp, stdio: 'pipe' }); }
+    try {
+      git(['init']);
+      git(['config', 'user.email', 't@t.com']);
+      git(['config', 'user.name', 't']);
+
+      // include 区故意乱序 + 已规范的函数；提交为 HEAD（老文件基线）
+      const baseline =
+        '#include <zlib.h>\n' +
+        '#include <abc.h>\n' +
+        '\n' +
+        'int a() { return 0; }\n' +
+        'int b() { return 1; }\n';
+      const f = path.join(gtmp, 'old.cpp');
+      fs.writeFileSync(f, baseline);
+      git(['add', 'old.cpp']);
+      git(['commit', '-m', 'init']);
+      const root = gtmp;
+
+      // 仅改第 5 行（b 函数）缩进，include 区(1-2 行)不碰
+      const edited =
+        '#include <zlib.h>\n' +
+        '#include <abc.h>\n' +
+        '\n' +
+        'int a() { return 0; }\n' +
+        'int    b()    {    return 1;    }\n';
+      fs.writeFileSync(f, edited);
+
+      const changed = applyClangFormat(f, { isNew: false, root });
+      assert.strictEqual(changed, true, '老文件改动行有杂乱空格 → 格式化写回');
+      const result = fs.readFileSync(f, 'utf-8').split('\n');
+      // include 顺序保持原样（SortIncludes:Never）
+      assert.strictEqual(result[0], '#include <zlib.h>', '老文件 include 第1行不变(不排序)');
+      assert.strictEqual(result[1], '#include <abc.h>', '老文件 include 第2行不变(不排序)');
+      // 第 4 行(未改动的 a 函数)保持原样
+      assert.strictEqual(result[3], 'int a() { return 0; }', '老文件未改动行不被格式化');
+      // 第 5 行(改动的 b 函数)被规范化
+      assert.strictEqual(result[4], 'int b() { return 1; }', '老文件改动行被规范化');
+
+      // include 区本身被改动 → 仍不排序（SortIncludes:Never 生效）
+      const baseline2 = '#include <zlib.h>\n#include <abc.h>\nint a() { return 0; }\n';
+      const f2 = path.join(gtmp, 'inc.cpp');
+      fs.writeFileSync(f2, baseline2);
+      git(['add', 'inc.cpp']);
+      git(['commit', '-m', 'inc']);
+      // 改第 1 行 include 的空格(制造改动落在 include 区)
+      const edited2 = '#include    <zlib.h>\n#include <abc.h>\nint a() { return 0; }\n';
+      fs.writeFileSync(f2, edited2);
+      applyClangFormat(f2, { isNew: false, root });
+      const r2 = fs.readFileSync(f2, 'utf-8').split('\n');
+      assert.strictEqual(r2[0], '#include <zlib.h>', '改动落在 include 区也不排序: 第1行仍 zlib');
+      assert.strictEqual(r2[1], '#include <abc.h>', '改动落在 include 区也不排序: 第2行仍 abc');
+
+      // 无改动行 → 不格式化，返回 false
+      const f3 = path.join(gtmp, 'nochange.cpp');
+      fs.writeFileSync(f3, 'int  m( ){return 0;}\n'); // 杂乱但等于 HEAD
+      git(['add', 'nochange.cpp']);
+      git(['commit', '-m', 'nochange']);
+      const beforeNc = fs.readFileSync(f3);
+      const changedNc = applyClangFormat(f3, { isNew: false, root });
+      assert.strictEqual(changedNc, false, '老文件无改动行 → 不格式化返回 false');
+      assert.ok(fs.readFileSync(f3).equals(beforeNc), '老文件无改动行 → 内容不动');
+
+      console.log('clang_format.test.js old-file mode PASS');
+    } finally {
+      fs.rmSync(gtmp, { recursive: true, force: true });
+    }
+  }
 } finally {
   for (const p of created) { try { fs.unlinkSync(p); } catch (_) {} }
   try { fs.rmdirSync(tmp); } catch (_) {}
