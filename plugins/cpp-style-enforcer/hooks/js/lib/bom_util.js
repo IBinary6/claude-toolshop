@@ -1,6 +1,8 @@
 'use strict';
 
-const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
+const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);          // UTF-8 BOM
+const UTF16LE_BOM = Buffer.from([0xFF, 0xFE]);         // UTF-16 LE BOM
+const UTF16BE_BOM = Buffer.from([0xFE, 0xFF]);         // UTF-16 BE BOM
 
 /**
  * 剥除所有前导 UTF-8 BOM。
@@ -9,11 +11,12 @@ const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
  */
 function stripBom(buf) {
   let offset = 0;
-  while (offset + 3 <= buf.length &&
-         buf[offset] === 0xEF && buf[offset + 1] === 0xBB && buf[offset + 2] === 0xBF) {
-    offset += 3;
+  while (offset + BOM.length <= buf.length &&
+         buf[offset] === BOM[0] && buf[offset + 1] === BOM[1] && buf[offset + 2] === BOM[2]) {
+    offset += BOM.length;
   }
-  return { hadBom: offset > 0, body: buf.slice(offset) };
+  // Buffer.from(subarray) 复制出独立内存，避免与原 buf 共享底层（含 offset=0 分支）
+  return { hadBom: offset > 0, body: Buffer.from(buf.subarray(offset)) };
 }
 
 /**
@@ -32,11 +35,14 @@ function restoreBom(hadBom, body) {
  * @returns {string}
  */
 function detectEncoding(buf) {
-  if (buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) return 'utf-8-bom';
-  if (buf.length >= 2 && ((buf[0] === 0xFF && buf[1] === 0xFE) || (buf[0] === 0xFE && buf[1] === 0xFF))) return 'utf-16';
+  if (buf.length >= BOM.length && buf[0] === BOM[0] && buf[1] === BOM[1] && buf[2] === BOM[2]) return 'utf-8-bom';
+  if (buf.length >= 2 &&
+      ((buf[0] === UTF16LE_BOM[0] && buf[1] === UTF16LE_BOM[1]) ||
+       (buf[0] === UTF16BE_BOM[0] && buf[1] === UTF16BE_BOM[1]))) return 'utf-16';
   if (isValidUtf8(buf)) return 'utf-8';
   try {
     const iconv = require('iconv-lite');
+    // gbk 为兜底分类：iconv 对多数字节都能解码，不保证精确
     if (iconv.decode(buf, 'gbk').length > 0) return 'gbk';
   } catch (_) {}
   return 'unknown';
@@ -49,13 +55,13 @@ function isValidUtf8(buf) {
     const b = buf[i];
     if (b <= 0x7F) { i += 1; continue; }
     let n;
-    if ((b & 0xE0) === 0xC0) n = 1;
-    else if ((b & 0xF0) === 0xE0) n = 2;
-    else if ((b & 0xF8) === 0xF0) n = 3;
+    if ((b & 0xE0) === 0xC0) n = 1;        // 110xxxxx → 2 字节序列
+    else if ((b & 0xF0) === 0xE0) n = 2;   // 1110xxxx → 3 字节序列
+    else if ((b & 0xF8) === 0xF0) n = 3;   // 11110xxx → 4 字节序列
     else return false;
     if (i + n >= buf.length) return false;
     for (let j = 1; j <= n; j++) {
-      if ((buf[i + j] & 0xC0) !== 0x80) return false;
+      if ((buf[i + j] & 0xC0) !== 0x80) return false;   // 续字节须为 10xxxxxx
     }
     i += n + 1;
   }
