@@ -165,8 +165,9 @@ function main() {
     '  - 各 checks 开关与 copyrightInfo 字段含义见同目录 readme.txt。',
   ].join('\n');
 
-  console.log(JSON.stringify({ reason }));
-  process.exit(0);
+  console.error(`\n  ⚠ [cpp-style-enforcer] 检测到 C++ 项目（${repoRoot}），但尚未配置风格检查模式。`);
+  console.log(JSON.stringify({ decision: 'block', reason }));
+  process.exit(2);
 }
 
 main();

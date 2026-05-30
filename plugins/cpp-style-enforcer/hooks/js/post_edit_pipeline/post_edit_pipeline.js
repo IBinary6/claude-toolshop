@@ -326,7 +326,12 @@ async function main() {
       const incrCfg = { mode: 'incremental', baseline: headHash || '', checks: defaultChecks };
       if (copyrightInfoTpl) incrCfg.copyrightInfo = copyrightInfoTpl;
 
+      // stderr 输出提示（Claude 作为 additional context 可见）
+      console.error(`\n  ⚠ [cpp-style-enforcer] 编辑了 C++ 文件（${path.basename(filePath)}），但该项目尚未配置风格检查模式。`);
+
+      // stdout JSON 输出指令（Claude 按 reason 字段执行）
       console.log(JSON.stringify({
+        decision: 'block',
         reason: [
           `[CPP_STYLE_ENFORCER] 编辑了 C++ 文件（${path.basename(filePath)}），但该项目尚未配置风格检查模式。`,
           '',
@@ -344,8 +349,11 @@ async function main() {
           JSON.stringify(incrCfg, null, 2).split('\n').map(l => '    ' + l).join('\n'),
           '',
           '注意：选项 2 的 baseline 已填入当前 HEAD，请原样写入。',
+          '创建完成后请重新编辑该文件以应用风格检查。',
         ].join('\n'),
       }));
+      process.exit(2);
+      return;
     }
   }
 
