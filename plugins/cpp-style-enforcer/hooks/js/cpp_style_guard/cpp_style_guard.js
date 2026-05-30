@@ -36,9 +36,25 @@ function getRepoRoot(cwd) {
 }
 
 /**
- * 快速检测项目中是否有 C/C++ 文件（只扫描常见目录的第一层）
+ * 检测 git 仓库中是否有 C/C++ 文件。
+ * 优先用 git ls-files 查询（不受目录嵌套层级限制）；
+ * git 失败时回退到目录扫描。
  */
 function hasCppFiles(repoRoot) {
+  // 方式 1: git ls-files（覆盖所有已跟踪 + 未跟踪文件）
+  const extGlob = [...CPP_EXTENSIONS].map(e => '*' + e);
+  const result = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', ...extGlob], {
+    cwd: repoRoot,
+    stdio: 'pipe',
+    timeout: 5000,
+    windowsHide: isWindows,
+  });
+  if (result.status === 0) {
+    const output = (result.stdout || Buffer.alloc(0)).toString('utf-8').trim();
+    if (output.length > 0) return true;
+  }
+
+  // 方式 2: 回退目录扫描（git 命令失败时）
   for (const sub of SCAN_DIRS) {
     const dir = sub ? path.join(repoRoot, sub) : repoRoot;
     try {
@@ -48,20 +64,15 @@ function hasCppFiles(repoRoot) {
         const ext = path.extname(entry).toLowerCase();
         if (CPP_EXTENSIONS.has(ext)) return true;
       }
-    } catch (_) {
-      // 目录读取失败，跳过
-    }
-  }
-  // 补充：检查是否有 .vcxproj / CMakeLists.txt 等 C++ 项目标识
-  const markers = ['CMakeLists.txt'];
-  for (const marker of markers) {
-    try {
-      const entries = fs.readdirSync(repoRoot);
-      for (const entry of entries) {
-        if (entry === marker || entry.endsWith('.vcxproj')) return true;
-      }
     } catch (_) {}
   }
+  // 补充：检查是否有 .vcxproj / CMakeLists.txt 等 C++ 项目标识
+  try {
+    const entries = fs.readdirSync(repoRoot);
+    for (const entry of entries) {
+      if (entry === 'CMakeLists.txt' || entry.endsWith('.vcxproj')) return true;
+    }
+  } catch (_) {}
   return false;
 }
 
