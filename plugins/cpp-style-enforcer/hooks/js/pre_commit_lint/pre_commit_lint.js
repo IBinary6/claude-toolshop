@@ -8,18 +8,10 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { readStdinJson, output, log, commandExists, isWindows, getCppStyleMode, isNewFileSince } = require('../lib/utils');
+const { readStdinJson, output, log, commandExists, isWindows, getCppStyleMode, isNewFileSince, CPP_EXTENSIONS, EXCLUDED_DIRS } = require('../lib/utils');
 
 // 插件内 cpplint.py（用 __dirname 相对定位，跨平台）
 const BUNDLED_CPPLINT = path.join(__dirname, '..', 'cpplint', 'cpplint.py');
-
-const CPP_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx']);
-
-const EXCLUDED_DIRS = new Set([
-  'node_modules', 'build', 'dist', 'out', 'bin', 'obj',
-  '.git', 'target', 'third_party', 'thirdparty', 'external',
-  'vendor', 'deps', 'packages',
-]);
 
 const CPPLINT_FILTERS = [
   '-build/include_order',
@@ -214,7 +206,6 @@ async function main() {
   }
 
   if (!hasErrors) {
-    console.error(`\n  ✓ [pre_commit_lint] ${stagedFiles.length} 个 C++ 文件通过 cpplint 检查`);
     process.exit(0);
     return;
   }

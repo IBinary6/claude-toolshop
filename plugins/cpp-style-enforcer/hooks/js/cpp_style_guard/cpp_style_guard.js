@@ -9,9 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { isWindows, ensureUserTemplate, readUserTemplate } = require('../lib/utils');
-
-const CPP_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx']);
+const { isWindows, ensureUserTemplate, readUserTemplate, CPP_EXTENSIONS } = require('../lib/utils');
 
 // 插件出厂默认模板（用 __dirname 定位，跨平台）
 const PLUGIN_DEFAULT_TEMPLATE = path.join(
@@ -141,8 +139,11 @@ function main() {
     null, 2
   );
 
-  // 预生成两份配置到插件临时目录，Claude 选完直接 cp
-  const tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
+  // 预生成两份配置到系统临时目录（按项目 hash 隔离，避免并发覆盖）
+  const crypto = require('crypto');
+  const os = require('os');
+  const projHash = crypto.createHash('sha1').update(repoRoot).digest('hex').slice(0, 8);
+  const tmpDir = path.join(os.tmpdir(), 'cpp-style-enforcer', projHash);
   try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (_) {}
   const fullPath = path.join(tmpDir, 'config-full.json');
   const incrPath = path.join(tmpDir, 'config-incremental.json');

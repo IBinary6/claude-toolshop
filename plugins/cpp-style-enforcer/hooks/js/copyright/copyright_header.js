@@ -7,30 +7,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { readStdinJson, getCopyrightInfo } = require('../lib/utils');
+const { readStdinJson, getCopyrightInfo, CPP_EXTENSIONS, EXCLUDED_DIRS, extractPathFromCommand, resolveFilePath } = require('../lib/utils');
 
-// 静态列表（非用户身份信息，无需配置）
-const CPP_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx']);
-const EXCLUDED_DIRS = new Set([
-  'node_modules', 'build', 'dist', 'out', 'bin', 'obj',
-  '.git', 'target', 'third_party', 'thirdparty', 'external',
-  'vendor', 'deps', 'packages',
-]);
 const EXCLUDED_FILES = new Set(['resource.h', 'targetver.h', 'stdafx.h']);
-
-/**
- * 从 Bash 命令中提取 C++ 文件路径
- */
-function extractPathFromCommand(command) {
-  if (!command || typeof command !== 'string') return null;
-  const extPattern = [...CPP_EXTENSIONS].map(e => e.replace('.', '\\.')).join('|');
-  const re = new RegExp(
-    '(?:[A-Za-z]:[/\\\\][^\\s\'"<>|*?]+|/[^\\s\'"<>|*?]+)(?:' + extPattern + ')(?=[\\s\'";|&)>]|$)',
-    'g'
-  );
-  const matches = command.match(re);
-  return matches ? matches[0].replace(/^['"]|['"]$/g, '') : null;
-}
 
 // 版权头正则
 const COPYRIGHT_RE = /^\/\/\s*[Cc]opyright\s+\d{4}/m;
@@ -55,25 +34,6 @@ function todayDatePrefix() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
-}
-
-/**
- * 从 hook stdin 提取文件路径（支持 Write/Edit/Bash/MCP）
- */
-function resolveFilePath(input) {
-  if (!input || typeof input !== 'object') return null;
-  const ti = input.tool_input;
-  if (typeof ti === 'object' && ti !== null) {
-    const direct = ti.file_path || ti.path || null;
-    if (direct) return direct;
-    if (ti.relative_path) {
-      const cwd = input.cwd || process.cwd();
-      return path.resolve(cwd, ti.relative_path);
-    }
-    if (typeof ti.command === 'string') return extractPathFromCommand(ti.command);
-  }
-  if (typeof ti === 'string') return ti;
-  return input.file_path || input.path || null;
 }
 
 /**

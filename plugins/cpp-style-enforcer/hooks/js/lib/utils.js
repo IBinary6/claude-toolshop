@@ -339,6 +339,61 @@ function isNewFileSince(filePath, baseline, root) {
   return result.status !== 0;
 }
 
+// ── 跨 hook 共享的常量与工具函数 ──
+
+/**
+ * C++ 源文件扩展名集合（含 C / C++ / 头文件）
+ */
+const CPP_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx']);
+
+/**
+ * 跳过检查的目录名集合（第三方 / 构建产物 / 包管理器）
+ */
+const EXCLUDED_DIRS = new Set([
+  'node_modules', 'build', 'dist', 'out', 'bin', 'obj',
+  '.git', 'target', 'third_party', 'thirdparty', 'external',
+  'vendor', 'deps', 'packages',
+]);
+
+/**
+ * 从 Bash 命令中提取 C++ 文件路径
+ * @param {string} command shell 命令字符串
+ * @returns {string|null} 匹配到的第一个 C++ 文件绝对路径，或 null
+ */
+function extractPathFromCommand(command) {
+  if (!command || typeof command !== 'string') return null;
+  const extPattern = [...CPP_EXTENSIONS].map(e => e.replace('.', '\\.')).join('|');
+  const re = new RegExp(
+    '(?:[A-Za-z]:[/\\\\][^\\s\'"<>|*?]+|/[^\\s\'"<>|*?]+)(?:' + extPattern + ')(?=[\\s\'";|&)>]|$)',
+    'g'
+  );
+  const matches = command.match(re);
+  return matches ? matches[0].replace(/^['"]|['"]$/g, '') : null;
+}
+
+/**
+ * 从 hook stdin JSON 中提取被编辑的文件路径（支持 Write/Edit/Bash/MCP）
+ * @param {object} input hook stdin 解析后的 JSON 对象
+ * @returns {string|null} 文件绝对路径，或 null
+ */
+function resolveFilePath(input) {
+  if (!input || typeof input !== 'object') return null;
+
+  const toolInput = input.tool_input;
+  if (typeof toolInput === 'object' && toolInput !== null) {
+    const direct = toolInput.file_path || toolInput.path || null;
+    if (direct) return direct;
+    if (toolInput.relative_path) {
+      const cwd = input.cwd || process.cwd();
+      return path.resolve(cwd, toolInput.relative_path);
+    }
+    if (typeof toolInput.command === 'string') return extractPathFromCommand(toolInput.command);
+  }
+  if (typeof toolInput === 'string') return toolInput;
+
+  return input.file_path || input.path || null;
+}
+
 module.exports = {
   // 平台信息
   isWindows,
@@ -368,4 +423,10 @@ module.exports = {
   readUserTemplate,
   ensureUserTemplate,
   getCopyrightInfo,
+
+  // 跨 hook 共享常量与工具
+  CPP_EXTENSIONS,
+  EXCLUDED_DIRS,
+  extractPathFromCommand,
+  resolveFilePath,
 };

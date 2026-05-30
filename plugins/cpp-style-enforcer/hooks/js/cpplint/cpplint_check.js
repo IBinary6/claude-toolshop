@@ -8,35 +8,13 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { readStdinJson, isWindows, commandExists } = require('../lib/utils');
+const { readStdinJson, isWindows, commandExists, CPP_EXTENSIONS, EXCLUDED_DIRS, extractPathFromCommand, resolveFilePath } = require('../lib/utils');
 
 // 内嵌的 cpplint.py 路径（与本脚本同目录，用 __dirname 跨平台定位）
 const BUNDLED_CPPLINT = path.join(__dirname, 'cpplint.py');
 
 // cpplint 可执行路径缓存
 let cpplintCmd = null;
-
-const CPP_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx']);
-
-/**
- * 从 Bash 命令中提取 C++ 文件路径
- */
-function extractPathFromCommand(command) {
-  if (!command || typeof command !== 'string') return null;
-  const extPattern = [...CPP_EXTENSIONS].map(e => e.replace('.', '\\.')).join('|');
-  const re = new RegExp(
-    '(?:[A-Za-z]:[/\\\\][^\\s\'"<>|*?]+|/[^\\s\'"<>|*?]+)(?:' + extPattern + ')(?=[\\s\'";|&)>]|$)',
-    'g'
-  );
-  const matches = command.match(re);
-  return matches ? matches[0].replace(/^['"]|['"]$/g, '') : null;
-}
-
-const EXCLUDED_DIRS = new Set([
-  'node_modules', 'build', 'dist', 'out', 'bin', 'obj',
-  '.git', 'target', 'third_party', 'thirdparty', 'external',
-  'vendor', 'deps', 'packages',
-]);
 
 // cpplint 过滤规则
 const CPPLINT_FILTERS = [
@@ -88,28 +66,6 @@ function resolveCpplint() {
   }
 
   return null;
-}
-
-/**
- * 从 hook stdin JSON 中提取被编辑的文件路径（支持 Write/Edit/Bash/MCP）。
- * 同时兼容 CLI 直接调用（手动复跑校验）：argv 第一个 C++ 文件参数。
- */
-function resolveFilePath(input) {
-  if (!input || typeof input !== 'object') return null;
-
-  const toolInput = input.tool_input;
-  if (typeof toolInput === 'object' && toolInput !== null) {
-    const direct = toolInput.file_path || toolInput.path || null;
-    if (direct) return direct;
-    if (toolInput.relative_path) {
-      const cwd = input.cwd || process.cwd();
-      return path.resolve(cwd, toolInput.relative_path);
-    }
-    if (typeof toolInput.command === 'string') return extractPathFromCommand(toolInput.command);
-  }
-  if (typeof toolInput === 'string') return toolInput;
-
-  return input.file_path || input.path || null;
 }
 
 /**

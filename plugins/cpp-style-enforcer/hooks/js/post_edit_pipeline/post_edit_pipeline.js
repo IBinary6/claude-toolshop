@@ -5,72 +5,12 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { readStdinJson, isWindows, getCppStyleMode, isNewFileSince } = require("../lib/utils");
+const { readStdinJson, isWindows, getCppStyleMode, isNewFileSince, CPP_EXTENSIONS, EXCLUDED_DIRS, extractPathFromCommand, resolveFilePath } = require("../lib/utils");
 
 // 插件内 js 目录基址（用 __dirname 定位，调用 copyright/cpplint 子 hook 走插件内副本）
 const HOOKS_BASE = path.join(__dirname, "..");
 
-const CPP_EXTENSIONS = new Set([
-  ".c",
-  ".cc",
-  ".cpp",
-  ".cxx",
-  ".h",
-  ".hpp",
-  ".hxx",
-]);
-
-const EXCLUDED_DIRS = new Set([
-  "node_modules",
-  "build",
-  "dist",
-  "out",
-  "bin",
-  "obj",
-  ".git",
-  "target",
-  "third_party",
-  "thirdparty",
-  "external",
-  "vendor",
-  "deps",
-  "packages",
-]);
-
 const SKIPPED_FILES = new Set(["resource.h"]);
-
-function extractPathFromCommand(command) {
-  if (!command || typeof command !== "string") return null;
-  const extPattern = [...CPP_EXTENSIONS]
-    .map((e) => e.replace(".", "\\."))
-    .join("|");
-  const re = new RegExp(
-    "(?:[A-Za-z]:[/\\\\][^\\s'\"<>|*?]+|/[^\\s'\"<>|*?]+)(?:" +
-      extPattern +
-      ")(?=[\\s'\";|&)>]|$)",
-    "g"
-  );
-  const matches = command.match(re);
-  return matches ? matches[0].replace(/^['"]|['"]$/g, "") : null;
-}
-
-function resolveFilePath(input) {
-  if (!input || typeof input !== "object") return null;
-  const toolInput = input.tool_input;
-  if (typeof toolInput === "object" && toolInput !== null) {
-    if (toolInput.file_path) return toolInput.file_path;
-    if (toolInput.path) return toolInput.path;
-    if (typeof toolInput.command === "string") {
-      return extractPathFromCommand(toolInput.command);
-    }
-  }
-  const toolResponse = input.tool_response;
-  if (typeof toolResponse === "object" && toolResponse !== null) {
-    if (toolResponse.filePath) return toolResponse.filePath;
-    if (toolResponse.file_path) return toolResponse.file_path;
-  }
-  return input.file_path || input.path || null;
-}
 
 function shouldHandle(filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -330,8 +270,11 @@ async function main() {
       const incrCfg = { mode: 'incremental', baseline: headHash || '', checks: defaultChecks };
       if (ci) incrCfg.copyrightInfo = ci;
 
-      // 预生成配置到插件临时目录
-      const tmpDir = path.join(__dirname, '..', '..', '..', '.tmp');
+      // 预生成配置到系统临时目录（按项目 hash 隔离）
+      const crypto = require('crypto');
+      const os = require('os');
+      const projHash = crypto.createHash('sha1').update(root).digest('hex').slice(0, 8);
+      const tmpDir = path.join(os.tmpdir(), 'cpp-style-enforcer', projHash);
       try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (_) {}
       const fullPath = path.join(tmpDir, 'config-full.json');
       const incrPath = path.join(tmpDir, 'config-incremental.json');
