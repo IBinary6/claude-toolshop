@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/cpp_style_guard/cpp_style_guard.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/session_start.js\"",
             "timeout": 10
           }
         ]
@@ -14,11 +14,11 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|mcp__.*(?:write|edit|create|replace|insert)",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*(?:write|edit|create|replace|insert)",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/post_edit_pipeline/post_edit_pipeline.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/post_edit.js\"",
             "timeout": 30
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_commit_lint/pre_commit_lint.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_commit.js\"",
             "timeout": 30
           }
         ]
