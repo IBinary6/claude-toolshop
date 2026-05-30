@@ -21,7 +21,7 @@ function applyClangFormat(filePath) {
   const r = spawnSync(
     'clang-format',
     ['-style=file', '-fallback-style=Google', `-assume-filename=${filePath}`],
-    { input: body, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, windowsHide: isWindows }
+    { input: body, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, maxBuffer: 32 * 1024 * 1024, windowsHide: isWindows }
   );
   // clang-format 不在 PATH（ENOENT）或执行失败 → 静默跳过
   if (r.error || r.status !== 0 || !r.stdout) return false;

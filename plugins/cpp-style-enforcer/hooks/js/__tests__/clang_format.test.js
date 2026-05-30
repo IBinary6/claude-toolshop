@@ -40,6 +40,22 @@ try {
     assert.ok(out.slice(0, 3).equals(BOM), '带 BOM 格式化后 BOM 仍首字节');
     assert.ok(!out.slice(3, 6).equals(BOM), 'BOM 不重复');
 
+    // 大文件：格式化后 stdout > Node 默认 1MB。无 maxBuffer 会 ENOBUFS 被静默跳过。
+    // 这里构造缩进混乱的多行代码，格式化后正文 > 1.5MB，验证 maxBuffer(32MB) 生效、大文件能正常写回。
+    const lines = [];
+    lines.push('int big() {');
+    for (let i = 0; i < 60000; i++) lines.push('    int  v' + i + '  =  ' + i + ' ;'); // 每行混乱空格，待规范化
+    lines.push('  return 0 ;');
+    lines.push('}');
+    const bigSrc = Buffer.from(lines.join('\n') + '\n', 'utf-8');
+    assert.ok(bigSrc.length > 1024 * 1024, '构造的输入应 > 1MB 以触发旧 1MB 上限');
+    const bigFile = write('big.cpp', bigSrc);
+    const changedBig = applyClangFormat(bigFile);
+    assert.strictEqual(changedBig, true, '大文件杂乱格式 → 不被 ENOBUFS 静默跳过，正常写回');
+    const bigOut = fs.readFileSync(bigFile);
+    assert.ok(bigOut.length > 1024 * 1024, '格式化后大文件正文仍 > 1MB（确认整段被写回，未截断）');
+    assert.ok(!bigOut.includes(Buffer.from('  =  ', 'utf-8')), '混乱空格已被规范化');
+
     console.log('clang_format.test.js PASS');
   }
 } finally {
