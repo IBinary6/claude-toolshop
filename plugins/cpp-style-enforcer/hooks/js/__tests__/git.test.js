@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { repoRoot, isNew } = require('../lib/git.js');
+const { repoRoot, isNew, changedLineRanges } = require('../lib/git.js');
 
 function sh(args, cwd) { spawnSync('git', args, { cwd, stdio: 'pipe' }); }
 
@@ -48,6 +48,26 @@ try {
   fs.writeFileSync(f, 'int c;');
   assert.strictEqual(repoRoot(f), null, '非 git repoRoot=null');
   assert.strictEqual(isNew(f, null), true, '非 git 所有文件视为新 isNew=true');
+
+  // changedLineRanges：已跟踪文件改一行 → 解析出对应改动行范围
+  const multi = path.join(tmp, 'multi.cpp');
+  fs.writeFileSync(multi, 'int a;\nint b;\nint c;\nint d;\n');
+  sh(['add', 'multi.cpp'], tmp);
+  sh(['commit', '-m', 'multi'], tmp);
+  fs.writeFileSync(multi, 'int a;\nint b;\nint cc;\nint d;\n'); // 改第 3 行
+  const ranges = changedLineRanges(multi, root);
+  assert.ok(Array.isArray(ranges), 'changedLineRanges 返回数组');
+  assert.deepStrictEqual(ranges, [[3, 3]], '仅第 3 行改动 → [[3,3]]');
+
+  // 未改动的已跟踪文件 → 空数组
+  assert.deepStrictEqual(changedLineRanges(tracked, root), [], '无改动 → []');
+
+  // 非 git → null
+  const nonGitR = fs.mkdtempSync(path.join(os.tmpdir(), 'nongit-cr-'));
+  const nf = path.join(nonGitR, 'y.cpp');
+  fs.writeFileSync(nf, 'int z;\n');
+  assert.strictEqual(changedLineRanges(nf, null), null, '非 git → null');
+  fs.rmSync(nonGitR, { recursive: true, force: true });
 
   console.log('git.test.js PASS');
   fs.rmSync(tmp, { recursive: true, force: true });
