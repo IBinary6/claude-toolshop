@@ -165,9 +165,14 @@ function main() {
     '  - 各 checks 开关与 copyrightInfo 字段含义见同目录 readme.txt。',
   ].join('\n');
 
-  console.error(`\n  ⚠ [cpp-style-enforcer] 检测到 C++ 项目（${repoRoot}），但尚未配置风格检查模式。`);
-  console.log(JSON.stringify({ decision: 'block', reason }));
-  process.exit(2);
+  // SessionStart stdout 作为 additional context 注入对话，不支持 block 语义
+  // 用纯文本输出指令，Claude 在对话开头看到后优先执行
+  console.log([
+    '[IMPORTANT] [cpp-style-enforcer] 在回复用户之前，你必须先处理以下配置请求：',
+    '',
+    reason,
+  ].join('\n'));
+  process.exit(0);
 }
 
 main();
