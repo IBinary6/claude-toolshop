@@ -43,14 +43,20 @@ function isTracked(filePath, root) {
 }
 
 /**
- * 新文件判定：!isTracked。非 git 仓库(root=null) → true（视为新）。
+ * 新文件判定：文件不在 HEAD（已提交历史）中即为新文件。
+ * 涵盖未跟踪、已暂存未提交、首次提交。非 git 仓库(root=null) → true（视为新）。
+ * 仓库无任何 commit（HEAD 无效）→ cat-file 失败 → 所有文件视为新。
  * @param {string} filePath
  * @param {string|null} root
  * @returns {boolean}
  */
 function isNew(filePath, root) {
   if (!root) return true;
-  return !isTracked(filePath, root);
+  const rel = path.relative(root, filePath).split(path.sep).join('/');
+  const r = spawnSync('git', ['cat-file', '-e', `HEAD:${rel}`], {
+    cwd: root, stdio: 'pipe', timeout: 3000, windowsHide: isWindows,
+  });
+  return r.status !== 0;
 }
 
 /**
