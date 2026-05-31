@@ -1,73 +1,42 @@
 ---
-description: cpp-style-enforcer 手动配置 / 重置 — 选择 full/incremental 写入 .claude-cpp-style，或查看/编辑用户模板
+description: 查看或配置 cpp-style-enforcer：编辑全局模板或为当前项目写覆盖配置
 ---
 
-# /cpp-style-setup — C++ 风格检查配置 / 重置
+# cpp-style-enforcer 配置
 
-**可选命令**。装好插件后，SessionStart 钩子会在检测到 C++ 项目且缺少 `.claude-cpp-style` 时自动提示选择模式，通常无需手动跑这个命令。
+本命令是**按需配置工具**，纯查看与编辑配置，不做任何交互式提问或拦截。根据需要选择以下操作之一。
 
-本命令用于：**手动初始化 / 重置当前项目的风格检查配置**，或**查看 / 编辑用户级模板**。
+## 配置层级
 
-## 执行流程
+1. **全局模板** `~/.claude/cpp-style-template.json`：所有项目的默认值（公司名、作者、默认 mode、各检查开关）。SessionStart 首次自动创建，**已存在绝不覆盖**。
+2. **项目覆盖** `<项目根>/.claude-cpp-style/cpp-style.json`：对当前项目做**字段级覆盖**（只写想改的字段，其余回退全局模板）。注意是 `.claude-cpp-style` 文件夹内的 `cpp-style.json` 文件。
 
-按以下步骤执行。**遇到决策点必须使用 AskUserQuestion 工具询问用户，不要假设。**
+## Schema（两层同构）
 
-### Step 1: 检测当前项目
-
-执行：
-
-```bash
-git rev-parse --show-toplevel
+```json
+{
+  "enabled": true,
+  "mode": "incremental",
+  "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
+  "copyrightInfo": { "company": "", "author": "", "dateFormat": "YYYY/MM/DD HH:mm" }
+}
 ```
 
-- 非 git 仓库 / 命令失败 → 告知用户「当前目录不是 git 仓库，本插件依赖 git 区分新旧文件，无法配置」，停止。
-- 成功 → 记下仓库根目录，继续 Step 2。
+- `enabled`：设为 false 彻底关闭本项目所有检查。
+- `mode`：`incremental`（仅新文件走全套）| `full`（所有文件走全套）。
+- `checks.clangFormat`：格式化（含 #include 排序）；`checks.cpplint`：Google C++ 风格静态检查；`checks.copyright`：版权头；`checks.bom`：UTF-8 BOM 补全（CMake 项目自动跳过）。
+- `copyrightInfo.company`：空 = 不写版权头，cpplint 同步屏蔽 legal/copyright；`copyrightInfo.author`：作者名；`copyrightInfo.dateFormat`：当前时间显示格式，占位符 `YYYY`/`MM`/`DD`/`HH`/`mm`。
 
-### Step 2: 读用户模板
+## 常见操作
 
-读取 `~/.claude/cpp-style-template.json`（不存在时插件 SessionStart 已自动创建；若仍缺失，从插件 `templates/cpp-style-template.default.json` 复制理解其结构）。把其中的 `checks` 与 `copyrightInfo` 作为待写入 `.claude-cpp-style` 的内容基底。
+- 设公司名/作者（全局）：编辑 `~/.claude/cpp-style-template.json` 的 `copyrightInfo.company` / `copyrightInfo.author`。
+- 某项目关闭：项目根 `.claude-cpp-style/cpp-style.json` 写 `{ "enabled": false }`。
+- 新项目要求所有文件规范：写 `{ "mode": "full" }`。
+- 只要 BOM：写 `{ "checks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": true } }`。
 
-**用 AskUserQuestion 询问用户本次意图**，给出选项：
+## 行为速记
 
-- 选项 A：「配置当前项目的风格检查模式」→ 继续 Step 3
-- 选项 B：「查看 / 编辑用户模板（公司名、作者、默认开关）」→ 跳到 Step 5
-
-### Step 3: 选择模式
-
-检查仓库根目录是否已存在 `.claude-cpp-style`：
-- 已存在 → 先用 AskUserQuestion 确认「已有配置，是否覆盖重置？」，用户拒绝则停止。
-
-**用 AskUserQuestion 询问模式**：
-
-- 选项 1：「新项目 — 所有文件完整检查（full）」
-- 选项 2：「老项目 — 仅新文件完整检查，旧文件只补 BOM（incremental）」
-
-若选 incremental，执行 `git rev-parse HEAD` 取当前 HEAD 作为 baseline。
-
-### Step 4: 写入 .claude-cpp-style
-
-用 Write 工具在仓库根目录写入 `.claude-cpp-style`（JSON）。内容 = 用户模板的 `checks` + `copyrightInfo`，叠加本次选择：
-
-- full：`{ ...模板, "mode": "full" }`（不含 baseline）
-- incremental：`{ ...模板, "mode": "incremental", "baseline": "<HEAD hash>" }`
-
-提醒用户：
-- 该文件建议加入 `.gitignore`。
-- `copyrightInfo.company` 为空时不会写版权头（cpplint 同步屏蔽 legal/copyright）。
-
-汇报写入路径与最终内容，结束。
-
-### Step 5: 查看 / 编辑用户模板
-
-打印 `~/.claude/cpp-style-template.json` 当前内容。**用 AskUserQuestion 询问是否修改**公司名 / 作者 / 默认开关：
-
-- 用户要改 → 收集新值，用 Edit/Write 更新该文件，告知「之后新项目自动继承，已配置项目不受影响」。
-- 用户不改 → 结束。
-
-## 约束
-
-- 决策点必须用 AskUserQuestion 工具，不得自作主张。
-- 不替用户决定 full / incremental，必须问。
-- incremental 的 baseline 必须用实际 `git rev-parse HEAD` 输出，不得编造 hash。
-- 覆盖已有 `.claude-cpp-style` 前必须二次确认。
-- 字段含义见 `hooks/js/cpp_style_guard/readme.txt`。
+- **新老文件判定** = git 是否跟踪。`incremental` 下未跟踪的新文件走全套，已跟踪的老文件只补 BOM。非 git 仓库所有文件视为新文件走全套。
+- **CMake 项目**（从被编辑文件向上找到 CMakeLists.txt）一律不补 BOM，其余检查照常。
+- **dateFormat** 是当前时间的显示格式模板，必须含 `YYYY`/`MM`/`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。
+- **局部豁免** include 排序：源码里用 `// clang-format off` / `// clang-format on` 包住。
