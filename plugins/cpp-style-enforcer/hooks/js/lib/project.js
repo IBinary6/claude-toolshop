@@ -40,4 +40,38 @@ function isCMakeProject(filePath) {
   return findCMakeRoot(filePath) !== null;
 }
 
-module.exports = { findCMakeRoot, isCMakeProject };
+const _CPP_SRC_EXT = new Set(['.cpp', '.cc', '.cxx', '.c', '.h', '.hpp', '.hh', '.hxx']);
+
+/**
+ * 保守判断给定目录是否为 C/C++ 项目：根或常见子目录有 C++ 标志。
+ * 标志（任一即可）：CMakeLists.txt、*.vcxproj/*.sln、根或 src/include/source 下有 C/C++ 源文件。
+ * 仅浅层扫描（根 + 一层常见目录），找不到 → false（保守，宁可漏不可在非 C++ 项目乱建）。
+ *
+ * @param {string|null} root 项目根（git 仓库根）
+ * @returns {boolean}
+ */
+function isCppProjectDir(root) {
+  if (!root || typeof root !== 'string') return false;
+  try {
+    if (fs.existsSync(path.join(root, 'CMakeLists.txt'))) return true;
+    const dirsToScan = [root, path.join(root, 'src'), path.join(root, 'include'), path.join(root, 'source')];
+    for (const dir of dirsToScan) {
+      let entries;
+      try {
+        entries = fs.readdirSync(dir);
+      } catch (_) {
+        continue;
+      }
+      for (const name of entries) {
+        const ext = path.extname(name).toLowerCase();
+        if (ext === '.vcxproj' || ext === '.sln') return true;
+        if (_CPP_SRC_EXT.has(ext)) return true;
+      }
+    }
+  } catch (_) {
+    return false;
+  }
+  return false;
+}
+
+module.exports = { findCMakeRoot, isCMakeProject, isCppProjectDir };
