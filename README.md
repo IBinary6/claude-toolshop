@@ -27,6 +27,7 @@ IBinary6 的 Claude Code 插件市场（Plugin Marketplace）—— 一组可独
 | cpp-style-enforcer | C++ Google 风格强制（clang-format / cpplint / 版权头 / BOM），新老项目自动分流 | [README](./plugins/cpp-style-enforcer/README.md) |
 | bugdb-knowledge | 本地 Bug 知识库，编辑/报错时自动召回历史 Bug 方案 | [README](./plugins/bugdb-knowledge/README.md) |
 | codemap-boost | 代码图谱增强（code-review-graph / graphify hook 增强） | [README](./plugins/codemap-boost/README.md) |
+| agent-dispatch | 智能调度：白名单制强制主 agent 委派工作给子代理，保护上下文窗口 | [README](./plugins/agent-dispatch/README.md) |
 
 ## 协议
 
