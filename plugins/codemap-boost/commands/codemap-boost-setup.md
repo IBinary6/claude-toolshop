@@ -62,8 +62,8 @@ graphify --version
 
 - **存在** → 继续 Step 5
 - **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 执行 `python -m pip install graphify`（用 Step 3 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install graphify`，告知装完重开 Claude Code，停下。
+  - 选项 A：「帮我装」→ 执行 `python -m pip install graphifyy`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 3 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install graphifyy`，告知装完重开 Claude Code，停下。
 
 ### Step 5: 验证 hook 文件可被 Node 解析
 

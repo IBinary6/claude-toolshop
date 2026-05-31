@@ -8,15 +8,18 @@
 
 ## 前置依赖
 
-| 依赖 | 安装 |
-|------|------|
-| Node.js 18+ | `winget install OpenJS.NodeJS.LTS` / `brew install node` / `apt install nodejs` |
-| `code-review-graph` CLI | `pip install code-review-graph` |
-| `graphify` CLI | `pip install graphify` |
+| 依赖 | 最低版本 | 必需 | 安装 |
+|------|---------|------|------|
+| Node.js | 18+ | **是**（hook 运行时） | `winget install OpenJS.NodeJS.LTS` / `brew install node` / `apt install nodejs` |
+| Python | 3.10+ | 推荐（pip 自举 / 图谱 CLI 依赖） | `winget install Python.Python.3.12` / `brew install python` / `apt install python3` |
+| `code-review-graph` CLI | — | 可选但推荐 | `pip install code-review-graph` |
+| `graphify` CLI | — | 可选但推荐 | `pip install graphifyy`（包名 `graphifyy`，提供 `graphify` 命令） |
 
-三者**全部必需**，缺任一项对应 hook 不会工作。
+Node.js 是 hook 运行时，**必需**；`code-review-graph` / `graphify` 缺失时对应图谱功能**降级跳过、不影响其它**，但装上才有完整能力，故标「可选但推荐」。`graphify` 命令由 PyPI 包 **`graphifyy`**（注意双 y）提供。
 
-装插件后跑一次 `/codemap-boost-setup` 即可——它会逐项检测，缺哪个就**问你要不要直接帮你装**：`code-review-graph` / `graphify` 这两个 pip 包同意后可自动安装；Node.js 因需管理员权限只打印命令让你复制（**不会替你跑 sudo / winget**）。
+> **自动自举**：装上插件后，首次 SessionStart 会在后台尝试 `pip install` 缺失的 `code-review-graph` / `graphifyy`（需本机已装 Python + pip）。装不上则图谱功能降级跳过、不影响其它；安装只尝试一次，失败后不再重复。
+
+装插件后也可手动跑一次 `/codemap-boost-setup`——它会逐项检测，缺哪个就**问你要不要直接帮你装**：`code-review-graph` / `graphifyy` 这两个 pip 包同意后可自动安装；Node.js 因需管理员权限只打印命令让你复制（**不会替你跑 sudo / winget**）。
 
 ---
 
