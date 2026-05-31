@@ -5,6 +5,7 @@ const { passSilent, blockClaude, diag } = require('./lib/protocol');
 const { resolveFilePath, shouldHandle } = require('./lib/target');
 const { loadConfig } = require('./lib/config');
 const { repoRoot, isNew } = require('./lib/git');
+const { ensureClangFormatConfig } = require('./lib/ensure_clang_format_config');
 const { isCMakeProject } = require('./lib/project');
 const { applyClangFormat } = require('./steps/clang_format');
 const { applyBom } = require('./steps/bom');
@@ -40,6 +41,8 @@ async function main() {
   //    新文件/full → 整文件全格；老文件(incremental && !isNew) → 仅格改动行 + include 不排序
   if (checks.clangFormat) {
     const clangIsNew = applyTriple; // full 或 新文件 → 整文件模式；否则老文件改动行模式
+    // 走全套（新文件/full）时，项目根缺 .clang-format 则生成 Google 风格，三方共享同一份配置
+    if (applyTriple) step('ensure_clang_format_config', () => ensureClangFormatConfig(root));
     step('clang_format', () => applyClangFormat(filePath, { isNew: clangIsNew, root }));
   }
 
