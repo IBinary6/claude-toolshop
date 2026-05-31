@@ -7,6 +7,7 @@ const { spawnSync } = require('child_process');
 const {
   ensureIconvLite,
   ensureClangFormat,
+  detectClangFormat,
   markerPath,
   spawnPrewarm,
 } = require('../lib/ensure_deps.js');
@@ -80,25 +81,86 @@ const pluginRoot = path.join(__dirname, '..', '..', '..');
   }
 }
 
-// ---- ensureClangFormat: PATH 有 clang-format → 返回命令、不触发 pip ----
+// ---- detectClangFormat: 注入 probe，PATH(clang-format) 优先命中 → 返回 PATH desc ----
+{
+  const probed = [];
+  const desc = detectClangFormat({
+    probe: (d) => { probed.push(d); return d.cmd === 'clang-format'; },
+    scriptsDirs: () => [],
+  });
+  assert.deepStrictEqual(desc, { cmd: 'clang-format', args: [] }, 'PATH 命中 → 返回 PATH 调用描述');
+  assert.deepStrictEqual(probed[0], { cmd: 'clang-format', args: [] }, '先探测 PATH 的 clang-format');
+  console.log('ensure_deps: detect PATH desc PASS');
+}
+
+// ---- detectClangFormat: PATH 无、python -m clang_format 可用 → 返回 python desc ----
+{
+  const desc = detectClangFormat({
+    probe: (d) => d.cmd === 'python' && d.args[0] === '-m' && d.args[1] === 'clang_format',
+    scriptsDirs: () => [],
+  });
+  assert.deepStrictEqual(desc, { cmd: 'python', args: ['-m', 'clang_format'] },
+    'PATH 无 + python -m clang_format 可用 → 返回 python 模块调用描述');
+  console.log('ensure_deps: detect python -m clang_format desc PASS');
+}
+
+// ---- detectClangFormat: 仅 Scripts 目录可执行可用 → 返回该绝对路径 desc ----
+{
+  const scriptExe = { cmd: '/fake/Scripts/clang-format', args: [] };
+  const desc = detectClangFormat({
+    probe: (d) => d.cmd === scriptExe.cmd,
+    scriptsDirs: () => [scriptExe],
+  });
+  assert.deepStrictEqual(desc, scriptExe, '仅 Scripts 目录可执行可用 → 返回该路径调用描述');
+  console.log('ensure_deps: detect Scripts-dir desc PASS');
+}
+
+// ---- detectClangFormat: 全不可用 → 返回 null ----
+{
+  const desc = detectClangFormat({ probe: () => false, scriptsDirs: () => [] });
+  assert.strictEqual(desc, null, '所有调用方式都跑不通 → 返回 null');
+  console.log('ensure_deps: detect none -> null PASS');
+}
+
+// ---- ensureClangFormat: PATH 有 clang-format → 返回调用描述、不触发 pip ----
 {
   const hasClangFormat = spawnSync('clang-format', ['--version'], { stdio: 'pipe' }).status === 0;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ed-cf-present-'));
   try {
     let installAttempted = false;
-    const cmd = ensureClangFormat({
+    const desc = ensureClangFormat({
       marker: path.join(tmp, '.clang-format-install-failed'),
       install: () => { installAttempted = true; return false; },
     });
     if (hasClangFormat) {
-      assert.strictEqual(cmd, 'clang-format', 'PATH 有 clang-format → 返回 "clang-format"');
+      assert.deepStrictEqual(desc, { cmd: 'clang-format', args: [] },
+        'PATH 有 clang-format → 返回 PATH 调用描述');
       assert.strictEqual(installAttempted, false, 'PATH 有 clang-format → 绝不触发 pip 安装');
       console.log('ensure_deps: clangFormat present, no install PASS');
     } else {
-      assert.strictEqual(cmd, null, '缺失 + 安装失败 → null');
+      assert.strictEqual(desc, null, '缺失 + 安装失败 → null');
       assert.strictEqual(installAttempted, true, '缺失 → 尝试一次安装');
       console.log('ensure_deps: clangFormat absent, degrade null PASS');
     }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ---- ensureClangFormat: 安装成功后检测到 python desc → 返回 python 调用描述 ----
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ed-cf-pip-'));
+  try {
+    let detectCalls = 0;
+    const pythonDesc = { cmd: 'python', args: ['-m', 'clang_format'] };
+    const desc = ensureClangFormat({
+      marker: path.join(tmp, '.clang-format-install-failed'),
+      detect: () => { detectCalls += 1; return detectCalls === 1 ? null : pythonDesc; },
+      install: () => true, // 模拟 pip 安装成功
+    });
+    assert.deepStrictEqual(desc, pythonDesc, 'pip 装后检测到 python -m clang_format → 返回该调用描述');
+    assert.strictEqual(detectCalls, 2, '安装前后各检测一次');
+    console.log('ensure_deps: clangFormat pip then python desc PASS');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

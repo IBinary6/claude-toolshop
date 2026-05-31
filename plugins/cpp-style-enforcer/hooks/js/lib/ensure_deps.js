@@ -52,13 +52,71 @@ function pipInstallClangFormat() {
   return false;
 }
 
-/** 默认：找出可用的 clang-format 调用方式，找不到返回 null */
-function detectClangFormat() {
-  // 1) PATH 里的 clang-format
+/**
+ * 默认探测：以 `<cmd> [...args] --version` 试跑一个调用描述是否可用。
+ * @param {{cmd:string, args:string[]}} desc
+ * @returns {boolean}
+ */
+function probeClangFormat(desc) {
   try {
-    const r = spawnSync('clang-format', ['--version'], { stdio: 'ignore', timeout: 10000, windowsHide: isWindows });
-    if (!r.error && r.status === 0) return 'clang-format';
-  } catch (_) {}
+    const r = spawnSync(desc.cmd, [...desc.args, '--version'], { stdio: 'ignore', timeout: 10000, windowsHide: isWindows });
+    return !r.error && r.status === 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * 默认：拿 python(/python3) 的 Scripts 目录里 clang-format 可执行的绝对路径候选。
+ * pip 安装的入口脚本常落在此目录，可能不在 PATH。失败静默返回 []。
+ * @returns {Array<{cmd:string, args:string[]}>}
+ */
+function scriptsDirCandidates() {
+  const out = [];
+  for (const py of ['python', 'python3']) {
+    let dir = null;
+    try {
+      const r = spawnSync(py, ['-c', "import sysconfig; print(sysconfig.get_path('scripts'))"],
+        { stdio: ['ignore', 'pipe', 'ignore'], timeout: 10000, windowsHide: isWindows });
+      if (!r.error && r.status === 0 && r.stdout) dir = String(r.stdout).trim();
+    } catch (_) {}
+    if (!dir) continue;
+    for (const exe of isWindows ? ['clang-format.exe', 'clang-format'] : ['clang-format']) {
+      const p = path.join(dir, exe);
+      try { if (fs.existsSync(p)) out.push({ cmd: p, args: [] }); } catch (_) {}
+    }
+  }
+  return out;
+}
+
+/**
+ * 默认：按顺序找出可用的 clang-format 调用方式，返回调用描述 {cmd, args}，找不到返回 null。
+ * 顺序：1) PATH 的 clang-format  2) pip 包模块入口 python -m clang_format(python/python3)
+ *      3) python Scripts 目录下的 clang-format 可执行。
+ *
+ * @param {object} [opts]
+ * @param {function({cmd:string,args:string[]}):boolean} [opts.probe] 注入探测函数（测试用）
+ * @param {function():Array<{cmd:string,args:string[]}>} [opts.scriptsDirs] 注入 Scripts 候选生成（测试用）
+ * @returns {{cmd:string, args:string[]}|null}
+ */
+function detectClangFormat(opts) {
+  const o = opts || {};
+  const probe = o.probe || probeClangFormat;
+  const scriptsDirs = o.scriptsDirs || scriptsDirCandidates;
+
+  const candidates = [
+    { cmd: 'clang-format', args: [] },
+    { cmd: 'python', args: ['-m', 'clang_format'] },
+    { cmd: 'python3', args: ['-m', 'clang_format'] },
+  ];
+  for (const desc of candidates) {
+    try { if (probe(desc)) return desc; } catch (_) {}
+  }
+  let extra = [];
+  try { extra = scriptsDirs() || []; } catch (_) { extra = []; }
+  for (const desc of extra) {
+    try { if (probe(desc)) return desc; } catch (_) {}
+  }
   return null;
 }
 
@@ -95,14 +153,14 @@ function ensureIconvLite(opts) {
 }
 
 /**
- * 按需自举 clang-format。检测到可用直接返回命令名；缺失且未尝试过 → pip 安装一次；
+ * 按需自举 clang-format。检测到可用直接返回调用描述；缺失且未尝试过 → pip 安装一次；
  * 仍检测不到 → 写失败标记并返回 null（降级：clang-format 跳过）。全程不抛。
  *
  * @param {object} [opts]
- * @param {function():(string|null)} [opts.detect] 注入检测函数，缺省 detectClangFormat
+ * @param {function():({cmd:string,args:string[]}|null)} [opts.detect] 注入检测函数，缺省 detectClangFormat
  * @param {string} [opts.marker] 失败标记路径，缺省插件根 .clang-format-install-failed
  * @param {function():boolean} [opts.install] 注入安装函数，缺省 pipInstallClangFormat
- * @returns {string|null}
+ * @returns {{cmd:string, args:string[]}|null}
  */
 function ensureClangFormat(opts) {
   const o = opts || {};
@@ -110,16 +168,16 @@ function ensureClangFormat(opts) {
   const detect = o.detect || detectClangFormat;
   const install = o.install || pipInstallClangFormat;
 
-  let cmd = null;
-  try { cmd = detect(); } catch (_) { cmd = null; }
-  if (cmd) return cmd;                       // 已可用 → 不触发安装
+  let desc = null;
+  try { desc = detect(); } catch (_) { desc = null; }
+  if (desc) return desc;                      // 已可用 → 不触发安装
   if (markerExists(marker)) return null;      // 曾失败 → 不重试
 
   let ok = false;
   try { ok = !!install(); } catch (_) { ok = false; }
   if (ok) {
-    try { cmd = detect(); } catch (_) { cmd = null; }
-    if (cmd) return cmd;
+    try { desc = detect(); } catch (_) { desc = null; }
+    if (desc) return desc;
   }
   writeMarker(marker);
   return null;

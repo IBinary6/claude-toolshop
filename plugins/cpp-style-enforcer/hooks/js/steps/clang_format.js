@@ -4,6 +4,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const { stripBom, restoreBom } = require('../lib/bom_util.js');
 const { changedLineRanges } = require('../lib/git.js');
+const { detectClangFormat } = require('../lib/ensure_deps.js');
 
 const isWindows = process.platform === 'win32';
 
@@ -21,12 +22,17 @@ const isWindows = process.platform === 'win32';
  * 3 字节（BOM 在第一行行首，不增减行），故 git diff 的改动行号可直接用作 --lines。
  *
  * @param {string} filePath
- * @param {{isNew?:boolean, root?:string|null}} [opts]
+ * @param {{isNew?:boolean, root?:string|null, detect?:function():({cmd:string,args:string[]}|null)}} [opts]
  * @returns {boolean} 是否改写了文件
  */
 function applyClangFormat(filePath, opts) {
   const isNew = !opts || opts.isNew !== false; // 缺省 → 新文件整文件模式
   const root = opts && opts.root ? opts.root : null;
+  // 只检测不安装：每次编辑都跑，安装仅在 SessionStart 预热做。
+  const detect = (opts && opts.detect) || detectClangFormat;
+  let desc = null;
+  try { desc = detect(); } catch (_) { desc = null; }
+  if (!desc) return false; // clang-format 不可用 → 静默降级
 
   let raw;
   try { raw = fs.readFileSync(filePath); } catch (_) { return false; }
@@ -43,11 +49,11 @@ function applyClangFormat(filePath, opts) {
   }
 
   const r = spawnSync(
-    'clang-format',
-    args,
+    desc.cmd,
+    [...desc.args, ...args],
     { input: body, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, maxBuffer: 32 * 1024 * 1024, windowsHide: isWindows }
   );
-  // clang-format 不在 PATH（ENOENT）或执行失败 → 静默跳过
+  // clang-format 执行失败 → 静默跳过
   if (r.error || r.status !== 0 || !r.stdout) return false;
 
   const formatted = Buffer.isBuffer(r.stdout) ? r.stdout : Buffer.from(r.stdout);
