@@ -7,6 +7,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// 缺依赖时后台 pip 自举（detached 预热，不阻塞 SessionStart、不超时）。
+// require/调用全程不抛——失败安全降级，绝不阻塞会话。
+try {
+  require('../lib/ensure_deps').spawnPrewarm();
+} catch (_) {}
+
 const MARKER = 'code-review-graph';
 const SNIPPET = `
 
