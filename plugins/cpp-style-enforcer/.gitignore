@@ -1,2 +1,7 @@
 # 测试生成的临时 runner 产物
 hooks/js/__tests__/fixtures/
+
+# 依赖自举失败标记（运行期产物，勿提交）
+.iconv-install-failed
+.clang-format-install-failed
+node_modules/
