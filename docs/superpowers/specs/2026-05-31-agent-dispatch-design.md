@@ -1,105 +1,105 @@
-# agent-dispatch — Plugin Design Spec
+# agent-dispatch — 插件设计文档
 
-## Overview
+## 概述
 
-Claude Code plugin that forces the main agent to delegate work to subagents, protecting the main agent's context window. Replaces the legacy `subagent_enforce` / `subagent_prompt` global hooks with a clean, maintainable, configurable plugin.
+Claude Code 插件，强制主 agent 将工作委派给子代理（subagent），保护主 agent 的上下文窗口。用干净、可维护、可配置的插件架构替代原有的 `subagent_enforce` / `subagent_prompt` 全局钩子。
 
-## Problem
+## 问题
 
-- Manually telling Claude Code "use subagent" every time is tedious
-- The existing enforce hook works but has been through many add/remove iterations and is unmaintainable
-- Without enforcement, the main agent consumes context on work that subagents could handle
+- 每次手动告诉 Claude Code "请用 subagent" 很繁琐
+- 现有 enforce 钩子经过反复增删改，代码已无法维护
+- 不做强制约束时，主 agent 会在本可交给子代理的工作上消耗上下文
 
-## Core Principle
+## 核心原则
 
-**Whitelist-based enforcement**: only explicitly allowed tools/commands can be used by the main agent. Everything else is blocked with a delegation hint. Subagent calls (those carrying `agent_id`) are unconditionally exempt.
+**白名单制**：只有明确放行的工具/命令允许主 agent 直接使用，其余一律 block 并提示委派。子代理调用（携带 `agent_id`）无条件豁免。
 
-## Plugin Structure
+## 插件结构
 
 ```
 plugins/agent-dispatch/
 ├── README.md
 ├── commands/
-│   └── agent-dispatch-setup.md      # optional setup skill
+│   └── agent-dispatch-setup.md      # 可选的 setup skill
 ├── hooks/
-│   ├── hooks.json                   # hook registration
+│   ├── hooks.json                   # 钩子注册
 │   └── js/
 │       ├── lib/
 │       │   ├── utils.js             # readStdinJson / output / log
-│       │   ├── rules.js             # rule matching engine
-│       │   └── config.js            # config loading & merging
-│       └── enforcer.js              # PreToolUse — main enforcement hook
+│       │   ├── rules.js             # 规则匹配引擎
+│       │   └── config.js            # 配置加载与合并
+│       └── enforcer.js              # PreToolUse — 主执行钩子
 ├── defaults/
-│   └── dispatch-rules.json          # built-in default rules
+│   └── dispatch-rules.json          # 内置默认规则
 └── docs/
     └── MANUAL_INSTALL.md
 ```
 
-## Modules
+## 模块
 
-| Module | Hook | Matcher | Default | Purpose |
-|--------|------|---------|---------|---------|
-| Enforcer | PreToolUse | `Bash\|PowerShell\|Write\|Edit\|MultiEdit\|NotebookEdit\|WebFetch\|WebSearch\|mcp__.*` | ON | Whitelist-based tool blocking, forces delegation |
-| Prompt Inject | UserPromptSubmit | — | OFF | Injects fixed "you are a dispatcher" instruction |
+| 模块 | 钩子 | Matcher | 默认状态 | 职责 |
+|------|------|---------|----------|------|
+| Enforcer | PreToolUse | `Bash\|PowerShell\|Write\|Edit\|MultiEdit\|NotebookEdit\|WebFetch\|WebSearch\|mcp__.*` | 开启 | 白名单制工具拦截，强制委派 |
+| Prompt Inject | UserPromptSubmit | — | 关闭 | 注入固定的"你是调度器"指令 |
 
-Plugin works out of the box with zero configuration. The setup skill is only for users who want to customize rules.
+插件安装即生效，零配置。Setup skill 仅供需要自定义规则的用户使用。
 
-## Enforcer Decision Flow
+## Enforcer 决策流程
 
 ```
-stdin JSON → parse tool_name, tool_input, agent_id
+stdin JSON → 解析 tool_name, tool_input, agent_id
 
-1. agent_id present?          → ALLOW (subagent exempt)
-2. tool in whitelist?         → ALLOW
-3. tool matches MCP prefix?   → ALLOW
-4. tool is Bash/PowerShell?   → analyze command:
-   a. command substitution?   → BLOCK
-   b. split by && || ; |, check each segment:
-      - git readonly?         → ALLOW
-      - git safe write?       → check not dangerous → ALLOW
-      - safe shell head?      → ALLOW
-      - else                  → BLOCK
-5. else                       → BLOCK
+1. agent_id 存在？              → 放行（子代理豁免）
+2. tool 在白名单中？            → 放行
+3. tool 匹配 MCP 前缀白名单？   → 放行
+4. tool 是 Bash/PowerShell？    → 分析命令内容：
+   a. 含命令替换？              → 拦截
+   b. 按 && || ; | 拆分，逐段检查：
+      - git 只读命令？          → 放行
+      - git 安全写命令？        → 检查非危险操作 → 放行
+      - 安全 shell 命令头？     → 放行
+      - 其他                    → 拦截
+5. 其他                         → 拦截
 ```
 
-## Block Message Format
+## Block 消息格式
 
 ```
 ⚠ BLOCKED [toolName]. Delegate via Agent tool.
 Agent({ description: "...", prompt: "..." })
 ```
 
-Two lines. Consumed by the AI, not the user.
+两行。由 AI 消费，非面向用户。
 
-## Tool Classification
+## 工具分类
 
-### Whitelisted Tools (main agent may use directly)
+### 白名单工具（主 agent 可直接使用）
 
-| Category | Tools | Rationale |
-|----------|-------|-----------|
-| Coordination | Agent, SendMessage, TaskCreate/Update/List/Get/Output/Stop, AskUserQuestion, Skill, Workflow | Main agent's primary job |
-| Mode switching | EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree | Session control |
-| Scheduling | CronCreate, CronDelete, CronList, ScheduleWakeup | Lightweight meta-ops |
-| Lightweight read | Read, Grep, Glob, LSP | Needed for informed dispatch decisions |
-| Small edits | Edit, Write, MultiEdit, NotebookEdit | Single-file trivial changes |
-| Web queries | WebFetch, WebSearch | Results consumed by main agent directly |
+| 分类 | 工具 | 理由 |
+|------|------|------|
+| 调度协调 | Agent, SendMessage, TaskCreate/Update/List/Get/Output/Stop, AskUserQuestion, Skill, Workflow | 主 agent 的本职工作 |
+| 模式切换 | EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree | 会话控制 |
+| 定时调度 | CronCreate, CronDelete, CronList, ScheduleWakeup | 轻量元操作 |
+| 轻量读取 | Read, Grep, Glob, LSP | 主 agent 需要读取信息以做出调度决策 |
+| 小幅编辑 | Edit, Write, MultiEdit, NotebookEdit | 单文件小改动不值得起子代理 |
+| 网页查询 | WebFetch, WebSearch | 结果需主 agent 直接消费 |
 
-### Whitelisted MCP Prefixes
+### MCP 前缀白名单
 
-| Prefix | Rationale |
-|--------|-----------|
-| `mcp__plugin_context-mode_` | Sandbox executor, saves context by design |
-| `mcp__plugin_claude-mem_` | Memory retrieval, layered (index → detail) |
-| `mcp__sequential-thinking` | Thinking chain, short output |
+| 前缀 | 理由 |
+|------|------|
+| `mcp__plugin_context-mode_` | 沙盒执行器，本身就是节省上下文的设计 |
+| `mcp__plugin_claude-mem_` | 记忆检索，已分层（index → 取详情） |
+| `mcp__sequential-thinking` | 思考链，输出短 |
 
-### Blocked (everything else)
+### 拦截（其余所有）
 
-- Heavy MCP tools (context7, microsoft-learn, deepwiki, tavily, serena, exa, etc.)
-- Unknown tools not in whitelist
+- 重型 MCP 工具（context7, microsoft-learn, deepwiki, tavily, serena, exa 等）
+- 不在白名单中的未知工具
 
-### Bash Command Analysis
+### Bash 命令分析
 
-**Safe shell heads** (allowed):
+**安全 shell 命令头**（放行）：
 ```
 ls, pwd, cd, mkdir, rm, mv, cp, touch,
 cat, echo, which, where,
@@ -107,7 +107,7 @@ fd, rg, grep, jq, delta, gh, tsc, pyright, pdftotext,
 head, tail, wc, sort, uniq
 ```
 
-**Git readonly** (allowed):
+**Git 只读命令**（放行）：
 ```
 status, diff, log, show, blame, branch,
 rev-parse, rev-list, ls-files, ls-tree,
@@ -115,7 +115,7 @@ describe, reflog, remote -v/show, config --get/--list,
 stash list/show, tag -l/--list
 ```
 
-**Git safe write** (allowed, unless dangerous):
+**Git 安全写命令**（放行，除非为危险操作）：
 ```
 add, commit, push, pull, fetch, tag,
 switch, checkout, restore, stash,
@@ -123,7 +123,7 @@ merge, rebase, reset, cherry-pick, revert,
 rm, mv, clean, worktree, notes
 ```
 
-**Git dangerous patterns** (blocked):
+**Git 危险模式**（拦截）：
 ```
 push --force / push -f
 reset --hard
@@ -133,25 +133,25 @@ checkout -- .
 restore -- .
 ```
 
-**Command substitution** (`$(...)` or backticks): always blocked.
+**命令替换**（`$(...)` 或反引号）：始终拦截。
 
-**Pipeline/chain segments**: split by `&&`, `||`, `;`, `|` — every segment must independently pass.
+**管道/链式命令段**：按 `&&`、`||`、`;`、`|` 拆分——每一段必须独立通过检查。
 
-## Configuration
+## 配置
 
-### Loading Priority
+### 加载优先级
 
 ```
-Built-in defaults (defaults/dispatch-rules.json)
-       ↓ merge override
-Project-level .agent-dispatch.json (optional, project root)
+插件内置默认 (defaults/dispatch-rules.json)
+       ↓ 合并覆盖
+项目级 .agent-dispatch.json（可选，位于项目根目录）
 ```
 
-No config file needed — built-in defaults work out of the box.
+无需配置文件——内置默认即可直接使用。
 
-### Override Format (.agent-dispatch.json)
+### 覆盖格式 (.agent-dispatch.json)
 
-Users only write incremental overrides. Unspecified fields keep defaults.
+用户只需写增量覆盖，未指定的字段保持默认值。
 
 ```json
 {
@@ -169,7 +169,7 @@ Users only write incremental overrides. Unspecified fields keep defaults.
 }
 ```
 
-### Config Merging Logic
+### 配置合并逻辑
 
 ```
 final_tools      = (default_tools + tools_add) - tools_remove
@@ -179,26 +179,26 @@ final_bash_heads = (default_bash_heads + bash_heads_add) - bash_heads_remove
 
 ## Setup Skill
 
-`commands/agent-dispatch-setup.md` — interactive configuration helper. NOT required for plugin to work. Use cases:
+`commands/agent-dispatch-setup.md` — 交互式配置助手。插件正常工作**不需要**此 skill。适用场景：
 
-- View current effective rules
-- Toggle enforcer / prompt_inject modules
-- Add/remove whitelist entries
-- Generate `.agent-dispatch.json` in project root
+- 查看当前生效的规则
+- 开关 enforcer / prompt_inject 模块
+- 添加/移除白名单条目
+- 在项目根目录生成 `.agent-dispatch.json`
 
-## Prompt Inject Module (optional, default OFF)
+## Prompt Inject 模块（可选，默认关闭）
 
-When enabled, injects a fixed English instruction at UserPromptSubmit telling the main agent it is a dispatcher. Fixed text, no prompt analysis, minimal token overhead.
+开启后在 UserPromptSubmit 注入一段固定英文指令，告知主 agent 它是调度器。固定文本，不分析用户 prompt，token 开销极小。
 
-## Dependencies
+## 依赖
 
 - Node.js 18+
-- No external packages (pure Node.js stdlib)
-- No dependency on specific subagent_types — works with any Claude Code installation
+- 无外部包（纯 Node.js 标准库）
+- 不依赖特定 subagent_type——适用于任何 Claude Code 安装环境
 
-## Non-Goals
+## 非目标
 
-- No intelligent routing to specific agent types (users' environments vary)
-- No model-tier routing (deferred to future version)
-- No session state tracking
-- No PostToolUse hooks
+- 不做面向特定 agent 类型的智能路由（用户环境各异）
+- 不做模型分级路由（留待未来版本）
+- 不做会话状态跟踪
+- 不做 PostToolUse 钩子
