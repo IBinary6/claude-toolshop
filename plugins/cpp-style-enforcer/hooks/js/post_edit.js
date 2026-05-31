@@ -6,11 +6,12 @@ const { resolveFilePath, shouldHandle } = require('./lib/target');
 const { loadConfig } = require('./lib/config');
 const { repoRoot, isNew } = require('./lib/git');
 const { ensureClangFormatConfig } = require('./lib/ensure_clang_format_config');
+const { ensureProjectConfig } = require('./lib/ensure_project_config');
 const { isCMakeProject } = require('./lib/project');
 const { applyClangFormat } = require('./steps/clang_format');
 const { applyBom } = require('./steps/bom');
 const { applyCopyright } = require('./steps/copyright');
-const { runCpplint, formatViolations, formatSoftViolations, splitViolations } = require('./steps/cpplint');
+const { runCpplint, formatViolations } = require('./steps/cpplint');
 
 function step(name, fn) {
   try {
@@ -42,7 +43,10 @@ async function main() {
   if (checks.clangFormat) {
     const clangIsNew = applyTriple; // full 或 新文件 → 整文件模式；否则老文件改动行模式
     // 走全套（新文件/full）时，项目根缺 .clang-format 则生成 Google 风格，三方共享同一份配置
-    if (applyTriple) step('ensure_clang_format_config', () => ensureClangFormatConfig(root));
+    if (applyTriple) {
+      step('ensure_clang_format_config', () => ensureClangFormatConfig(root));
+      step('ensure_project_config', () => ensureProjectConfig(root));
+    }
     step('clang_format', () => applyClangFormat(filePath, { isNew: clangIsNew, root }));
   }
 
@@ -56,17 +60,12 @@ async function main() {
     step('copyright', () => applyCopyright(filePath, copyrightInfo));
   }
 
-  // 4. cpplint（仅全套文件）→ 硬违规强制修；纯软违规（include_subdir）走建议性提示
+  // 4. cpplint（仅全套文件）→ 一律硬违规，有违规即 block
   if (applyTriple && checks.cpplint) {
     const suppressCopyright = !(copyrightInfo && copyrightInfo.company) || checks.copyright === false;
     const violations = step('cpplint', () => runCpplint(filePath, { root, suppressCopyright })) || [];
     if (violations.length > 0) {
-      const { hard, soft } = splitViolations(violations);
-      if (hard.length > 0) {
-        return blockClaude(formatViolations(hard));
-      }
-      // 仅软违规：建议改用完整目录前缀，但允许按项目习惯保留，由 Claude 判断
-      return blockClaude(formatSoftViolations(soft));
+      return blockClaude(formatViolations(violations));
     }
   }
 
