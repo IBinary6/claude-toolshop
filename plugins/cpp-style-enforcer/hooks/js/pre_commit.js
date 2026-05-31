@@ -8,7 +8,7 @@ const { passSilent, denyTool, diag } = require('./lib/protocol');
 const { loadConfig } = require('./lib/config');
 const { repoRoot, isNew } = require('./lib/git');
 const { shouldHandle } = require('./lib/target');
-const { runCpplint, formatViolations } = require('./steps/cpplint');
+const { runCpplint, formatViolations, splitViolations } = require('./steps/cpplint');
 
 const isWindows = process.platform === 'win32';
 
@@ -77,8 +77,13 @@ async function main() {
     }
   }
 
-  if (allViolations.length > 0) {
-    return denyTool('提交被阻止：暂存的 C++ 文件存在 cpplint 违规。\n' + formatViolations(allViolations));
+  // 软违规（include_subdir / header_guard）建议非强制，不阻止提交（仅 diag）；仅硬违规拦截。
+  const { hard, soft } = splitViolations(allViolations);
+  if (soft.length > 0) {
+    diag(`pre_commit 软违规 ${soft.length} 条（建议非强制，已放行）`);
+  }
+  if (hard.length > 0) {
+    return denyTool('提交被阻止：暂存的 C++ 文件存在 cpplint 违规。\n' + formatViolations(hard));
   }
   return passSilent();
 }

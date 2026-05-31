@@ -9,7 +9,7 @@ const { isCMakeProject } = require('./lib/project');
 const { applyClangFormat } = require('./steps/clang_format');
 const { applyBom } = require('./steps/bom');
 const { applyCopyright } = require('./steps/copyright');
-const { runCpplint, formatViolations } = require('./steps/cpplint');
+const { runCpplint, formatViolations, formatSoftViolations, splitViolations } = require('./steps/cpplint');
 
 function step(name, fn) {
   try {
@@ -53,12 +53,17 @@ async function main() {
     step('copyright', () => applyCopyright(filePath, copyrightInfo));
   }
 
-  // 4. cpplint（仅全套文件）→ 有违规 blockClaude
+  // 4. cpplint（仅全套文件）→ 硬违规强制修；纯软违规（include_subdir）走建议性提示
   if (applyTriple && checks.cpplint) {
     const suppressCopyright = !(copyrightInfo && copyrightInfo.company) || checks.copyright === false;
     const violations = step('cpplint', () => runCpplint(filePath, { root, suppressCopyright })) || [];
     if (violations.length > 0) {
-      return blockClaude(formatViolations(violations));
+      const { hard, soft } = splitViolations(violations);
+      if (hard.length > 0) {
+        return blockClaude(formatViolations(hard));
+      }
+      // 仅软违规：建议改用完整目录前缀，但允许按项目习惯保留，由 Claude 判断
+      return blockClaude(formatSoftViolations(soft));
     }
   }
 
