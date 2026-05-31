@@ -4,7 +4,7 @@ C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude
 
 ## v0.3.0 行为
 
-单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 在临时副本上运行**不损坏源文件**。
+单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 在临时副本上运行**不损坏源文件**。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），依赖（clang-format / iconv-lite）SessionStart 后台自动补齐，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。
 
 ### 工作原理
 
@@ -38,7 +38,7 @@ Schema：
 |---|---|
 | `enabled` | 设 `false` 彻底关闭本项目所有检查（完全 no-op，文件零改动） |
 | `mode` | `incremental`（仅新文件走全套）/ `full`（所有文件走全套） |
-| `checks.clangFormat` | 格式化（含 `#include` 排序） |
+| `checks.clangFormat` | 格式化（新文件整文件全格含 `#include` 排序；老文件仅格改动行、include 不动） |
 | `checks.copyright` | 版权头。`company` 为空 = 不写头，cpplint 同步屏蔽 `legal/copyright` |
 | `checks.cpplint` | cpplint 风格检查（违规拦截编辑 / 阻止提交） |
 | `checks.bom` | 补 UTF-8 BOM（CMake 项目自动跳过） |
@@ -50,32 +50,42 @@ Schema：
 
 | 场景 | 行为 |
 |---|---|
-| 新项目 / `mode:full` | 所有文件全套：clang-format（含 `#include` 排序）+ 版权头 + cpplint + BOM |
-| 老项目新文件（`incremental` 且**未被 git 跟踪**） | 同样全套 |
-| 老项目老文件（`incremental` 且**已被 git 跟踪**） | **只补 BOM**，不格式化 / 不版权 / 不 lint |
+| 新项目 / `mode:full` | 所有文件全套：clang-format（**整文件全格，含 `#include` 排序**）+ 版权头 + cpplint + BOM |
+| 老项目新文件（`incremental` 且**未被 git 跟踪**） | 同样全套（整文件全格） |
+| 老项目老文件（`incremental` 且**已被 git 跟踪**） | **补 BOM + clang-format 仅格改动行**（内联 `SortIncludes:Never`，`#include` 永不被动排序）；**不版权 / 不 lint** |
 
-非 git 仓库下所有文件视为「新」（走全套）。
+非 git 仓库下所有文件视为「新」（走全套，整文件格式化）。
 
 ### 要点
 
+- **clang-format 双模式**：走全套的文件**整文件格式化**（`-style=file -fallback-style=Google`，`#include` 正常排序）；老项目老文件**仅格 git 改动行**（`--lines` + 内联 `SortIncludes:Never`，include 永不被动排序）。
+- **自动生成 `.clang-format`**：走全套且项目根（git 根）缺 `.clang-format`（或 `_clang-format`）时，自动生成一份 `BasedOnStyle: Google`——让 **VS 2017+ / clangd / 本插件**三方读同一份配置，风格一致不打架。**已存在绝不覆盖，非 git 项目不生成**。老文件「不排 include」靠插件调用时内联 `SortIncludes:Never`，**不写进**项目 `.clang-format`，故不影响新文件 / VS 的正常排序。
 - **CMake 项目**（从文件向上找到 `CMakeLists.txt`）一律**不补 BOM**，其余检查照常。
 - **dateFormat** 是当前时间显示格式模板：必须含 `YYYY`+`MM`+`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。
-- **cpplint** 在 `os.tmpdir()` 下的临时副本上运行，**永不写回原文件**，仅产出违规报告（去重后取前 5 条）。
+- **cpplint** 在 `os.tmpdir()` 下的**临时副本**上运行，**永不写回原文件**（进程被超时杀掉也只丢临时文件，源文件零损坏），仅产出违规报告（去重后取前 5 条）。
+  - **软违规**：`build/header_guard` 与 `build/include_subdir` 为建议性提示（非强制 block）——可改用 `#pragma once` / 完整目录前缀，也可按项目习惯保留。其余为硬违规，强制修复。
+  - filter 精简：新架构下走全套文件先 Google 整文件格式化再 lint，format 已对齐 Google，故无需旧的 `include_order` / `indent_namespace` / `comments` filter；仅按需屏蔽 `legal/copyright`。
 - **局部豁免** `#include` 排序：源码用 `// clang-format off` / `// clang-format on` 包住。
+- **协议安全**：全程 `exit 0`，stdout 要么空、要么纯 JSON，绝不崩溃、不阻塞会话。
 - **去交互**：不再弹问选模式，`/cpp-style-setup` 为按需配置工具。
 
 ## 依赖
 
-| 依赖 | 必需 | 用途 |
-|---|---|---|
-| Node.js 18+ | 是 | hook 运行时 |
-| Python 3 | cpplint 需要 | 跑内嵌 `cpplint.py`（缺失则静默跳过 lint） |
-| clang-format | clangFormat 需要 | 格式化（缺失则静默跳过格式化） |
-| `iconv-lite` | GBK 文件需要 | GBK→UTF-8 转码（见下） |
+**前提：用户须自备 Python 3 + Node.js**（插件不代装这两者）。其余依赖在 SessionStart 后台**自动补齐**，全程不阻塞、静默、失败安全降级。
 
-依赖缺失时对应步骤静默降级，不报错、不阻塞。
+| 依赖 | 必需 | 用途 | 自举方式 |
+|---|---|---|---|
+| Node.js 18+ | 是（前提） | hook 运行时 | 用户自备 |
+| Python 3 | 是（前提） | 跑内嵌 `cpplint.py`；clang-format 的 pip 安装与 `python -m clang_format` 调用也靠它 | 用户自备 |
+| cpplint | 内置 | C++ 风格检查 | 内嵌 `cpplint/cpplint.py`，靠 Python 运行，无需安装 |
+| clang-format | 格式化需要 | 格式化 | 缺失时 SessionStart 后台 `pip install clang-format`；检测支持 PATH / `python -m clang_format` / Python Scripts 目录三种调用方式；装不上则静默跳过格式化 |
+| `iconv-lite` | GBK 文件需要 | GBK→UTF-8 转码 | 缺失时 SessionStart 后台 `npm install`；装不上则 GBK 文件跳过 BOM（不转码、不损坏） |
 
-> **GBK 转码说明**：将 GBK 编码的 C/C++ 文件转为带 BOM 的 UTF-8 依赖 `iconv-lite`（已在 `package.json` 声明为 dependency）。若运行环境**缺失 `iconv-lite`**，GBK 文件会被判为 `unknown` 并**跳过 BOM 处理**——文件不被转码、也**不被损坏**，其余非 GBK 文件不受影响。
+- **自举在 SessionStart 后台 detached 进程做**：不阻塞、不占 timeout、静默；安装失败写标记不重复重试。
+- **编辑期只检测不安装**：PostToolUse 流水线只检测可用性，不在编辑时同步安装（避免阻塞编辑）。
+- 任一依赖缺失（含安装失败）→ 对应步骤静默降级，不报错、不阻塞。
+
+> **GBK 转码说明**：将 GBK 编码的 C/C++ 文件转为带 BOM 的 UTF-8 依赖 `iconv-lite`（已在 `package.json` 声明为 dependency，并由 SessionStart 后台自动安装兜底）。若 `iconv-lite` 最终仍缺失，GBK 文件会被判为 `unknown` 并**跳过 BOM 处理**——文件不被转码、也**不被损坏**，其余非 GBK 文件不受影响。
 
 ## 命令
 
