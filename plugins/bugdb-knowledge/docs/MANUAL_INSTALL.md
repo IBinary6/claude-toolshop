@@ -34,6 +34,7 @@ node --version     # >= 18
 | `commands/bugsearch.md` | `~/.claude/commands/bugsearch.md` |
 | `commands/bugdb-setup.md` | `~/.claude/commands/bugdb-setup.md` |
 | `hooks/js/bugdb_check/bugdb_check.js` | `~/.claude/hooks/js/bugdb_check/bugdb_check.js` |
+| `hooks/js/bugdb_check/bugdb_python_check.js` | `~/.claude/hooks/js/bugdb_check/bugdb_python_check.js` |
 | `skills/bugdb-lookup/SKILL.md` | `~/.claude/skills/bugdb-lookup/SKILL.md` |
 | `skills/bugdb-record/SKILL.md` | `~/.claude/skills/bugdb-record/SKILL.md` |
 
@@ -61,6 +62,7 @@ cp "$REPO"/commands/bugdb-setup.md ~/.claude/commands/
 # Hook
 mkdir -p ~/.claude/hooks/js/bugdb_check
 cp "$REPO"/hooks/js/bugdb_check/bugdb_check.js ~/.claude/hooks/js/bugdb_check/
+cp "$REPO"/hooks/js/bugdb_check/bugdb_python_check.js ~/.claude/hooks/js/bugdb_check/
 
 # Skills
 mkdir -p ~/.claude/skills/bugdb-lookup
@@ -81,9 +83,26 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
   "hooks": [
     {
       "type": "command",
-      "command": "node -e \"H=require('os').homedir();const p=require('path');const{execSync}=require('child_process');const m=require(p.join(H,'.claude','hooks','js','bugdb_check','bugdb_check.js'));m({toolName:'Bash',toolInput:process.env.CLAUDE_TOOL_INPUT||'',toolResult:{stdout:process.env.CLAUDE_TOOL_STDOUT||'',stderr:process.env.CLAUDE_TOOL_STDERR||''}})\"",
-      "timeout": 5000,
-      "async": true
+      "command": "node \"$HOME/.claude/hooks/js/bugdb_check/bugdb_check.js\"",
+      "timeout": 5000
+    }
+  ]
+}
+```
+
+> **说明**：`bugdb_check.js` 是自执行脚本（`main()` 自调用），Claude Code 通过 **stdin 传入 JSON**（含 `tool_response.stdout/stderr`），脚本读 stdin、命中错误模式后向 stdout 写 `hookSpecificOutput.additionalContext`。不要把它当函数 `require(...)({...})` 调用，也不依赖 `CLAUDE_TOOL_*` 环境变量——那种写法不工作。
+>
+> Windows 用户：若 `$HOME` 在你的 shell 中不展开，请改用展开后的绝对路径，例如 `node "C:\\Users\\<你>\\.claude\\hooks\\js\\bugdb_check\\bugdb_check.js"`。
+
+此外，在 `hooks.SessionStart` 数组中追加以下条目（会话启动时检测 Python 3.11+，缺失/版本不足时给一句温和提示，从不拦截）：
+
+```json
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "node \"$HOME/.claude/hooks/js/bugdb_check/bugdb_python_check.js\"",
+      "timeout": 5000
     }
   ]
 }
@@ -126,6 +145,9 @@ python -c "import json; json.load(open('$HOME/.claude/settings.json', encoding='
 
 依次执行以下命令，全部成功则安装完毕。
 
+> **关于 `bugdb` 命令**：下面用 `bugdb <子命令>` 的地方，**仅在你执行过上面（可选的）`pip install -e` 后才可用**。若未 pip install，请把 `bugdb` 替换为
+> `python "$HOME/.claude/plugins/bugdb-knowledge/bugdb/cli.py"`，例如 `python "$HOME/.claude/plugins/bugdb-knowledge/bugdb/cli.py" stats`。
+
 ```bash
 # 1. CLI 状态检查
 bugdb stats
@@ -143,24 +165,23 @@ bugdb add \
 # 3. 搜索验证
 bugdb search --query "LNK2001 __imp_WSAStartup" --language c++
 
-# 4. Hook 加载检查
-node -e "
-  const f = require(require('os').homedir() + '/.claude/hooks/js/bugdb_check/bugdb_check.js');
-  console.log(typeof f === 'function' ? 'OK: hook loaded' : 'FAIL: not a function');
-"
+# 4. Hook 冒烟测试（stdin 传 JSON，验证脚本能跑通并命中）
+echo '{"tool_response":{"stdout":"","stderr":"error LNK2001: unresolved external symbol __imp_WSAStartup"}}' \
+  | node ~/.claude/hooks/js/bugdb_check/bugdb_check.js
 ```
 
 预期输出：
 - 步骤 1：显示数据库统计信息（首次安装记录数为 0）
 - 步骤 2：成功录入并返回记录 ID
 - 步骤 3：搜索命中刚录入的记录
-- 步骤 4：输出 `OK: hook loaded`
+- 步骤 4：输出一段含 `[BUGDB_MATCH]` 的 JSON（命中步骤 2 录入的记录）；若知识库为空或未命中则**无输出且退出码 0**（hook 静默是正常行为）
 
 ---
 
 ## 六、卸载
 
 ```bash
+# 仅当之前执行过 pip install -e 时才需要
 pip uninstall bugdb
 rm -rf ~/.claude/plugins/bugdb-knowledge
 rm -f  ~/.claude/commands/bugfix.md
