@@ -35,7 +35,10 @@ async function main() {
   log(`[agent-dispatch] BLOCKED: ${toolName}`);
   output({
     decision: 'block',
-    reason: `⚠ BLOCKED [${toolName}]. Delegate via Agent tool.\nAgent({ description: "...", prompt: "..." })`,
+    reason:
+      `⚠ BLOCKED: Main agent may NOT call [${toolName}] directly.\n` +
+      `You MUST use the Agent tool to delegate this to a subagent.\n` +
+      `Example: Agent({ description: "run ${toolName} task", prompt: "..." })`,
   });
   process.exit(0);
 }
