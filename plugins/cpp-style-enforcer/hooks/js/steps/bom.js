@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const { detectEncoding, BOM } = require('../lib/bom_util.js');
+const { requireIconv } = require('../lib/ensure_deps.js');
 
 /**
  * 补 UTF-8 BOM / GBK 转码加 BOM。内容无变化不写。
@@ -28,7 +29,8 @@ function applyBom(filePath, options = {}) {
 
   if (enc === 'gbk') {
     try {
-      const iconv = require('iconv-lite');
+      const iconv = requireIconv();            // 双保险解析 ROOT→DATA
+      if (!iconv) return false;                // iconv 缺失 → 跳过，不崩
       const text = iconv.decode(buf, 'gbk');
       const out = Buffer.concat([BOM, Buffer.from(text, 'utf-8')]);
       fs.writeFileSync(filePath, out);

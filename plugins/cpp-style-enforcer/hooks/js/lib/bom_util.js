@@ -1,5 +1,7 @@
 'use strict';
 
+const { requireIconv } = require('./ensure_deps.js');
+
 const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);          // UTF-8 BOM
 const UTF16LE_BOM = Buffer.from([0xFF, 0xFE]);         // UTF-16 LE BOM
 const UTF16BE_BOM = Buffer.from([0xFE, 0xFF]);         // UTF-16 BE BOM
@@ -41,9 +43,9 @@ function detectEncoding(buf) {
        (buf[0] === UTF16BE_BOM[0] && buf[1] === UTF16BE_BOM[1]))) return 'utf-16';
   if (isValidUtf8(buf)) return 'utf-8';
   try {
-    const iconv = require('iconv-lite');
+    const iconv = requireIconv();              // 双保险解析 ROOT→DATA，缺失返回 null
     // gbk 为兜底分类：iconv 对多数字节都能解码，不保证精确
-    if (iconv.decode(buf, 'gbk').length > 0) return 'gbk';
+    if (iconv && iconv.decode(buf, 'gbk').length > 0) return 'gbk';
   } catch (_) {}
   return 'unknown';
 }

@@ -5,12 +5,27 @@ const path = require('path');
 const { spawnSync, spawn } = require('child_process');
 
 const isWindows = process.platform === 'win32';
-// 插件根：hooks/js/lib → hooks/js → hooks → 插件根
-const PLUGIN_ROOT = path.join(__dirname, '..', '..', '..');
+// 插件根：hooks/js/lib → hooks/js → hooks → 插件根。
+// 优先用 hook 运行时注入的 CLAUDE_PLUGIN_ROOT；缺失（如直接 node 跑测试）回退到相对 __dirname。
+const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..', '..', '..');
 
-/** 插件目录下的标记文件绝对路径（用于“安装已失败、勿重试”） */
+/**
+ * 持久数据目录（~/.claude/plugins/data/{id}/）。由 hook 运行时注入 CLAUDE_PLUGIN_DATA。
+ * 缺失（直接 node 跑测试 / 老版本宿主）→ null，调用方据此降级。
+ */
+function pluginDataDir() {
+  const d = process.env.CLAUDE_PLUGIN_DATA;
+  return d ? d : null;
+}
+
+/**
+ * 标记文件绝对路径（用于“安装已失败、勿重试”）。
+ * 安装目标在 PLUGIN_DATA，失败标记也应随之落 PLUGIN_DATA（持久、可写）；
+ * PLUGIN_DATA 缺失时回退插件根，保持旧行为不崩。
+ */
 function markerPath(name) {
-  return path.join(PLUGIN_ROOT, name);
+  const dataDir = pluginDataDir();
+  return path.join(dataDir || PLUGIN_ROOT, name);
 }
 
 /** 安全检测：标记文件是否存在 */
@@ -23,13 +38,23 @@ function writeMarker(p) {
   try { if (p) fs.writeFileSync(p, '1'); } catch (_) {}
 }
 
-/** 默认：在插件根安装 package.json 声明的 npm 依赖（含 iconv-lite） */
+/**
+ * 安装 iconv-lite 到持久数据目录 PLUGIN_DATA（而非插件根）。
+ * 原因：marketplace bundle 通道会剥离打包的 node_modules，且插件目录每次更新整体替换、
+ * 只读场景不可写；PLUGIN_DATA 持久且可写。PLUGIN_DATA 缺失 → 跳过安装返回 false（别崩）。
+ * 用 `npm install <pkg> --prefix <dataDir>`，依赖名硬编码与 package.json 一致。
+ */
 function npmInstall() {
+  const dataDir = pluginDataDir();
+  if (!dataDir) return false; // 无持久目录 → 不安装（降级，不崩）
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+  } catch (_) {}
   try {
     const r = spawnSync(
       isWindows ? 'npm.cmd' : 'npm',
-      ['install', '--no-audit', '--no-fund', '--prefix', PLUGIN_ROOT],
-      { cwd: PLUGIN_ROOT, stdio: 'ignore', timeout: 60000, windowsHide: isWindows }
+      ['install', 'iconv-lite@^0.6.3', '--no-audit', '--no-fund', '--no-save', '--prefix', dataDir],
+      { cwd: dataDir, stdio: 'ignore', timeout: 60000, windowsHide: isWindows }
     );
     return !r.error && r.status === 0;
   } catch (_) {
@@ -121,22 +146,64 @@ function detectClangFormat(opts) {
 }
 
 /**
- * 按需自举 iconv-lite。已装直接返回模块；缺失且未尝试过 → 安装一次；
+ * 按双保险顺序解析一个模块的入口绝对路径，找不到返回 null。
+ * 顺序：(a) ${CLAUDE_PLUGIN_ROOT}/node_modules/<name>（打包的，本地/git 源装即用）
+ *      (b) ${CLAUDE_PLUGIN_DATA}/node_modules/<name>（兜底，SessionStart 装的）
+ * 用 require.resolve(paths) 让 Node 在指定目录树里解析。全程不抛。
+ * @param {string} name 模块名
+ * @returns {string|null} 解析到的入口路径
+ */
+function resolveModulePath(name) {
+  const roots = [];
+  if (PLUGIN_ROOT) roots.push(PLUGIN_ROOT);
+  const dataDir = pluginDataDir();
+  if (dataDir) roots.push(dataDir);
+  for (const r of roots) {
+    try {
+      return require.resolve(name, { paths: [r] });
+    } catch (_) {}
+  }
+  return null;
+}
+
+let _iconvCache; // undefined=未解析；null=确认不可用；object=模块
+/**
+ * 解析 iconv-lite 模块（双保险 ROOT→DATA），只解析不安装，结果缓存。
+ * 供频繁调用的 bom_util 使用——轻量、不触发任何子进程。找不到返回 null（GBK 降级）。
+ * @returns {object|null}
+ */
+function requireIconv() {
+  if (_iconvCache !== undefined) return _iconvCache;
+  const p = resolveModulePath('iconv-lite');
+  let mod = null;
+  if (p) {
+    try { mod = require(p); } catch (_) { mod = null; }
+  }
+  _iconvCache = mod;
+  return mod;
+}
+
+/**
+ * 按需自举 iconv-lite。已装直接返回模块；缺失且未尝试过 → 安装一次（装到 PLUGIN_DATA）；
  * 仍失败 → 写失败标记并返回 null（降级：GBK 跳过）。全程不抛。
  *
+ * 解析采用双保险：缺省模块名走 requireIconv（ROOT→DATA）；注入 moduleName 时按该名解析（测试用）。
+ *
  * @param {object} [opts]
- * @param {string} [opts.moduleName='iconv-lite'] 注入测试用
- * @param {string} [opts.marker] 失败标记路径，缺省插件根 .iconv-install-failed
- * @param {function():boolean} [opts.install] 注入安装函数，缺省 npmInstall
+ * @param {string} [opts.moduleName] 注入测试用；缺省走 requireIconv 双保险解析
+ * @param {string} [opts.marker] 失败标记路径，缺省 PLUGIN_DATA(或插件根) .iconv-install-failed
+ * @param {function():boolean} [opts.install] 注入安装函数，缺省 npmInstall（装到 PLUGIN_DATA）
  * @returns {object|null}
  */
 function ensureIconvLite(opts) {
   const o = opts || {};
-  const moduleName = o.moduleName || 'iconv-lite';
   const marker = o.marker || markerPath('.iconv-install-failed');
   const install = o.install || npmInstall;
 
-  const tryRequire = () => { try { return require(moduleName); } catch (_) { return null; } };
+  // 注入了 moduleName → 按该名解析（测试用，可模拟“缺失”）；否则走双保险路径解析。
+  const tryRequire = o.moduleName
+    ? () => { try { return require(o.moduleName); } catch (_) { return null; } }
+    : () => requireIconv();
 
   const found = tryRequire();
   if (found) return found;                 // 已装 → 不触发安装
@@ -145,6 +212,8 @@ function ensureIconvLite(opts) {
   let ok = false;
   try { ok = !!install(); } catch (_) { ok = false; }
   if (ok) {
+    // 安装后清缓存重解析（PLUGIN_DATA 刚装上的）
+    _iconvCache = undefined;
     const after = tryRequire();
     if (after) return after;
   }
@@ -209,6 +278,7 @@ module.exports = {
   markerPath,
   spawnPrewarm,
   detectClangFormat,
+  requireIconv,
 };
 
 // CLI: 后台预热入口。仅做安装/检测，绝不输出。
