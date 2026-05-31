@@ -15,9 +15,9 @@ assert.strictEqual(tpl.copyrightInfo.company, '', 'company 缺省空串');
 assert.strictEqual(tpl.copyrightInfo.author, '', 'author 缺省空串');
 assert.strictEqual(tpl.copyrightInfo.dateFormat, 'YYYY/MM/DD HH:mm', 'dateFormat 缺省值');
 
-// plugin.json 版本必须为 0.3.1
+// plugin.json 版本必须为 0.3.2
 const pj = JSON.parse(fs.readFileSync(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf-8'));
-assert.strictEqual(pj.version, '0.3.1', '版本应升到 0.3.1');
+assert.strictEqual(pj.version, '0.3.2', '版本应升到 0.3.2');
 
 // 目录骨架存在
 for (const d of ['hooks/js/lib', 'hooks/js/steps', 'hooks/js/__tests__']) {

@@ -1,6 +1,6 @@
 {
   "name": "cpp-style-enforcer",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Claude Code 插件：C++ 代码风格强制（Google C++ Style）。新项目全量 / 老项目仅新文件走 clang-format+copyright+cpplint，老文件只补 UTF-8 BOM；新老判定基于 git 是否跟踪。",
   "license": "MIT",
   "dependencies": {
