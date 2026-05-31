@@ -1,0 +1,61 @@
+{
+  "modules": {
+    "enforcer": true,
+    "prompt_inject": false
+  },
+  "whitelist": {
+    "tools": [
+      "Agent", "SendMessage",
+      "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput", "TaskStop",
+      "AskUserQuestion",
+      "EnterPlanMode", "ExitPlanMode",
+      "EnterWorktree", "ExitWorktree",
+      "Skill", "Workflow",
+      "CronCreate", "CronDelete", "CronList", "ScheduleWakeup",
+      "Read", "Grep", "Glob", "LSP",
+      "Edit", "Write", "MultiEdit", "NotebookEdit",
+      "WebFetch", "WebSearch"
+    ],
+    "mcp_prefixes": [
+      "mcp__plugin_context-mode_",
+      "mcp__plugin_claude-mem_",
+      "mcp__sequential-thinking"
+    ],
+    "bash_safe_heads": [
+      "ls", "pwd", "cd", "mkdir", "rm", "mv", "cp", "touch",
+      "cat", "echo", "which", "where",
+      "fd", "rg", "grep", "jq", "delta", "gh", "tsc", "pyright", "pdftotext",
+      "head", "tail", "wc", "sort", "uniq"
+    ],
+    "git_readonly": [
+      ["status"], ["diff"], ["log"], ["show"], ["blame"], ["branch"],
+      ["rev-parse"], ["rev-list"], ["ls-files"], ["ls-tree"],
+      ["describe"], ["reflog"],
+      ["remote", "-v"], ["remote", "show"],
+      ["config", "--get"], ["config", "--list"],
+      ["stash", "list"], ["stash", "show"],
+      ["tag", "-l"], ["tag", "--list"]
+    ],
+    "git_safe_write": [
+      "add", "commit", "push", "pull", "fetch", "tag",
+      "switch", "checkout", "restore", "stash",
+      "merge", "rebase", "reset", "cherry-pick", "revert",
+      "rm", "mv", "clean", "worktree", "notes"
+    ],
+    "git_dangerous_patterns": [
+      "push.*--force", "push.*-f\\b",
+      "reset.*--hard",
+      "branch.*-D\\b",
+      "clean.*-f[dx]",
+      "checkout.*--\\s+\\.",
+      "restore.*--\\s+\\."
+    ]
+  },
+  "overrides": {
+    "tools_add": [],
+    "tools_remove": [],
+    "mcp_prefixes_add": [],
+    "bash_heads_add": [],
+    "bash_heads_remove": []
+  }
+}
