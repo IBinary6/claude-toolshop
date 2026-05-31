@@ -120,6 +120,9 @@ function runCpplint(filePath, options = {}) {
     violations = [];
   } finally {
     try { fs.unlinkSync(tmpFile); } catch (_) {}
+    // 删完临时副本后尝试清理空的 <projHash> 目录，避免在 %TEMP% 无界累积。
+    // rmdirSync 仅当目录已空才成功；非空（并发其它副本）/权限失败均安全忽略。
+    try { fs.rmdirSync(tmpDir); } catch (_) {}
   }
   return violations;
 }
