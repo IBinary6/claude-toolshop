@@ -22,6 +22,7 @@
     {
       "name": "cpp-style-enforcer",
       "source": "./plugins/cpp-style-enforcer",
+      "version": "0.3.0",
       "description": "C++ 代码风格强制（Google C++ Style + 现代 C++ 规范）：新项目全量 / 老项目仅新文件走三件套，旧文件只补 BOM。检查项可独立开关，版权信息可配置可缺省，用户模板一次配置新项目自动继承。"
     }
   ]
