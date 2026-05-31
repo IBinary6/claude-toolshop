@@ -1,5 +1,7 @@
 # bugdb-knowledge — 本地知识库插件
 
+> 版本 v0.1.3
+
 基于 SQLite + FTS5 全文检索的 Claude Code 插件，为开发过程提供**持久化经验积累**。
 
 不仅记录 Bug 修复方案，还支持最佳实践、工具使用技巧、架构决策、工作流程等通用知识条目。所有数据存储在本地，无需外部服务。
@@ -253,6 +255,8 @@ Step 3: 验证
 ## CLI 完整用法
 
 所有外部调用方（Hook/Skill/Command）统一通过 CLI 入口。可通过 `bugdb <子命令>` 或 `python cli.py <子命令>` 调用。
+
+> `bugdb` 控制台命令**仅在 `pip install` 本包后存在**（见“开发与测试”里的 `pip install -e .`）。默认安装流程不要求 pip install——此时请用 `python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" <子命令>`（手动安装则替换为实际插件路径）。下文为简洁统一写作 `bugdb`。
 
 默认输出 JSON，`--format text` 切换为人类可读格式。
 
@@ -557,7 +561,8 @@ plugins/bugdb-knowledge/
 ├── hooks/
 │   ├── hooks.json           # Hook 注册（PostToolUse:Bash）
 │   └── js/bugdb_check/
-│       └── bugdb_check.js   # 错误检测 + 自动查库
+│       ├── bugdb_check.js   # 错误检测 + 自动查库（PostToolUse:Bash）
+│       └── bugdb_python_check.js  # Python 3.11+ 检测引导（SessionStart）
 ├── skills/
 │   ├── bugdb-lookup/
 │   │   └── SKILL.md         # 查询知识库 Skill
