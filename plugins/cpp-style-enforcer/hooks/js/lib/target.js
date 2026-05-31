@@ -18,22 +18,24 @@ const SKIPPED_FILES = new Set(['resource.h', 'targetver.h', 'stdafx.h', 'pch.h']
 /**
  * 从 hook stdin JSON 提取被编辑的文件路径（Write/Edit/MultiEdit/NotebookEdit/MCP）。
  * 不处理 Bash command（PostToolUse 已去掉 Bash matcher）。
+ * 始终返回绝对路径：相对路径以 input.cwd（hook 协议提供，正常 Claude Code 传绝对 file_path）
+ * 为基准解析，避免相对路径被原样漏过导致 repoRoot/配置查找/.clang-format 生成全错位。
  * @param {object} input
  * @returns {string|null}
  */
 function resolveFilePath(input) {
   if (!input || typeof input !== 'object') return null;
+  const cwd = input.cwd || process.cwd();
+  const toAbs = (p) => (path.isAbsolute(p) ? p : path.resolve(cwd, p));
   const t = input.tool_input;
   if (t && typeof t === 'object') {
     const direct = t.file_path || t.path || null;
-    if (direct) return direct;
-    if (t.relative_path) {
-      const cwd = input.cwd || process.cwd();
-      return path.resolve(cwd, t.relative_path);
-    }
+    if (direct) return toAbs(direct);
+    if (t.relative_path) return path.resolve(cwd, t.relative_path);
   }
-  if (typeof t === 'string') return t;
-  return input.file_path || input.path || null;
+  if (typeof t === 'string') return toAbs(t);
+  const fallback = input.file_path || input.path || null;
+  return fallback ? toAbs(fallback) : null;
 }
 
 /**

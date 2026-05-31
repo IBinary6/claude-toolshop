@@ -46,4 +46,31 @@ assert.strictEqual(
 assert.strictEqual(
   resolveFilePath({ tool_input: {} }), null, 'tool_input 缺失字段返回 null');
 
+// 修复3：resolveFilePath 始终返回绝对路径
+// 相对 file_path + input.cwd → 以 cwd 为基准绝对化（不再原样漏过相对值）
+assert.strictEqual(
+  resolveFilePath({ cwd: '/proj', tool_input: { file_path: 'src/a.cpp' } }),
+  path.resolve('/proj', 'src/a.cpp'),
+  '相对 file_path 以 cwd 绝对化');
+// 相对 path 同理
+assert.strictEqual(
+  resolveFilePath({ cwd: '/proj', tool_input: { path: 'src/b.cc' } }),
+  path.resolve('/proj', 'src/b.cc'),
+  '相对 path 以 cwd 绝对化');
+// 绝对 file_path → 原样返回
+assert.strictEqual(
+  resolveFilePath({ cwd: '/elsewhere', tool_input: { file_path: '/abs/a.cpp' } }),
+  '/abs/a.cpp',
+  '绝对 file_path 原样（cwd 不影响）');
+// 顶层相对 fallback 也绝对化
+assert.strictEqual(
+  resolveFilePath({ cwd: '/proj', file_path: 'rel.cpp' }),
+  path.resolve('/proj', 'rel.cpp'),
+  '顶层相对 file_path 以 cwd 绝对化');
+// relative_path 分支不变
+assert.strictEqual(
+  resolveFilePath({ cwd: '/proj', tool_input: { relative_path: 'src/c.cc' } }),
+  path.resolve('/proj', 'src/c.cc'),
+  'relative_path 分支不变');
+
 console.log('target.test.js PASS');
