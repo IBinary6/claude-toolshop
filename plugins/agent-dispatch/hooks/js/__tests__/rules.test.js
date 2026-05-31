@@ -1,0 +1,117 @@
+'use strict';
+const assert = require('assert').strict;
+const path = require('path');
+
+const {
+  isWhitelistedTool,
+  isWhitelistedMcp,
+  hasCommandSubstitution,
+  tokenize,
+  splitSegments,
+  isDangerousGit,
+  isReadonlyGit,
+  isSafeGitWrite,
+  classifySegment,
+  isSafeBashCommand,
+} = require('../lib/rules');
+
+const { loadDefaults } = require('../lib/config');
+const config = loadDefaults();
+
+// --- isWhitelistedTool ---
+assert.equal(isWhitelistedTool('Agent', config), true);
+assert.equal(isWhitelistedTool('Read', config), true);
+assert.equal(isWhitelistedTool('Grep', config), true);
+assert.equal(isWhitelistedTool('Edit', config), true);
+assert.equal(isWhitelistedTool('Write', config), true);
+assert.equal(isWhitelistedTool('Bash', config), false);
+assert.equal(isWhitelistedTool('UnknownTool', config), false);
+assert.equal(isWhitelistedTool('mcp__context7__query', config), false);
+
+// --- isWhitelistedMcp ---
+assert.equal(isWhitelistedMcp('mcp__plugin_context-mode_ctx_execute', config), true);
+assert.equal(isWhitelistedMcp('mcp__plugin_claude-mem_search', config), true);
+assert.equal(isWhitelistedMcp('mcp__sequential-thinking_think', config), true);
+assert.equal(isWhitelistedMcp('mcp__context7__query-docs', config), false);
+assert.equal(isWhitelistedMcp('mcp__tavily-cross-platform__search', config), false);
+assert.equal(isWhitelistedMcp('mcp__deepwiki__fetch', config), false);
+
+// --- hasCommandSubstitution ---
+assert.equal(hasCommandSubstitution('echo hello'), false);
+assert.equal(hasCommandSubstitution('echo $(whoami)'), true);
+assert.equal(hasCommandSubstitution('echo `whoami`'), true);
+assert.equal(hasCommandSubstitution('git status'), false);
+
+// --- tokenize ---
+assert.deepEqual(tokenize('git status'), ['git', 'status']);
+assert.deepEqual(tokenize('echo "hello world"'), ['echo', '"hello world"']);
+assert.deepEqual(tokenize("echo 'single quotes'"), ['echo', "'single quotes'"]);
+assert.deepEqual(tokenize(''), []);
+assert.deepEqual(tokenize(null), []);
+assert.deepEqual(tokenize(undefined), []);
+
+// --- splitSegments ---
+assert.deepEqual(splitSegments(['git', 'status', '&&', 'echo', 'done']), [['git', 'status'], ['echo', 'done']]);
+assert.deepEqual(splitSegments(['ls', '|', 'grep', 'foo']), [['ls'], ['grep', 'foo']]);
+assert.deepEqual(splitSegments(['echo', 'hi']), [['echo', 'hi']]);
+assert.deepEqual(splitSegments(['cmd1', '||', 'cmd2', ';', 'cmd3']), [['cmd1'], ['cmd2'], ['cmd3']]);
+
+// --- isDangerousGit ---
+assert.equal(isDangerousGit(['push', '--force'], config), true);
+assert.equal(isDangerousGit(['push', '-f'], config), true);
+assert.equal(isDangerousGit(['reset', '--hard'], config), true);
+assert.equal(isDangerousGit(['branch', '-D', 'feature'], config), true);
+assert.equal(isDangerousGit(['clean', '-fdx'], config), true);
+assert.equal(isDangerousGit(['checkout', '--', '.'], config), true);
+assert.equal(isDangerousGit(['restore', '--', '.'], config), true);
+assert.equal(isDangerousGit(['push', 'origin', 'main'], config), false);
+assert.equal(isDangerousGit(['commit', '-m', 'msg'], config), false);
+assert.equal(isDangerousGit(['reset', '--soft', 'HEAD~1'], config), false);
+
+// --- isReadonlyGit ---
+assert.equal(isReadonlyGit(['status'], config), true);
+assert.equal(isReadonlyGit(['diff'], config), true);
+assert.equal(isReadonlyGit(['log'], config), true);
+assert.equal(isReadonlyGit(['remote', '-v'], config), true);
+assert.equal(isReadonlyGit(['config', '--get'], config), true);
+assert.equal(isReadonlyGit(['stash', 'list'], config), true);
+assert.equal(isReadonlyGit(['commit'], config), false);
+assert.equal(isReadonlyGit(['push'], config), false);
+
+// --- isSafeGitWrite ---
+assert.equal(isSafeGitWrite(['add', '.'], config), true);
+assert.equal(isSafeGitWrite(['commit', '-m', 'test'], config), true);
+assert.equal(isSafeGitWrite(['push', 'origin', 'main'], config), true);
+assert.equal(isSafeGitWrite(['merge', 'feature'], config), true);
+assert.equal(isSafeGitWrite([], config), false);
+assert.equal(isSafeGitWrite(['unknown-subcmd'], config), false);
+
+// --- classifySegment ---
+assert.equal(classifySegment(['ls', '-la'], config), 'safe');
+assert.equal(classifySegment(['fd', '--type', 'f'], config), 'safe');
+assert.equal(classifySegment(['git', 'status'], config), 'safe');
+assert.equal(classifySegment(['git', 'commit', '-m', 'msg'], config), 'safe');
+assert.equal(classifySegment(['git', 'push', '--force'], config), 'unsafe');
+assert.equal(classifySegment(['git'], config), 'unsafe');
+assert.equal(classifySegment(['npm', 'test'], config), 'unsafe');
+assert.equal(classifySegment(['python', 'script.py'], config), 'unsafe');
+assert.equal(classifySegment(['echo', 'hi', '>', 'file.txt'], config), 'safe');
+assert.equal(classifySegment([], config), 'empty');
+
+// --- isSafeBashCommand ---
+assert.equal(isSafeBashCommand('ls -la', config), true);
+assert.equal(isSafeBashCommand('git status', config), true);
+assert.equal(isSafeBashCommand('git log --oneline', config), true);
+assert.equal(isSafeBashCommand('fd -t f . && rg pattern', config), true);
+assert.equal(isSafeBashCommand('git add . && git commit -m "test"', config), true);
+assert.equal(isSafeBashCommand('ls | grep foo | wc -l', config), true);
+assert.equal(isSafeBashCommand('git push --force', config), false);
+assert.equal(isSafeBashCommand('npm test', config), false);
+assert.equal(isSafeBashCommand('echo $(whoami)', config), false);
+assert.equal(isSafeBashCommand('python script.py', config), false);
+assert.equal(isSafeBashCommand('safe && npm run build', config), false);
+assert.equal(isSafeBashCommand('', config), false);
+assert.equal(isSafeBashCommand(null, config), false);
+assert.equal(isSafeBashCommand(undefined, config), false);
+
+console.log('✓ rules.test.js — all assertions passed');
