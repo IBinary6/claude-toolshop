@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = {
   enabled: true,
   mode: 'incremental',
   checks: { clangFormat: true, copyright: true, cpplint: true, bom: true },
+  legacyChecks: { clangFormat: false, copyright: false, cpplint: false, bom: true },
   copyrightInfo: { company: '', author: '', dateFormat: 'YYYY/MM/DD HH:mm' },
 };
 
@@ -59,7 +60,7 @@ function findProjectConfig(filePath) {
   return null;
 }
 
-/** 规范化：字段级合并 base ⊕ override，checks 各项缺失默认 true */
+/** 规范化：字段级合并 base ⊕ override，checks/legacyChecks 各项缺失默认见注释 */
 function normalize(base, override) {
   const merged = { ...DEFAULT_CONFIG, ...base, ...override };
   const checksIn = { ...DEFAULT_CONFIG.checks, ...(base && base.checks), ...(override && override.checks) };
@@ -68,6 +69,14 @@ function normalize(base, override) {
     copyright: checksIn.copyright !== false,
     cpplint: checksIn.cpplint !== false,
     bom: checksIn.bom !== false,
+  };
+  // legacyChecks: 老文件（git 已追踪）的每项开关；默认只跑 bom，其余关闭
+  const legacyIn = { ...DEFAULT_CONFIG.legacyChecks, ...(base && base.legacyChecks), ...(override && override.legacyChecks) };
+  const legacyChecks = {
+    clangFormat: legacyIn.clangFormat === true,
+    copyright: legacyIn.copyright === true,
+    cpplint: legacyIn.cpplint === true,
+    bom: legacyIn.bom !== false,
   };
   const copyrightInfo = {
     ...DEFAULT_CONFIG.copyrightInfo,
@@ -78,6 +87,7 @@ function normalize(base, override) {
     enabled: merged.enabled !== false,
     mode: merged.mode === 'full' ? 'full' : 'incremental',
     checks,
+    legacyChecks,
     copyrightInfo,
   };
 }

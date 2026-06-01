@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { stripBom, restoreBom } = require('../lib/bom_util.js');
 
 const DEFAULT_DATE_FORMAT = 'YYYY/MM/DD HH:mm';
@@ -52,9 +53,10 @@ function buildDateRegex(fmt) {
  * 同日去重：已有今日 Date 行则整次跳过。更新已有头归正错位 BOM。
  * @param {string} filePath
  * @param {{company:string, author:string, dateFormat:string}} copyrightInfo
+ * @param {string|null} [root] git 仓库根，用于生成相对路径行；null 则跳过第四行
  * @returns {boolean} 是否改写了文件
  */
-function applyCopyright(filePath, copyrightInfo) {
+function applyCopyright(filePath, copyrightInfo, root) {
   const { company, author } = copyrightInfo || {};
   if (!company) return false;
 
@@ -77,10 +79,14 @@ function applyCopyright(filePath, copyrightInfo) {
     if (sameDay) return false; // 同天只写一次
   }
 
+  // 第四行：相对路径（正斜杠，跨平台一致）
+  const relPath = root ? path.relative(root, filePath).replace(/\\/g, '/') : null;
+
   const header = [
-    `${MARK_COPYRIGHT} (c) ${now.getFullYear()} ${company}`,
+    `${MARK_COPYRIGHT} ${now.getFullYear()} ${company}`,
     ...(author ? [`${MARK_AUTHOR} ${author}`] : []),
     `${MARK_DATE} ${dateStr}`,
+    ...(relPath ? [`// ${relPath}`] : []),
     '',
   ].join('\n') + '\n';
 
