@@ -134,7 +134,7 @@ function ensureCrg(opts) {
  */
 function ensureGraphify(opts) {
   return ensureCli(
-    { cmd: 'graphify', pkg: 'graphifyy', marker: '.graphify-install-failed' },
+    { cmd: 'graphify', pkg: 'graphifyy[all]', marker: '.graphify-install-failed' },
     opts
   );
 }
