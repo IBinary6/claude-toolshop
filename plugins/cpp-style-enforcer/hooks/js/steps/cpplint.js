@@ -31,13 +31,22 @@ function parseCpplintOutput(out) {
 }
 
 /**
- * 合并 filter：按需 -legal/copyright + 调用方额外项，去重后拼成单个逗号分隔的 --filter 值
+ * 始终禁用的 cpplint 检查项（与全局版 cpplint 保持一致）。
+ * - whitespace/indent_namespace: Google Style 不缩进 namespace 内容，
+ *   但 clang-format 仅格式化变更行，旧代码可能仍有缩进；
+ *   抑制此检查避免用户添加 NOLINT 注释后行超 80 字符的连锁冲突。
+ */
+const DEFAULT_FILTERS = ['-whitespace/indent_namespace'];
+
+/**
+ * 合并 filter：默认禁用项 + 按需 -legal/copyright + 调用方额外项，
+ * 去重后拼成单个逗号分隔的 --filter 值
  * （cpplint 只接受一个 --filter）。无任何 filter 项时返回 null，由调用方决定不传 --filter。
  * @param {{suppressCopyright?:boolean, extraFilters?:string[]}} options
  * @returns {string|null}
  */
 function buildFilterArg(options = {}) {
-  const filters = [];
+  const filters = [...DEFAULT_FILTERS];
   if (options.suppressCopyright) filters.push('-legal/copyright');
   if (Array.isArray(options.extraFilters)) filters.push(...options.extraFilters);
   const uniq = [];

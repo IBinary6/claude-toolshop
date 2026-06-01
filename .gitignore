@@ -65,3 +65,4 @@ logs/
 # Claude Code
 .claude/sessions/
 .claude/todos/
+.claude-cpp-style
