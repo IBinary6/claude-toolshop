@@ -174,14 +174,14 @@ function assertBlock(result, toolName) {
   assert.equal((r.stdout || '').trim(), '', 'enforcer disabled should pass through');
 }
 
-// --- block message format validation ---
+// --- block message format validation (中文短版) ---
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' } });
   const parsed = JSON.parse(r.stdout);
-  assert.ok(parsed.reason.includes('SYSTEM INSTRUCTION'), 'block should use system instruction framing');
-  assert.ok(parsed.reason.includes('ABSOLUTE PROHIBITIONS'), 'block should include prohibition list');
-  assert.ok(parsed.reason.includes('Agent('), 'block should include Agent template');
-  assert.ok(parsed.reason.includes('Subagents have FULL tool access'), 'block should encourage delegation');
+  assert.ok(parsed.reason.includes('🈲BLOCKED'), 'block 消息应包含 🈲BLOCKED 标识');
+  assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
+  assert.ok(parsed.reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
+  assert.ok(parsed.reason.split('\n').length <= 3, 'block 消息应不超过 3 行（精简版）');
 }
 
 console.log('✓ enforcer.integration.test.js — all assertions passed');
