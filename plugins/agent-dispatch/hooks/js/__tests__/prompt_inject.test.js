@@ -89,6 +89,13 @@ function runInject({ hasMarker = false, promptInjectEnabled = true, overrideCwd 
   assert.ok(lines.length <= 8, `注入消息应不超过 8 行，实际 ${lines.length} 行`);
 }
 
+// --- 注入消息含防缓存失效规则：子代理改文件须回传路径 ---
+{
+  const r = runInject({ hasMarker: true });
+  assert.ok(/被改文件|修改文件|文件路径/.test(r.stdout) && /重读|缓存/.test(r.stdout),
+    '注入消息应要求子代理回传被改文件路径、主 agent 重读以保持缓存一致');
+}
+
 // --- prompt_inject 关闭时 → 不注入 ---
 {
   // 需要让 hook 的 cwd 指向含 .agent-dispatch.json 的目录，config 才会生效

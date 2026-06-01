@@ -15,7 +15,7 @@ const MARKER_FILE = path.join(os.tmpdir(), '.agent-dispatch-blocked');
  * 不硬编码任何具体 MCP 插件名，适用于所有被拦截的工具
  */
 function buildBlockMessage(toolName) {
-  return `🈲BLOCKED:主 agent禁止直接调用[${toolName}]。请使用 Agent tool派遣子代理执行此操作。\n示例:Agent({ description:"...", prompt:"..."})`;
+  return `🈲BLOCKED:主 agent禁止直接调用[${toolName}]，请派遣子代理执行。\n若子代理会修改文件，必须在返回报告中列出所有被改文件的路径，供主 agent 重读以保持缓存一致。\n示例:Agent({ description:"...", prompt:"...改完后列出所有被修改的文件路径" })`;
 }
 
 /**

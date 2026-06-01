@@ -182,6 +182,9 @@ function assertBlock(result, toolName) {
   assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
   assert.ok(parsed.reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
   assert.ok(parsed.reason.split('\n').length <= 3, 'block 消息应不超过 3 行（精简版）');
+  // 防缓存失效：必须提示子代理改文件后回传被改文件路径，主 agent 才能重读保持一致
+  assert.ok(/被改文件|修改.*文件.*路径|文件.*路径/.test(parsed.reason),
+    'block 消息应提示子代理回传被修改的文件路径（防主 agent 缓存失效）');
 }
 
 console.log('✓ enforcer.integration.test.js — all assertions passed');
