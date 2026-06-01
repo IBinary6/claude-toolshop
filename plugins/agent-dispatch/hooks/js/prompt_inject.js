@@ -3,7 +3,7 @@
 
 /**
  * ABOUTME: UserPromptSubmit Hook — 延迟激活 dispatcher 角色指令
- * ABOUTME: 仅在会话中首次 block 发生后才注入（通过标记文件判断）
+ * ABOUTME: 仅在上次 block 后的下一条 prompt 注入一次，注入后立即删标记
  * ABOUTME: 由 config.modules.prompt_inject 控制总开关
  */
 
@@ -32,17 +32,16 @@ function main() {
   if (!config.modules.prompt_inject) return;
   if (!isRecentlyBlocked()) return;
 
+  // 一次性触发：注入后立即删标记，避免后续每条 prompt 都注入
+  try { fs.unlinkSync(MARKER_FILE); } catch {}
+
   const message = [
     '## Agent Dispatch Policy [ACTIVE — previously blocked]',
     '',
-    'You are the ORCHESTRATOR. Your context window is protected.',
-    '',
-    'DELEGATION RULES:',
-    '1. Heavy work (builds, tests, research, multi-step shell) → Agent({ description, prompt })',
-    '2. You may directly: read files, small edits, coordinate, search memory/knowledge',
-    '3. When a tool is BLOCKED, your ONLY valid response is spawning a subagent',
-    '4. NEVER use alternative tools to work around a block — delegate the original task',
-    '5. NEVER say "let me try another approach" to avoid delegation',
+    '你是 ORCHESTRATOR。委派规则：',
+    '1. 重型工作（构建、测试、研究、多步 shell）→ Agent({ description, prompt })',
+    '2. 可直接执行：读文件、小编辑、协调、查记忆/知识库',
+    '3. 工具被拦截时唯一正确响应是派遣子代理，不要换工具绕过',
   ].join('\n');
 
   console.log(message);

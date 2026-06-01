@@ -11,30 +11,11 @@ const { isWhitelistedTool, isWhitelistedMcp, isSafeBashCommand, isMcpBlocked } =
 const MARKER_FILE = path.join(os.tmpdir(), '.agent-dispatch-blocked');
 
 /**
- * 构建通用强力 block 消息（系统指令语气）
+ * 构建通用 block 消息（中文短版，系统指令语气）
  * 不硬编码任何具体 MCP 插件名，适用于所有被拦截的工具
  */
 function buildBlockMessage(toolName) {
-  return [
-    `[SYSTEM INSTRUCTION — MANDATORY COMPLIANCE]`,
-    ``,
-    `BLOCKED: Tool [${toolName}] is PROHIBITED for the main agent.`,
-    ``,
-    `REQUIRED ACTION: You MUST immediately spawn a subagent. The subagent has full tool access.`,
-    ``,
-    `Agent({`,
-    `  description: "<one-line summary of the task>",`,
-    `  prompt: "<detailed instructions for the subagent>"`,
-    `})`,
-    ``,
-    `ABSOLUTE PROHIBITIONS:`,
-    `• Do NOT use any alternative tool to achieve the same effect indirectly`,
-    `• Do NOT say "let me try a different approach" to avoid delegation`,
-    `• Do NOT split the blocked action into smaller whitelisted tool calls`,
-    `• Do NOT attempt this tool again — it will be blocked every time`,
-    ``,
-    `Subagents have FULL tool access. Delegate and move on.`,
-  ].join('\n');
+  return `🈲BLOCKED:主 agent禁止直接调用[${toolName}]。请使用 Agent tool派遣子代理执行此操作。\n示例:Agent({ description:"...", prompt:"..."})`;
 }
 
 /**

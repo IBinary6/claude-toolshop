@@ -7,7 +7,7 @@
 | Hook 时机 | 脚本 | 作用 |
 |---|---|---|
 | PreToolUse | `hooks/js/enforcer.js` | 白名单检查：非白名单工具 block，提示用 Agent tool 委派 |
-| UserPromptSubmit | `hooks/js/prompt_inject.js` | 可选：注入 dispatcher 角色指令（默认**关闭**） |
+| UserPromptSubmit | `hooks/js/prompt_inject.js` | 可选：被 block 后的下一条 prompt 注入一次 dispatcher 角色指令（默认**开启**） |
 
 ### 决策流程
 
@@ -127,7 +127,7 @@ final_bash_heads = (默认 + bash_heads_add) - bash_heads_remove
 | 模块 | 默认 | 作用 |
 |------|------|------|
 | enforcer | **开启** | PreToolUse 白名单拦截 |
-| prompt_inject | 关闭 | UserPromptSubmit 注入 dispatcher 指令 |
+| prompt_inject | **开启** | UserPromptSubmit 注入 dispatcher 指令（被 block 后下一条 prompt 注入一次） |
 
 在 `.agent-dispatch.json` 中设置 `modules.enforcer: false` 可临时关闭拦截。
 
