@@ -35,6 +35,17 @@
             "async": true
           }
         ]
+      },
+      {
+        "matcher": "EnterWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_worktree/crg_worktree.js\"",
+            "timeout": 10,
+            "async": true
+          }
+        ]
       }
     ],
     "PreToolUse": [

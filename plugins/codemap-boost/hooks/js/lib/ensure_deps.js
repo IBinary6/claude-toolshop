@@ -122,7 +122,7 @@ function ensureCli(args, opts) {
  */
 function ensureCrg(opts) {
   return ensureCli(
-    { cmd: 'code-review-graph', pkg: 'code-review-graph', marker: '.crg-install-failed' },
+    { cmd: 'code-review-graph', pkg: 'code-review-graph[all]', marker: '.crg-install-failed' },
     opts
   );
 }

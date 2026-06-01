@@ -17,14 +17,17 @@ if (!commandExists('code-review-graph')) {
 }
 
 // 通过 additionalContext 强制提示 Claude: 代码符号/调用/引用查找必须用 CRG, 不用 Grep
+// 附加 Token 优化规则, 确保使用 minimal 模式
 // 仅注入上下文, 不带 permissionDecision -> Grep 仍被放行
 const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'MUST use mcp__code-review-graph__semantic_search_nodes_tool / query_graph_tool ' +
-      'for symbol, function, class, call, and reference lookups — NOT Grep. ' +
+      'MUST use mcp__code-review-graph tools for symbol, function, class, call, and reference lookups — NOT Grep. ' +
       'Grep is only for plain-text/string/comment search. ' +
+      'TOKEN RULES: Always call get_minimal_context_tool FIRST (~100 tokens). ' +
+      'Always pass detail_level="minimal" unless you specifically need full output. ' +
+      'Max 3 CRG calls per task. ' +
       'CRG is indexed and authoritative for code structure.'
   }
 };

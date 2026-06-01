@@ -39,7 +39,19 @@ Node.js 安装通常需要管理员权限（winget / brew / apt），**不替用
 
 明确告诉用户：装完后需要**重开终端 / Claude Code** 让 PATH 刷新，然后重跑 `/codemap-boost-setup`。停下，**不要继续往后跑**（Node 缺失后续步骤无意义）。
 
-### Step 3: 检测 code-review-graph CLI（pip 包，可自动装）
+### Step 3: 选择安装级别
+
+**必须用 AskUserQuestion 工具询问用户**：
+
+code-review-graph 提供三种安装级别：
+
+- 选项 A：**完整安装（推荐）** `pip install "code-review-graph[all]"` — 含语义嵌入、社区检测、所有分析功能（约 500MB）
+- 选项 B：**嵌入增强** `pip install "code-review-graph[embeddings]"` — 仅含语义搜索能力（约 300MB）
+- 选项 C：**核心功能** `pip install code-review-graph` — 最小安装，FTS5 关键词搜索、无语义搜索（约 50MB）
+
+记住用户的选择，在后续 Step 4 中使用对应的 pip 包名进行安装。
+
+### Step 4: 检测 code-review-graph CLI（pip 包，可自动装）
 
 执行：
 
@@ -47,12 +59,12 @@ Node.js 安装通常需要管理员权限（winget / brew / apt），**不替用
 code-review-graph --version
 ```
 
-- **存在** → 继续 Step 4
+- **存在** → 继续 Step 5
 - **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 先确认 Python/pip 可用（`python -m pip --version`，失败则 `python3 -m pip --version`），然后执行 `python -m pip install code-review-graph`（用实际可用的解释器）。装完复跑 `code-review-graph --version` 验证；成功继续 Step 4，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install code-review-graph`，告知装完重开 Claude Code，停下。
+  - 选项 A：「帮我装」→ 先确认 Python/pip 可用（`python -m pip --version`，失败则 `python3 -m pip --version`），然后根据 Step 3 用户选择执行对应的安装命令（如 `python -m pip install "code-review-graph[all]"`）。装完复跑 `code-review-graph --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己装」→ 打印 Step 3 选择对应的安装命令，告知装完重开 Claude Code，停下。
 
-### Step 4: 检测 graphify CLI（pip 包，可自动装）
+### Step 5: 检测 graphify CLI（pip 包，可自动装）
 
 执行：
 
@@ -60,38 +72,40 @@ code-review-graph --version
 graphify --version
 ```
 
-- **存在** → 继续 Step 5
+- **存在** → 继续 Step 6
 - **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 执行 `python -m pip install graphifyy`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 3 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
+  - 选项 A：「帮我装」→ 执行 `python -m pip install graphifyy`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 4 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 6，失败报告 stderr 并停下。
   - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install graphifyy`，告知装完重开 Claude Code，停下。
 
-### Step 5: 验证 hook 文件可被 Node 解析
+### Step 6: 验证 hook 文件可被 Node 解析
 
-执行（依次校验五个 hook 文件能被 node 解析；不实际运行业务逻辑）：
+执行（依次校验所有 hook 文件能被 node 解析；不实际运行业务逻辑）：
 
 ```bash
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/claudemd_inject/claudemd_inject.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_update/crg_update.js"
+node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_worktree/crg_worktree.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/graphify_build/graphify_build.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
 ```
 
 任一失败 → 报告 stderr 并停止（说明插件文件损坏，需要重装）。
-全部通过 → 继续 Step 6。
+全部通过 → 继续 Step 7。
 
-### Step 6: 汇报结果
+### Step 7: 汇报结果
 
-简短输出（不超过 8 行）。根据前面步骤检测/安装结果，**显式列出**前置依赖状态：
+简短输出（不超过 10 行）。根据前面步骤检测/安装结果，**显式列出**前置依赖状态：
 
 ```
 codemap-boost-setup 完成：
   ✓ Node.js <版本>
-  ✓ code-review-graph CLI<（本次自动安装）>
+  ✓ code-review-graph CLI <版本><（本次自动安装，级别：[all]/[embeddings]/core）>
   ✓ graphify CLI<（本次自动安装）>
-  ✓ hook 文件 node --check 通过
+  ✓ hook 文件 node --check 通过（含 EnterWorktree 钩子）
 
 CLAUDE.md 触发规则由 SessionStart hook 自动维护，无需手动配置。
+Token 优化规则已内置，CRG 工具默认使用 minimal 模式。
 后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
 ```
 
