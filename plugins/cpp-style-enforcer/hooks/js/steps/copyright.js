@@ -47,35 +47,63 @@ function buildDateRegex(fmt) {
 
 /**
  * 解析文件顶部的版权头块，提取各语义行和正文起始位置。
- * 只识别 Copyright/Author/Date/文件名行；遇到无关行即停扫描。
- * @param {string[]} lines
- * @returns {{ copyright, author, date, relPathLine, bodyStart }}
+ *
+ * 头块定义为文件顶部第一个连续注释区（允许行首空白、跳过最顶空行）。
+ * 区内识别 Copyright/Author/Date/文件名 四类语义行：
+ *   - 各类仅取首次出现，重复出现的语义行丢弃（根除版权头重复追加）；
+ *   - 语义行之间夹的空行视为头内分隔，不保留也不中断扫描；
+ *   - 紧邻语义行的非语义注释行收入 extraComments 原样保留；
+ *   - 空行之后再出现的注释视为正文文档注释，头块到此结束。
+ * 若连续注释区内无任何语义行，判定文件无版权头，全部归还正文（bodyStart=0）。
+ *
+ * @param {string[]} lines 已按行分割（行尾 \r 已剥离）的文本行
+ * @returns {{copyright, author, date, relPathLine, bodyStart, extraComments:string[]}}
  */
 function parseHeaderBlock(lines) {
   let copyright = null, author = null, date = null, relPathLine = null;
-  let lastHdrIdx = -1;
+  const extraComments = [];
+  let sawSemantic = false;
+  let pendingBlank = 0;
 
-  for (let i = 0; i < Math.min(lines.length, 12); i++) {
-    const l = lines[i];
-    if (l.startsWith(MARK_COPYRIGHT)) { copyright = l; lastHdrIdx = i; }
-    else if (l.startsWith(MARK_AUTHOR)) { author = l; lastHdrIdx = i; }
-    else if (l.startsWith(MARK_DATE)) { date = l; lastHdrIdx = i; }
-    else if (FILENAME_LINE.test(l)) { relPathLine = l; lastHdrIdx = i; }
-    else if (lastHdrIdx >= 0) break; // 非版权语义行且头块已开始 → 停止
+  let i = 0;
+  while (i < lines.length && lines[i].replace(/^\s+/, '') === '') i++; // 跳过最顶空行
+
+  for (; i < lines.length; i++) {
+    const l = lines[i].replace(/^\s+/, ''); // 容忍行首空白
+    if (l === '') { pendingBlank++; continue; }
+    if (!l.startsWith('//')) break; // 代码行 → 头块结束
+
+    const isSemantic =
+      l.startsWith(MARK_COPYRIGHT) || l.startsWith(MARK_AUTHOR) ||
+      l.startsWith(MARK_DATE) || FILENAME_LINE.test(l);
+
+    if (!isSemantic) {
+      if (pendingBlank > 0) break; // 空行后的注释 → 正文文档注释，头块结束（不消费此行）
+      extraComments.push(lines[i]); // 紧邻语义行的注释 → 头内夹注释，原样保留
+      continue;
+    }
+
+    // 语义行：清空待定空行（头内分隔不保留），各类仅取首次
+    pendingBlank = 0;
+    sawSemantic = true;
+    if (l.startsWith(MARK_COPYRIGHT)) { if (!copyright) copyright = l; }
+    else if (l.startsWith(MARK_AUTHOR)) { if (!author) author = l; }
+    else if (l.startsWith(MARK_DATE)) { if (!date) date = l; }
+    else if (!relPathLine) relPathLine = l;
   }
 
-  // 头块后紧随的空行为分隔符，一并纳入，不计入正文
-  const hasSeparator = lastHdrIdx >= 0 && lines[lastHdrIdx + 1] === '';
-  const bodyStart = lastHdrIdx < 0 ? 0 : (hasSeparator ? lastHdrIdx + 2 : lastHdrIdx + 1);
-
-  return { copyright, author, date, relPathLine, bodyStart };
+  if (!sawSemantic) {
+    return { copyright: null, author: null, date: null, relPathLine: null, bodyStart: 0, extraComments: [] };
+  }
+  // i 指向头块结束位置（代码行 / 空行后的注释行 / 文件末尾）；其后行均为正文
+  return { copyright, author, date, relPathLine, bodyStart: i, extraComments };
 }
 
 /**
  * 字段级幂等版权头写入，最小化 git 变动：
  *   - Copyright / Author / 文件路径行：已有则保留原文，缺失才补充
  *   - Date：缺失则写入；已有今日日期则跳过；已有但非今日则更新
- * 全部字段均已是最新时直接返回 false，不写盘。
+ *   - 重复语义行去重、头内夹注释保留，重建后与原文全等则不写盘。
  *
  * @param {string} filePath
  * @param {{company:string, author:string, dateFormat:string}} copyrightInfo
@@ -90,7 +118,8 @@ function applyCopyright(filePath, copyrightInfo, root) {
   try { raw = fs.readFileSync(filePath); } catch (_) { return false; }
   const { hadBom, body } = stripBom(raw);
   const origText = body.toString('utf-8');
-  const lines = origText.split('\n');
+  const eol = origText.includes('\r\n') ? '\r\n' : '\n'; // 保持原行尾风格
+  const lines = origText.split(/\r?\n/); // 剥离行尾 \r，统一按内容比对
 
   const fmt = validateDateFormat(copyrightInfo.dateFormat);
   const now = new Date();
@@ -99,7 +128,7 @@ function applyCopyright(filePath, copyrightInfo, root) {
   const relPathTarget = relPath ? `// ${relPath}` : null;
 
   const { copyright: existCopy, author: existAuthor, date: existDate,
-    relPathLine: existRelPath, bodyStart } = parseHeaderBlock(lines);
+    relPathLine: existRelPath, bodyStart, extraComments } = parseHeaderBlock(lines);
 
   // 计算 Date 是否为今日
   let dateIsToday = false;
@@ -110,14 +139,6 @@ function applyCopyright(filePath, copyrightInfo, root) {
       m.groups.M === String(now.getMonth() + 1).padStart(2, '0') &&
       m.groups.D === String(now.getDate()).padStart(2, '0'));
   }
-
-  // 快速退出：全部字段已就绪，无需任何改动
-  const allReady =
-    existCopy &&
-    (!author || existAuthor) &&
-    existDate && dateIsToday &&
-    (!relPathTarget || existRelPath);
-  if (allReady) return false;
 
   // 计算各字段最终值（已有 → 保留；缺失 → 用新值；Date 非今日 → 更新）
   const copyLine = existCopy || `${MARK_COPYRIGHT} ${now.getFullYear()} ${company}`;
@@ -132,11 +153,13 @@ function applyCopyright(filePath, copyrightInfo, root) {
     ...(relLine ? [relLine] : []),
   ];
 
+  // 头内夹注释（extraComments）保留在头部之后、正文之前
   const bodyLines = lines.slice(bodyStart);
-  const newLines = [...newHdrLines, '', ...bodyLines];
+  const newLines = [...newHdrLines, ...extraComments, '', ...bodyLines];
 
-  // 尾部多余空行规范化：保留原文尾部状态
-  const newText = newLines.join('\n');
+  // 始终重建后与原文比对：规范且就绪 → 全等不写盘；含重复/夹注释 → 写盘清理。
+  // 用原行尾风格还原（CRLF 文件不被改成 LF）。
+  const newText = newLines.join(eol);
   if (newText === origText) return false;
 
   try {
@@ -148,4 +171,4 @@ function applyCopyright(filePath, copyrightInfo, root) {
   }
 }
 
-module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex };
+module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex, parseHeaderBlock };
