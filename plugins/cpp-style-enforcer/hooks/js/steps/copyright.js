@@ -10,10 +10,9 @@ const MARK_COPYRIGHT = '// Copyright';
 const MARK_AUTHOR = '// Author';
 const MARK_DATE = '// Date';
 
-/** 文件名行白名单：仅 C/C++ 源码后缀（buildHeader 写入的文件名行后缀必属此集） */
+/** 文件名行白名单：// 开头后跟相对路径（含目录斜线或纯文件名带 C/C++ 后缀） */
 const FILENAME_LINE = /^\/\/ \S+\.(?:c|cc|cpp|cxx|h|hpp|hxx)\s*$/i;
 
-/** dateFormat 必须含 YYYY/MM/DD，否则回退默认 */
 function validateDateFormat(fmt) {
   if (typeof fmt !== 'string') return DEFAULT_DATE_FORMAT;
   if (fmt.includes('YYYY') && fmt.includes('MM') && fmt.includes('DD')) return fmt;
@@ -21,7 +20,6 @@ function validateDateFormat(fmt) {
   return DEFAULT_DATE_FORMAT;
 }
 
-/** 按 dateFormat 格式化日期；一次性正则交替替换，单遍命中，MM 与 mm 不互相误伤 */
 function formatDate(fmt, d) {
   const tokens = {
     YYYY: String(d.getFullYear()),
@@ -33,7 +31,6 @@ function formatDate(fmt, d) {
   return fmt.replace(/YYYY|MM|DD|HH|mm/g, (m) => tokens[m]);
 }
 
-/** 由 dateFormat 动态生成解析正则（YYYY→(?<Y>\d{4}) 等），其余字符转义为字面量 */
 function buildDateRegex(fmt) {
   let re = '';
   let i = 0;
@@ -49,12 +46,41 @@ function buildDateRegex(fmt) {
 }
 
 /**
- * 插入/更新版权头。company 空 → 不写。BOM 感知（头在 BOM 之后）。
- * 同日去重：已有今日 Date 行则整次跳过。更新已有头归正错位 BOM。
+ * 解析文件顶部的版权头块，提取各语义行和正文起始位置。
+ * 只识别 Copyright/Author/Date/文件名行；遇到无关行即停扫描。
+ * @param {string[]} lines
+ * @returns {{ copyright, author, date, relPathLine, bodyStart }}
+ */
+function parseHeaderBlock(lines) {
+  let copyright = null, author = null, date = null, relPathLine = null;
+  let lastHdrIdx = -1;
+
+  for (let i = 0; i < Math.min(lines.length, 12); i++) {
+    const l = lines[i];
+    if (l.startsWith(MARK_COPYRIGHT)) { copyright = l; lastHdrIdx = i; }
+    else if (l.startsWith(MARK_AUTHOR)) { author = l; lastHdrIdx = i; }
+    else if (l.startsWith(MARK_DATE)) { date = l; lastHdrIdx = i; }
+    else if (FILENAME_LINE.test(l)) { relPathLine = l; lastHdrIdx = i; }
+    else if (lastHdrIdx >= 0) break; // 非版权语义行且头块已开始 → 停止
+  }
+
+  // 头块后紧随的空行为分隔符，一并纳入，不计入正文
+  const hasSeparator = lastHdrIdx >= 0 && lines[lastHdrIdx + 1] === '';
+  const bodyStart = lastHdrIdx < 0 ? 0 : (hasSeparator ? lastHdrIdx + 2 : lastHdrIdx + 1);
+
+  return { copyright, author, date, relPathLine, bodyStart };
+}
+
+/**
+ * 字段级幂等版权头写入，最小化 git 变动：
+ *   - Copyright / Author / 文件路径行：已有则保留原文，缺失才补充
+ *   - Date：缺失则写入；已有今日日期则跳过；已有但非今日则更新
+ * 全部字段均已是最新时直接返回 false，不写盘。
+ *
  * @param {string} filePath
  * @param {{company:string, author:string, dateFormat:string}} copyrightInfo
- * @param {string|null} [root] git 仓库根，用于生成相对路径行；null 则跳过第四行
- * @returns {boolean} 是否改写了文件
+ * @param {string|null} [root] git 仓库根（用于生成文件相对路径行）
+ * @returns {boolean} 是否写盘
  */
 function applyCopyright(filePath, copyrightInfo, root) {
   const { company, author } = copyrightInfo || {};
@@ -63,44 +89,55 @@ function applyCopyright(filePath, copyrightInfo, root) {
   let raw;
   try { raw = fs.readFileSync(filePath); } catch (_) { return false; }
   const { hadBom, body } = stripBom(raw);
-  const text = body.toString('utf-8');
+  const origText = body.toString('utf-8');
+  const lines = origText.split('\n');
 
   const fmt = validateDateFormat(copyrightInfo.dateFormat);
   const now = new Date();
   const dateStr = formatDate(fmt, now);
-
-  // 同日去重：从已有 Date 行提年月日与今天比对
-  const dateRe = buildDateRegex(fmt);
-  const existing = text.match(dateRe);
-  if (existing && existing.groups) {
-    const sameDay = existing.groups.Y === String(now.getFullYear())
-      && existing.groups.M === String(now.getMonth() + 1).padStart(2, '0')
-      && existing.groups.D === String(now.getDate()).padStart(2, '0');
-    if (sameDay) return false; // 同天只写一次
-  }
-
-  // 第四行：相对路径（正斜杠，跨平台一致）
   const relPath = root ? path.relative(root, filePath).replace(/\\/g, '/') : null;
+  const relPathTarget = relPath ? `// ${relPath}` : null;
 
-  const header = [
-    `${MARK_COPYRIGHT} ${now.getFullYear()} ${company}`,
-    ...(author ? [`${MARK_AUTHOR} ${author}`] : []),
-    `${MARK_DATE} ${dateStr}`,
-    ...(relPath ? [`// ${relPath}`] : []),
-    '',
-  ].join('\n') + '\n';
+  const { copyright: existCopy, author: existAuthor, date: existDate,
+    relPathLine: existRelPath, bodyStart } = parseHeaderBlock(lines);
 
-  // 已有版权头（以 // Copyright 开头的连续注释块）→ 替换；否则前置插入
-  const hasHeader = new RegExp('^\\s*' + MARK_COPYRIGHT).test(text);
-  let newText;
-  if (hasHeader) {
-    // 仅剥离版权语义行（Copyright/Author/Date + 紧随 Date 的单个文件名行），
-    // 遇普通注释/空行/代码即停，避免误删与版权块零空行粘连的用户注释
-    newText = header + stripHeaderBlock(text);
-  } else {
-    newText = header + text;
+  // 计算 Date 是否为今日
+  let dateIsToday = false;
+  if (existDate) {
+    const m = existDate.match(buildDateRegex(fmt));
+    dateIsToday = !!(m && m.groups &&
+      m.groups.Y === String(now.getFullYear()) &&
+      m.groups.M === String(now.getMonth() + 1).padStart(2, '0') &&
+      m.groups.D === String(now.getDate()).padStart(2, '0'));
   }
-  if (newText === text) return false;
+
+  // 快速退出：全部字段已就绪，无需任何改动
+  const allReady =
+    existCopy &&
+    (!author || existAuthor) &&
+    existDate && dateIsToday &&
+    (!relPathTarget || existRelPath);
+  if (allReady) return false;
+
+  // 计算各字段最终值（已有 → 保留；缺失 → 用新值；Date 非今日 → 更新）
+  const copyLine = existCopy || `${MARK_COPYRIGHT} ${now.getFullYear()} ${company}`;
+  const authorLine = existAuthor || (author ? `${MARK_AUTHOR} ${author}` : null);
+  const dateLine = (existDate && dateIsToday) ? existDate : `${MARK_DATE} ${dateStr}`;
+  const relLine = relPathTarget || (root ? existRelPath : null);
+
+  const newHdrLines = [
+    copyLine,
+    ...(authorLine ? [authorLine] : []),
+    dateLine,
+    ...(relLine ? [relLine] : []),
+  ];
+
+  const bodyLines = lines.slice(bodyStart);
+  const newLines = [...newHdrLines, '', ...bodyLines];
+
+  // 尾部多余空行规范化：保留原文尾部状态
+  const newText = newLines.join('\n');
+  if (newText === origText) return false;
 
   try {
     fs.writeFileSync(filePath, restoreBom(hadBom, Buffer.from(newText, 'utf-8')));
@@ -109,41 +146,6 @@ function applyCopyright(filePath, copyrightInfo, root) {
     process.stderr.write('[cpp-style-enforcer] 版权头写盘失败，跳过：' + filePath + '\n');
     return false;
   }
-}
-
-/**
- * 剥离文件开头的旧版权语义行块，返回剩余文本。
- * 仅纳入 `// Copyright` / `// Author` / `// Date` 行，以及紧随 Date 行之后
- * 出现的单个文件名行（`// xxx.ext`）；遇到第一个非版权语义行（普通注释、
- * 空行、代码）即停。其后紧随的一个空行（版权头与正文的分隔）一并吃掉。
- * @param {string} text
- * @returns {string}
- */
-function stripHeaderBlock(text) {
-  const lines = text.split('\n');
-  let i = 0;
-  let lastWasDate = false;
-  let fileNameTaken = false;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (line.startsWith(MARK_COPYRIGHT) || line.startsWith(MARK_AUTHOR)) {
-      lastWasDate = false;
-      i += 1;
-    } else if (line.startsWith(MARK_DATE)) {
-      lastWasDate = true;
-      i += 1;
-    } else if (lastWasDate && !fileNameTaken && FILENAME_LINE.test(line)) {
-      // 紧随 Date 之后、仅出现一次的 C/C++ 源码文件名行视作版权头一部分
-      fileNameTaken = true;
-      lastWasDate = false;
-      i += 1;
-    } else {
-      break;
-    }
-  }
-  // 吃掉版权块后紧随的单个空行分隔
-  if (i < lines.length && lines[i] === '') i += 1;
-  return lines.slice(i).join('\n');
 }
 
 module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex };
