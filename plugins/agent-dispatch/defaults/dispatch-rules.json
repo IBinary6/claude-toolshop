@@ -1,7 +1,7 @@
 {
   "modules": {
     "enforcer": true,
-    "prompt_inject": false
+    "prompt_inject": true
   },
   "whitelist": {
     "tools": [
@@ -20,6 +20,11 @@
       "mcp__plugin_context-mode_",
       "mcp__plugin_claude-mem_",
       "mcp__sequential-thinking"
+    ],
+    "mcp_block_exact": [
+      "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute"
     ],
     "bash_safe_heads": [
       "ls", "pwd", "cd", "mkdir", "rm", "mv", "cp", "touch",
@@ -55,6 +60,8 @@
     "tools_add": [],
     "tools_remove": [],
     "mcp_prefixes_add": [],
+    "mcp_block_exact_add": [],
+    "mcp_block_exact_remove": [],
     "bash_heads_add": [],
     "bash_heads_remove": []
   }

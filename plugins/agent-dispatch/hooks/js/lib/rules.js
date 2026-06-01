@@ -10,6 +10,11 @@ function isWhitelistedMcp(toolName, config) {
   return config.whitelist.mcp_prefixes.some((p) => toolName.startsWith(p));
 }
 
+function isMcpBlocked(toolName, config) {
+  const blockList = config.whitelist.mcp_block_exact || [];
+  return blockList.includes(toolName);
+}
+
 function hasCommandSubstitution(command) {
   return /\$\(|`/.test(command);
 }
@@ -77,6 +82,7 @@ function isSafeBashCommand(command, config) {
 module.exports = {
   isWhitelistedTool,
   isWhitelistedMcp,
+  isMcpBlocked,
   hasCommandSubstitution,
   tokenize,
   splitSegments,

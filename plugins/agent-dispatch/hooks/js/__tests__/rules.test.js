@@ -5,6 +5,7 @@ const path = require('path');
 const {
   isWhitelistedTool,
   isWhitelistedMcp,
+  isMcpBlocked,
   hasCommandSubstitution,
   tokenize,
   splitSegments,
@@ -35,6 +36,21 @@ assert.equal(isWhitelistedMcp('mcp__sequential-thinking_think', config), true);
 assert.equal(isWhitelistedMcp('mcp__context7__query-docs', config), false);
 assert.equal(isWhitelistedMcp('mcp__tavily-cross-platform__search', config), false);
 assert.equal(isWhitelistedMcp('mcp__deepwiki__fetch', config), false);
+
+// --- isMcpBlocked (通用精确 deny 名单) ---
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_execute', config), true);
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_execute_file', config), true);
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_batch_execute', config), true);
+// 只读/元数据类不在 deny 名单
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_search', config), false);
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_index', config), false);
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_stats', config), false);
+assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_fetch_and_index', config), false);
+// 其他 MCP 工具不受影响
+assert.equal(isMcpBlocked('mcp__tavily-cross-platform__search', config), false);
+assert.equal(isMcpBlocked('mcp__plugin_claude-mem_search', config), false);
+// 前缀匹配仍然返回 true（deny 优先逻辑在 enforcer 中实现）
+assert.equal(isWhitelistedMcp('mcp__plugin_context-mode_context-mode__ctx_execute', config), true);
 
 // --- hasCommandSubstitution ---
 assert.equal(hasCommandSubstitution('echo hello'), false);

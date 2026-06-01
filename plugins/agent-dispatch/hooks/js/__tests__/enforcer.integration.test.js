@@ -55,13 +55,41 @@ function assertBlock(result, toolName) {
   assertPass(r);
 }
 
-// --- MCP prefix whitelist ---
+// --- MCP prefix whitelist (短格式不在 block_exact 名单中，仍通过前缀白名单放行) ---
 {
   const r = runHook({ tool_name: 'mcp__plugin_context-mode_ctx_execute', tool_input: {} });
   assertPass(r);
 }
 {
   const r = runHook({ tool_name: 'mcp__plugin_claude-mem_search', tool_input: {} });
+  assertPass(r);
+}
+
+// --- mcp_block_exact: 精确 deny 名单优先于前缀白名单 ---
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_execute', tool_input: { language: 'shell', code: 'npm test' } });
+  assertBlock(r, 'mcp__plugin_context-mode_context-mode__ctx_execute');
+}
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_execute_file', tool_input: {} });
+  assertBlock(r, 'mcp__plugin_context-mode_context-mode__ctx_execute_file');
+}
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_batch_execute', tool_input: {} });
+  assertBlock(r, 'mcp__plugin_context-mode_context-mode__ctx_batch_execute');
+}
+
+// --- 只读 context-mode 工具仍通过前缀白名单放行 ---
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_search', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_index', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__plugin_context-mode_context-mode__ctx_stats', tool_input: {} });
   assertPass(r);
 }
 
@@ -144,6 +172,16 @@ function assertBlock(result, toolName) {
   fs.rmSync(fakeHome, { recursive: true, force: true });
   assert.equal(r.status, 0);
   assert.equal((r.stdout || '').trim(), '', 'enforcer disabled should pass through');
+}
+
+// --- block message format validation ---
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  const parsed = JSON.parse(r.stdout);
+  assert.ok(parsed.reason.includes('SYSTEM INSTRUCTION'), 'block should use system instruction framing');
+  assert.ok(parsed.reason.includes('ABSOLUTE PROHIBITIONS'), 'block should include prohibition list');
+  assert.ok(parsed.reason.includes('Agent('), 'block should include Agent template');
+  assert.ok(parsed.reason.includes('Subagents have FULL tool access'), 'block should encourage delegation');
 }
 
 console.log('✓ enforcer.integration.test.js — all assertions passed');

@@ -37,6 +37,17 @@ function mergeConfig(defaults, overrides) {
   if (ov.mcp_prefixes_add && ov.mcp_prefixes_add.length) {
     result.whitelist.mcp_prefixes.push(...ov.mcp_prefixes_add);
   }
+  // 通用精确 deny 名单合并
+  if (!result.whitelist.mcp_block_exact) {
+    result.whitelist.mcp_block_exact = [];
+  }
+  if (ov.mcp_block_exact_add && ov.mcp_block_exact_add.length) {
+    result.whitelist.mcp_block_exact.push(...ov.mcp_block_exact_add);
+  }
+  if (ov.mcp_block_exact_remove && ov.mcp_block_exact_remove.length) {
+    const rm = new Set(ov.mcp_block_exact_remove);
+    result.whitelist.mcp_block_exact = result.whitelist.mcp_block_exact.filter((t) => !rm.has(t));
+  }
   if (ov.bash_heads_add && ov.bash_heads_add.length) {
     result.whitelist.bash_safe_heads.push(...ov.bash_heads_add);
   }

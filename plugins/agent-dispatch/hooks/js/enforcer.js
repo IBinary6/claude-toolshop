@@ -1,9 +1,48 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { readStdinJson, output, log } = require('./lib/utils');
 const { loadConfig } = require('./lib/config');
-const { isWhitelistedTool, isWhitelistedMcp, isSafeBashCommand } = require('./lib/rules');
+const { isWhitelistedTool, isWhitelistedMcp, isSafeBashCommand, isMcpBlocked } = require('./lib/rules');
+
+const MARKER_FILE = path.join(os.tmpdir(), '.agent-dispatch-blocked');
+
+/**
+ * 构建通用强力 block 消息（系统指令语气）
+ * 不硬编码任何具体 MCP 插件名，适用于所有被拦截的工具
+ */
+function buildBlockMessage(toolName) {
+  return [
+    `[SYSTEM INSTRUCTION — MANDATORY COMPLIANCE]`,
+    ``,
+    `BLOCKED: Tool [${toolName}] is PROHIBITED for the main agent.`,
+    ``,
+    `REQUIRED ACTION: You MUST immediately spawn a subagent. The subagent has full tool access.`,
+    ``,
+    `Agent({`,
+    `  description: "<one-line summary of the task>",`,
+    `  prompt: "<detailed instructions for the subagent>"`,
+    `})`,
+    ``,
+    `ABSOLUTE PROHIBITIONS:`,
+    `• Do NOT use any alternative tool to achieve the same effect indirectly`,
+    `• Do NOT say "let me try a different approach" to avoid delegation`,
+    `• Do NOT split the blocked action into smaller whitelisted tool calls`,
+    `• Do NOT attempt this tool again — it will be blocked every time`,
+    ``,
+    `Subagents have FULL tool access. Delegate and move on.`,
+  ].join('\n');
+}
+
+/**
+ * 写标记文件，供 prompt_inject 延迟激活使用
+ */
+function writeBlockMarker() {
+  try { fs.writeFileSync(MARKER_FILE, String(Date.now()), 'utf8'); } catch {}
+}
 
 async function main() {
   let input;
@@ -15,31 +54,36 @@ async function main() {
   }
   if (!input) { process.exit(0); return; }
 
+  // subagent 豁免：拥有 agent_id 的调用不受拦截
   if (input.agent_id) { process.exit(0); return; }
 
   const config = loadConfig();
   if (!config.modules.enforcer) { process.exit(0); return; }
 
   const toolName = input.tool_name || '';
-  const toolInput = input.tool_input || {};
+
+  // deny 优先：精确拦截名单中的工具，即使前缀白名单匹配也强制 block
+  if (isMcpBlocked(toolName, config)) {
+    log(`[agent-dispatch] HARD-BLOCKED (mcp_block_exact): ${toolName}`);
+    writeBlockMarker();
+    output({ decision: 'block', reason: buildBlockMessage(toolName) });
+    process.exit(0);
+    return;
+  }
 
   if (isWhitelistedTool(toolName, config)) { process.exit(0); return; }
 
   if (isWhitelistedMcp(toolName, config)) { process.exit(0); return; }
 
+  const toolInput = input.tool_input || {};
   if ((toolName === 'Bash' || toolName === 'PowerShell') && isSafeBashCommand(toolInput.command, config)) {
     process.exit(0);
     return;
   }
 
   log(`[agent-dispatch] BLOCKED: ${toolName}`);
-  output({
-    decision: 'block',
-    reason:
-      `⚠ BLOCKED: Main agent may NOT call [${toolName}] directly.\n` +
-      `You MUST use the Agent tool to delegate this to a subagent.\n` +
-      `Example: Agent({ description: "run ${toolName} task", prompt: "..." })`,
-  });
+  writeBlockMarker();
+  output({ decision: 'block', reason: buildBlockMessage(toolName) });
   process.exit(0);
 }
 
