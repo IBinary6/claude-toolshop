@@ -9,6 +9,27 @@ const { detectClangFormat } = require('../lib/ensure_deps.js');
 const isWindows = process.platform === 'win32';
 
 /**
+ * 将 formatted 的行尾风格还原成 source 的行尾风格。
+ *
+ * clang-format 部分版本 / BasedOnStyle 预设会把 CRLF 输出成 LF（DeriveLineEnding
+ * 行为差异）。VS 项目源码多为 CRLF，行尾被悄悄改成 LF 会导致 git 整文件每行都 diff。
+ * 此处不依赖 clang-format 配置，直接按输入行尾强制还原，覆盖所有版本与存量项目。
+ *
+ * 实现：用 latin1（字节安全）把输出统一到 LF，再按 source 风格决定是否还原成 CRLF。
+ * latin1 双向映射不破坏 UTF-8 多字节，replace 只触碰 \r(0x0D)\n(0x0A)。
+ *
+ * @param {Buffer} formatted clang-format 的输出字节
+ * @param {Buffer} source 剥 BOM 后的输入正文（作为行尾基准）
+ * @returns {Buffer} 行尾与 source 一致的输出
+ */
+function matchLineEnding(formatted, source) {
+  const sourceCRLF = source.includes('\r\n');
+  let s = formatted.toString('latin1').replace(/\r\n/g, '\n'); // 统一到 LF
+  if (sourceCRLF) s = s.replace(/\n/g, '\r\n');                // 还原成 CRLF
+  return Buffer.from(s, 'latin1');
+}
+
+/**
  * BOM 感知的双模式 clang-format。
  * 剥 BOM → 无 BOM 正文经 stdin 喂 clang-format(stdout) → 与无 BOM 正文 diff
  * → 仅变化时 restoreBom 写回。clang-format 缺失/失败静默返回 false。不用 -i。
@@ -56,8 +77,10 @@ function applyClangFormat(filePath, opts) {
   // clang-format 执行失败 → 静默跳过
   if (r.error || r.status !== 0 || !r.stdout) return false;
 
-  const formatted = Buffer.isBuffer(r.stdout) ? r.stdout : Buffer.from(r.stdout);
-  if (formatted.equals(body)) return false; // 无变化不写
+  const rawFormatted = Buffer.isBuffer(r.stdout) ? r.stdout : Buffer.from(r.stdout);
+  // 行尾还原成输入风格（防 CRLF 被 clang-format 改成 LF 致全文 diff）
+  const formatted = matchLineEnding(rawFormatted, body);
+  if (formatted.equals(body)) return false; // 还原行尾后仍无变化 → 不写
 
   try {
     fs.writeFileSync(filePath, restoreBom(hadBom, formatted));
@@ -67,4 +90,4 @@ function applyClangFormat(filePath, opts) {
   }
 }
 
-module.exports = { applyClangFormat };
+module.exports = { applyClangFormat, matchLineEnding };
