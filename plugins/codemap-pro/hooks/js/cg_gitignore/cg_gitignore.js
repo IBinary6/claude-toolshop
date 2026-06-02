@@ -11,7 +11,7 @@ if (!fs.existsSync(path.join(dir, '.git'))) {
 }
 
 const gitignorePath = path.join(dir, '.gitignore');
-const ENTRIES = ['code-review-graph/', 'graphify-out/'];
+const ENTRIES = ['.codegraph/'];
 
 let content = '';
 if (fs.existsSync(gitignorePath)) {
@@ -25,7 +25,7 @@ if (missing.length === 0) {
 
 // 确保文件末尾有换行
 let append = (content.length > 0 && !content.endsWith('\n')) ? '\n' : '';
-append += '# codegraph generated output\n';
+append += '# codegraph 生成目录\n';
 append += missing.join('\n') + '\n';
 
 fs.appendFileSync(gitignorePath, append, 'utf8');

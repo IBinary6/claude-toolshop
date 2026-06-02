@@ -46,6 +46,17 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_update/cg_update.js\"",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      },
+      {
         "matcher": "EnterWorktree",
         "hooks": [
           {
