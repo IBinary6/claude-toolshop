@@ -1,0 +1,11 @@
+{
+  "name": "codemap-pro",
+  "version": "0.1.1",
+  "description": "CodeGraph 代码图谱增强：零配置自动安装，tree-sitter AST 精准解析 20+ 语言，SessionStart 自动构建，Grep 智能引导优先用图谱，Worktree 独立索引。比文本搜索快 10 倍，零网络依赖。",
+  "author": {
+    "name": "IBinary6"
+  },
+  "homepage": "https://github.com/IBinary6/claude-toolshop/tree/main/plugins/codemap-pro",
+  "license": "MIT",
+  "keywords": ["codegraph", "tree-sitter", "ast", "mcp", "code-intelligence", "graph", "索引"]
+}
