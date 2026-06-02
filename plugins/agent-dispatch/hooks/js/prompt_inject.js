@@ -36,13 +36,9 @@ function main() {
   try { fs.unlinkSync(MARKER_FILE); } catch {}
 
   const message = [
-    '## Agent Dispatch Policy [ACTIVE — previously blocked]',
-    '',
-    '你是 ORCHESTRATOR。委派规则：',
-    '1. 重型工作（构建、测试、研究、多步 shell）→ Agent({ description, prompt })',
-    '2. 可直接执行：读文件、改代码(Edit/Write)、协调、查记忆/知识库',
-    '3. 工具被拦截时唯一正确响应是派遣子代理，不要换工具绕过',
-    '4. 子代理若修改文件，必须在报告中列出被改文件路径；主 agent 重读后再续，保证缓存一致',
+    '⚠️ 上次工具调用被拦截。继续当前任务时请注意：',
+    '• 复杂操作使用 Agent({ description, prompt }) 派遣子代理',
+    '• 子代理修改文件后需在报告中列出路径，主 agent 据此重读保持缓存一致',
   ].join('\n');
 
   console.log(message);
