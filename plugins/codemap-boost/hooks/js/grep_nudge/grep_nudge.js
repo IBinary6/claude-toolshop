@@ -1,39 +1,108 @@
 #!/usr/bin/env node
-// ABOUTME: PreToolUse:Grep 钩子 - 每次 Grep 都提示优先用 CRG 图谱搜索
+// ABOUTME: PreToolUse:Grep 钩子 - 根据搜索路径判断推荐工具
+// ABOUTME: 路径在当前仓库内 → 推荐 CRG 图谱搜索
+// ABOUTME: 路径在仓库外 → 降级推荐 serena 等语义工具
 // ABOUTME: CRG 不在 PATH 时静默退出, 永不阻塞 Grep
 //
-// 每次触发: 输出 hookSpecificOutput.additionalContext JSON + exit 0
-//   - additionalContext 是 PreToolUse 官方"给模型注入推理上下文"字段, 比 systemMessage 更可靠进入思考
+// stdin: PreToolUse JSON { tool_name, tool_input: { path?, pattern, ... } }
+// stdout: hookSpecificOutput.additionalContext JSON + exit 0
 //   - 不带 permissionDecision -> 仍放行 Grep (软提示, 不 deny)
-// CRG CLI 不在 PATH -> 静默 exit 0 (commandExists)
 
 'use strict';
 
-const { commandExists } = require('../lib/utils');
+const path = require('path');
+const { execSync } = require('child_process');
+const { commandExists, readStdinJson } = require('../lib/utils');
 
-// CRG CLI 不在 PATH -> 没必要推 CRG 工具, 静默退出
-if (!commandExists('code-review-graph')) {
+// CRG CLI 不在 PATH -> 没必要推 CRG 工具, 但仍可推荐 serena
+const hasCrg = commandExists('code-review-graph');
+
+/**
+ * 解析当前仓库根目录
+ */
+function getRepoRoot() {
+  try {
+    const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+    return execSync('git rev-parse --show-toplevel', {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 判断目标路径是否在仓库根目录内
+ * Windows 路径规范化：统一小写 + 正斜杠比较
+ */
+function isPathInRepo(targetPath, repoRoot) {
+  if (!targetPath || !repoRoot) return true; // 无路径 = 默认 cwd = 在 repo 内
+  try {
+    const normalizedTarget = path.resolve(targetPath).replace(/\\/g, '/').toLowerCase();
+    const normalizedRepo = path.resolve(repoRoot).replace(/\\/g, '/').toLowerCase();
+    return normalizedTarget.startsWith(normalizedRepo + '/') || normalizedTarget === normalizedRepo;
+  } catch {
+    return true; // 解析失败保守处理：当作 repo 内
+  }
+}
+
+// CRG 推荐（路径在 repo 内）
+const CRG_CONTEXT =
+  'MUST use mcp__code-review-graph tools for symbol, function, class, call, and reference lookups — NOT Grep. ' +
+  'Grep is only for plain-text/string/comment search. ' +
+  'TOKEN RULES: Always call get_minimal_context_tool FIRST (~100 tokens). ' +
+  'Always pass detail_level="minimal" unless you specifically need full output. ' +
+  'Max 3 CRG calls per task. ' +
+  'CRG is indexed and authoritative for code structure.';
+
+// 降级推荐（路径在 repo 外）
+const EXTERNAL_CONTEXT =
+  'Target path is OUTSIDE the current repository — code-review-graph cannot help here. ' +
+  'For cross-repo symbol/structure lookups, prefer mcp__serena tools (find_symbol, find_declaration, get_symbols_overview). ' +
+  'Grep is acceptable for plain-text search in external paths.';
+
+async function main() {
+  let input;
+  try {
+    input = await readStdinJson({ timeoutMs: 2000 });
+  } catch {
+    // stdin 解析失败：降级为旧行为（有 CRG 就推荐）
+    if (hasCrg) {
+      emitContext(CRG_CONTEXT);
+    }
+    process.exit(0);
+    return;
+  }
+
+  const grepPath = (input && input.tool_input && input.tool_input.path) || null;
+  const repoRoot = getRepoRoot();
+
+  if (isPathInRepo(grepPath, repoRoot)) {
+    // 路径在 repo 内：推荐 CRG（如果可用）
+    if (hasCrg) {
+      emitContext(CRG_CONTEXT);
+    }
+  } else {
+    // 路径在 repo 外：降级推荐 serena
+    emitContext(EXTERNAL_CONTEXT);
+  }
+
   process.exit(0);
 }
 
-// 通过 additionalContext 强制提示 Claude: 代码符号/调用/引用查找必须用 CRG, 不用 Grep
-// 附加 Token 优化规则, 确保使用 minimal 模式
-// 仅注入上下文, 不带 permissionDecision -> Grep 仍被放行
-const payload = {
-  hookSpecificOutput: {
-    hookEventName: 'PreToolUse',
-    additionalContext:
-      'MUST use mcp__code-review-graph tools for symbol, function, class, call, and reference lookups — NOT Grep. ' +
-      'Grep is only for plain-text/string/comment search. ' +
-      'TOKEN RULES: Always call get_minimal_context_tool FIRST (~100 tokens). ' +
-      'Always pass detail_level="minimal" unless you specifically need full output. ' +
-      'Max 3 CRG calls per task. ' +
-      'CRG is indexed and authoritative for code structure.'
-  }
-};
+function emitContext(text) {
+  const payload = {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      additionalContext: text
+    }
+  };
+  try {
+    process.stdout.write(JSON.stringify(payload) + '\n');
+  } catch {}
+}
 
-try {
-  process.stdout.write(JSON.stringify(payload) + '\n');
-} catch (e) {}
-
-process.exit(0);
+main();
