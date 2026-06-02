@@ -13,6 +13,11 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_init/cg_init.js\"",
             "timeout": 10,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_gitignore/cg_gitignore.js\"",
+            "timeout": 10
           }
         ]
       }
@@ -24,6 +29,16 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js\"",
             "timeout": 5
           }
         ]
