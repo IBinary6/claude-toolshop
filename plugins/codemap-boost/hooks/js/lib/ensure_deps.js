@@ -140,6 +140,46 @@ function ensureGraphify(opts) {
 }
 
 /**
+ * 注册 code-review-graph MCP 服务器到 settings.json。
+ * 幂等：已注册或曾失败过则跳过。失败写标记防重试。
+ * @param {object} [opts] 依赖注入（测试用）
+ * @returns {boolean} 是否已注册（含本次注册成功和已存在）
+ */
+function ensureCrgMcp(opts) {
+  const o = opts || {};
+  const marker = o.markerPath || markerPath('.crg-mcp-register-failed');
+
+  // 已注册过（检查 settings.json）
+  try {
+    const { isCrgMcpRegistered } = require('./utils');
+    if (isCrgMcpRegistered()) return true;
+  } catch (_) {}
+
+  // 曾失败过 → 不重试
+  if (markerExists(marker)) return false;
+
+  // 执行 code-review-graph install（自动写入 settings.json）
+  try {
+    const r = spawnSync('code-review-graph', ['install'], {
+      stdio: 'ignore',
+      timeout: 30000,
+      windowsHide: isWindows,
+    });
+    if (!r.error && r.status === 0) {
+      // 验证是否真的写入了
+      try {
+        const { isCrgMcpRegistered } = require('./utils');
+        if (isCrgMcpRegistered()) return true;
+      } catch (_) {}
+    }
+  } catch (_) {}
+
+  // 失败写标记
+  writeMarker(marker);
+  return false;
+}
+
+/**
  * 后台 detached 预热子进程：跑本模块 CLI（--prewarm 分支）执行两个 ensure。
  * 立即返回不阻塞调用方；子进程 unref 后独立存活；输出全部丢弃保持静默。
  * spawn 失败不抛，返回 null。
@@ -163,6 +203,7 @@ function spawnPrewarm() {
 module.exports = {
   ensureCrg,
   ensureGraphify,
+  ensureCrgMcp,
   ensureCli,
   probeCommand,
   pipInstall,
@@ -174,5 +215,6 @@ module.exports = {
 if (require.main === module && process.argv.includes('--prewarm')) {
   try { ensureCrg(); } catch (_) {}
   try { ensureGraphify(); } catch (_) {}
+  try { ensureCrgMcp(); } catch (_) {}
   process.exit(0);
 }

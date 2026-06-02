@@ -91,7 +91,24 @@ node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
 ```
 
 任一失败 → 报告 stderr 并停止（说明插件文件损坏，需要重装）。
-全部通过 → 继续 Step 7。
+全部通过 → 继续 Step 6.5。
+
+### Step 6.5: 验证 MCP 服务器注册
+
+检查 code-review-graph MCP 服务器是否已注册到 settings.json。
+
+**检测方法**（按优先级选择一种）：
+
+1. **方法 A（推荐）**：读取 `~/.claude/settings.json`，解析 JSON，检查 `mcpServers` 字段中是否有 `code-review-graph` 键。
+
+2. **方法 B（备选）**：执行 `code-review-graph install --dry-run`（如果该命令支持 dry-run 参数）。
+
+**结果判断**：
+
+- **已注册** → 继续 Step 7
+- **未注册** → **必须用 AskUserQuestion** 询问用户：
+  - 选项 A：「帮我注册」→ 执行 `code-review-graph install`。成功继续 Step 7，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己注册」→ 打印 `code-review-graph install`，告知注册后需重启 Claude Code，停下。
 
 ### Step 7: 汇报结果
 
@@ -102,6 +119,7 @@ codemap-boost-setup 完成：
   ✓ Node.js <版本>
   ✓ code-review-graph CLI <版本><（本次自动安装，级别：[all]/[embeddings]/core）>
   ✓ graphify CLI<（本次自动安装）>
+  ✓ code-review-graph MCP server <已注册/本次注册>
   ✓ hook 文件 node --check 通过（含 EnterWorktree 钩子）
 
 CLAUDE.md 触发规则由 SessionStart hook 自动维护，无需手动配置。

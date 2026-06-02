@@ -18,8 +18,10 @@
 Node.js 是 hook 运行时，**必需**；`code-review-graph` / `graphify` 缺失时对应图谱功能**降级跳过、不影响其它**，但装上才有完整能力，故标「可选但推荐」。`graphify` 命令由 PyPI 包 **`graphifyy`**（注意双 y）提供。
 
 > **自动自举**：装上插件后，首次 SessionStart 会在后台尝试 `pip install` 缺失的 `code-review-graph` / `graphifyy`（需本机已装 Python + pip）。装不上则图谱功能降级跳过、不影响其它；安装只尝试一次，失败后不再重复。
+> 
+> **MCP 自动注册**：`code-review-graph` CLI 安装成功后，插件会自动执行 `code-review-graph install` 注册 MCP 服务器到 `~/.claude/settings.json`，无需手动配置。注册失败时可运行 `/codemap-boost-setup` 手动修复。
 
-装插件后也可手动跑一次 `/codemap-boost-setup`——它会逐项检测，缺哪个就**问你要不要直接帮你装**：`code-review-graph` / `graphifyy` 这两个 pip 包同意后可自动安装；Node.js 因需管理员权限只打印命令让你复制（**不会替你跑 sudo / winget**）。
+装插件后也可手动跑一次 `/codemap-boost-setup`——它会逐项检测，缺哪个就**问你要不要直接帮你装**：`code-review-graph` / `graphifyy` 这两个 pip 包同意后可自动安装；Node.js 因需管理员权限只打印命令让你复制（**不会替你跑 sudo / winget**）。MCP 服务器未注册时也会询问是否代为注册。
 
 ---
 

@@ -547,6 +547,23 @@ function safeGet(obj, ...keys) {
   return undefined;
 }
 
+/**
+ * Check if code-review-graph MCP server is registered in settings.json
+ * @returns {boolean} true if registered, false otherwise
+ */
+function isCrgMcpRegistered() {
+  const settingsPath = path.join(getClaudeDir(), 'settings.json');
+  if (!fs.existsSync(settingsPath)) return false;
+
+  try {
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    return settings.mcpServers &&
+           settings.mcpServers['code-review-graph'] !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 module.exports = {
   // Platform info
   isWindows,
@@ -597,4 +614,7 @@ module.exports = {
 
   // Object helpers
   safeGet,
+
+  // MCP
+  isCrgMcpRegistered,
 };
