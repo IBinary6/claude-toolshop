@@ -30,7 +30,20 @@
       "ls", "pwd", "cd", "mkdir", "rm", "mv", "cp", "touch",
       "cat", "echo", "which", "where",
       "fd", "rg", "grep", "jq", "delta", "gh", "tsc", "pyright", "pdftotext",
-      "head", "tail", "wc", "sort", "uniq"
+      "head", "tail", "wc", "sort", "uniq",
+      "node", "npm", "yarn", "pnpm", "bun",
+      "python", "python3", "pip", "pipenv", "poetry",
+      "rustc", "cargo",
+      "go",
+      "java", "javac", "mvn", "gradle",
+      "dotnet",
+      "ruby", "gem", "bundle",
+      "gcc", "g++", "clang", "clang++",
+      "cmake", "make", "ninja", "meson",
+      "msbuild", "cl",
+      "docker", "docker-compose", "podman",
+      "kubectl", "helm",
+      "uname", "whoami", "hostname", "env", "printenv"
     ],
     "git_readonly": [
       ["status"], ["diff"], ["log"], ["show"], ["blame"], ["branch"],
