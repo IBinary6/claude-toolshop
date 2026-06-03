@@ -98,28 +98,44 @@ function startBackgroundBuild() {
   const wrapperCode = `
     const { spawnSync } = require('child_process');
     const fs = require('fs');
-    const out = fs.openSync(${JSON.stringify(buildLogFile)}, 'a');
+    let out;
     try {
+      out = fs.openSync(${JSON.stringify(buildLogFile)}, 'a');
       spawnSync('code-review-graph', ['build', '--repo', ${JSON.stringify(cwd)}], {
         stdio: ['ignore', out, out], windowsHide: true,
       });
+    } catch (e) {
     } finally {
+      if (typeof out === 'number') {
+        try { fs.closeSync(out); } catch (e) {}
+      }
       try { fs.unlinkSync(${JSON.stringify(buildLockFile)}); } catch (e) {}
     }
   `;
-  const wrapper = spawn(process.execPath, ['-e', wrapperCode], {
-    cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
-  });
-  wrapper.unref();
-  logLine(`图谱缺失, 后台 build 已启动 (lock pid=${process.pid})`);
+  try {
+    const wrapper = spawn(process.execPath, ['-e', wrapperCode], {
+      cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
+    });
+    wrapper.unref();
+    logLine(`图谱缺失, 后台 build 已启动 (lock pid=${process.pid})`);
+  } catch (e) {
+    try { fs.unlinkSync(buildLockFile); } catch (_) {}
+  }
 }
 
 function runUpdate() {
-  const out = fs.openSync(logFile, 'a');
-  const proc = spawn('code-review-graph', ['update', '--repo', cwd], {
-    cwd, detached: true, windowsHide: true, stdio: ['ignore', out, out],
-  });
-  proc.unref();
+  let out;
+  try {
+    out = fs.openSync(logFile, 'a');
+    const proc = spawn('code-review-graph', ['update', '--repo', cwd], {
+      cwd, detached: true, windowsHide: true, stdio: ['ignore', out, out],
+    });
+    proc.unref();
+  } catch (e) {
+    if (typeof out === 'number') {
+      try { fs.closeSync(out); } catch (_) {}
+    }
+  }
 }
 
 // --- watcher 子模式: sleep + 比对 sentinel + 跑 update ---

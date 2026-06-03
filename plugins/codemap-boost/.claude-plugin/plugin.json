@@ -1,6 +1,6 @@
 {
   "name": "codemap-boost",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "自动维护 code-review-graph / graphify 代码结构图：SessionStart 智能初始化 + MCP 自动注册 + .gitignore 防误提交、PostToolUse 增量更新、EnterWorktree 图谱重建/增量更新、PreToolUse:Grep/Agent 提示优先用图谱搜索、内置 Token 优化规则（minimal 模式优先）。所有 hook 在依赖工具缺失时静默降级。",
   "author": {
     "name": "IBinary6"

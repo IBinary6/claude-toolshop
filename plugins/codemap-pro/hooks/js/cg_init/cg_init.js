@@ -19,7 +19,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-const { commandExists, isGitRepo, runCommand } = require('../lib/utils');
+const { commandExists, isGitRepo } = require('../lib/utils');
 
 const isWindows = process.platform === 'win32';
 
@@ -116,31 +116,40 @@ const logFile = path.join(logDir, `init-${Date.now()}.log`);
 const wrapperCode = `
   const { spawnSync } = require('child_process');
   const fs = require('fs');
-  const out = fs.openSync(${JSON.stringify(logFile)}, 'a');
+  let out;
   try {
+    out = fs.openSync(${JSON.stringify(logFile)}, 'a');
     // codegraph init -i = init + index
     spawnSync('codegraph', ['init', '-i', ${JSON.stringify(cwd)}], {
       stdio: ['ignore', out, out],
       windowsHide: ${isWindows},
     });
+  } catch (e) {
   } finally {
-    try {
-      fs.closeSync(out);
-    } catch (e) {}
+    if (typeof out === 'number') {
+      try {
+        fs.closeSync(out);
+      } catch (e) {}
+    }
     try {
       fs.unlinkSync(${JSON.stringify(buildLockFile)});
     } catch (e) {}
   }
 `;
 
-const proc = spawn(process.execPath, ['-e', wrapperCode], {
-  cwd,
-  detached: true,
-  windowsHide: isWindows,
-  stdio: 'ignore',
-  env: process.env
-});
-
-proc.unref();
+try {
+  const proc = spawn(process.execPath, ['-e', wrapperCode], {
+    cwd,
+    detached: true,
+    windowsHide: isWindows,
+    stdio: 'ignore',
+    env: process.env
+  });
+  proc.unref();
+} catch (_) {
+  try {
+    fs.unlinkSync(buildLockFile);
+  } catch (_) {}
+}
 
 process.exit(0);

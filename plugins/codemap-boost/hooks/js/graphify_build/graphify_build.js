@@ -135,20 +135,29 @@ ensurePostCommitHook();
 const wrapperCode = `
   const { spawnSync } = require('child_process');
   const fs = require('fs');
-  const out = fs.openSync(${JSON.stringify(logFile)}, 'a');
+  let out;
   try {
+    out = fs.openSync(${JSON.stringify(logFile)}, 'a');
     spawnSync('graphify', ['.'], {
       cwd: ${JSON.stringify(cwd)},
       stdio: ['ignore', out, out], windowsHide: true,
     });
+  } catch (e) {
   } finally {
+    if (typeof out === 'number') {
+      try { fs.closeSync(out); } catch (e) {}
+    }
     try { fs.unlinkSync(${JSON.stringify(buildLockFile)}); } catch (e) {}
   }
 `;
-const proc = spawn(process.execPath, ['-e', wrapperCode], {
-  cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
-});
-proc.unref();
+try {
+  const proc = spawn(process.execPath, ['-e', wrapperCode], {
+    cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
+  });
+  proc.unref();
+} catch (e) {
+  try { fs.unlinkSync(buildLockFile); } catch (_) {}
+}
 
 logLine(`首次 build 已在后台启动 (lock pid=${process.pid}, LLM 抽取大项目可能耗时数分钟)`);
 process.exit(0);

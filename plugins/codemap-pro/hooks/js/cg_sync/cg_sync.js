@@ -106,14 +106,18 @@ function startBackground(args, lockFile, logName) {
   const wrapperCode = `
     const { spawnSync } = require('child_process');
     const fs = require('fs');
-    const out = fs.openSync(${JSON.stringify(logFile)}, 'a');
+    let out;
     try {
+      out = fs.openSync(${JSON.stringify(logFile)}, 'a');
       spawnSync('codegraph', ${JSON.stringify(args)}, {
         stdio: ['ignore', out, out],
         windowsHide: ${isWindows},
       });
+    } catch (e) {
     } finally {
-      try { fs.closeSync(out); } catch (e) {}
+      if (typeof out === 'number') {
+        try { fs.closeSync(out); } catch (e) {}
+      }
       try { fs.unlinkSync(${JSON.stringify(lockFile)}); } catch (e) {}
     }
   `;

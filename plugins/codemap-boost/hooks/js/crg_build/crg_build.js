@@ -108,19 +108,28 @@ if (!tryAcquireBuildLock()) {
 const wrapperCode = `
   const { spawnSync } = require('child_process');
   const fs = require('fs');
-  const out = fs.openSync(${JSON.stringify(logFile)}, 'a');
+  let out;
   try {
+    out = fs.openSync(${JSON.stringify(logFile)}, 'a');
     spawnSync('code-review-graph', ['build', '--repo', ${JSON.stringify(cwd)}], {
       stdio: ['ignore', out, out], windowsHide: true,
     });
+  } catch (e) {
   } finally {
+    if (typeof out === 'number') {
+      try { fs.closeSync(out); } catch (e) {}
+    }
     try { fs.unlinkSync(${JSON.stringify(buildLockFile)}); } catch (e) {}
   }
 `;
-const proc = spawn(process.execPath, ['-e', wrapperCode], {
-  cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
-});
-proc.unref();
+try {
+  const proc = spawn(process.execPath, ['-e', wrapperCode], {
+    cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
+  });
+  proc.unref();
+} catch (e) {
+  try { fs.unlinkSync(buildLockFile); } catch (_) {}
+}
 
 logLine(`首次 build 已在后台启动 (lock pid=${process.pid})`);
 process.exit(0);
