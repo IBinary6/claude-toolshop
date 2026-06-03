@@ -1,6 +1,6 @@
 # /codemap-pro-setup — CodeGraph 前置依赖检测 + 可选修复
 
-**可选命令**。codemap-pro 装好后会在 SessionStart 后台预热 CodeGraph，并维护 CLAUDE.md 触发规则；本命令用于显式检查和修复底层 CodeGraph CLI / MCP / hook 文件。
+**可选命令**。codemap-pro 装好后会在 SessionStart 后台预热 CodeGraph 并维护项目图谱，不再向 `CLAUDE.md` / `AGENTS.md` 注入持久提示词；本命令用于显式检查和修复底层 CodeGraph CLI / MCP / hook 文件。
 
 ## 执行流程
 
@@ -75,7 +75,6 @@ codegraph install --target=claude --yes
 执行：
 
 ```bash
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/claudemd_inject/claudemd_inject.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_init/cg_init.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_sync/cg_sync.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/cg_worktree/cg_worktree.js"
@@ -127,4 +126,4 @@ codemap-pro-setup 完成：
 - 不要替用户安装 Node.js / npm。
 - `npm install -g` 必须在用户选择「帮我安装」后才能执行。
 - 失败必须明确报告，不得静默跳过。
-- 不直接编辑用户 CLAUDE.md；触发规则由 SessionStart hook 维护。
+- 不直接编辑用户 CLAUDE.md / AGENTS.md；不得新增持久提示词注入。

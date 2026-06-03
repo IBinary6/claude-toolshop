@@ -18,8 +18,8 @@
     {
       "name": "codemap-boost",
       "source": "./plugins/codemap-boost",
-      "version": "0.2.6",
-      "description": "自动维护 code-review-graph / graphify 代码结构图：SessionStart 智能初始化、PostToolUse 增量更新、EnterWorktree 图谱重建/增量更新、PreToolUse:Grep 提示优先用图谱搜索、内置 Token 优化规则。所有 hook 在依赖工具缺失时静默降级。"
+      "version": "0.2.7",
+      "description": "自动维护 code-review-graph / graphify 代码结构图：SessionStart 智能初始化、PostToolUse 增量更新、EnterWorktree 图谱重建/增量更新、PreToolUse:Grep/Agent 运行时提示优先用图谱搜索，不写持久 MD 提示词。所有 hook 在依赖工具缺失时静默降级。"
     },
     {
       "name": "cpp-style-enforcer",
@@ -36,8 +36,8 @@
     {
       "name": "codemap-pro",
       "source": "./plugins/codemap-pro",
-      "version": "0.1.6",
-      "description": "CodeGraph 代码图谱增强：零配置自动安装，tree-sitter AST 精准解析 20+ 语言，SessionStart 自动构建，PostToolUse 兜底同步，Grep/Agent 智能引导优先用图谱，Worktree 独立索引，自动写入 .gitignore。比文本搜索快 10 倍，零网络依赖。"
+      "version": "0.1.7",
+      "description": "CodeGraph 代码图谱增强：零配置自动安装，tree-sitter AST 精准解析 20+ 语言，SessionStart 自动构建，PostToolUse 兜底同步，Grep/Agent 运行时引导优先用图谱，Worktree 独立索引，自动写入 .gitignore，不写持久 MD 提示词。比文本搜索快 10 倍，零网络依赖。"
     }
   ]
 }

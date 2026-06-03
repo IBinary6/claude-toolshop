@@ -110,7 +110,7 @@ validateTimeout(hooksConfig.hooks.PostToolUse, 'PostToolUse');
 // Test 5: 验证 async 语义
 log('\nTest 5: async 参数验证', 'yellow');
 const asyncHooks = [
-  { event: 'SessionStart', entryIndex: 0, hookIndex: 1, name: 'cg_init.js' },
+  { event: 'SessionStart', entryIndex: 0, hookIndex: 0, name: 'cg_init.js' },
   { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_sync.js' },
   { event: 'PostToolUse', entryIndex: 1, hookIndex: 0, name: 'cg_worktree.js' }
 ];
@@ -186,6 +186,9 @@ function validateHookScripts(hooks, eventName) {
 validateHookScripts(hooksConfig.hooks.SessionStart, 'SessionStart');
 validateHookScripts(hooksConfig.hooks.PreToolUse, 'PreToolUse');
 validateHookScripts(hooksConfig.hooks.PostToolUse, 'PostToolUse');
+
+const allHookCommands = JSON.stringify(hooksConfig.hooks);
+assert(!allHookCommands.includes('claudemd_inject'), 'hooks.json 不再注册 CLAUDE.md 注入 hook');
 
 // Test 8: 测试 utils.js 可以被 require
 log('\nTest 8: utils.js 模块加载测试', 'yellow');

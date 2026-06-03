@@ -6,11 +6,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/claudemd_inject/claudemd_inject.js\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js\"",
             "timeout": 10,
             "async": true

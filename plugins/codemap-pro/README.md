@@ -8,8 +8,8 @@
 - ✅ **自动安装** - 首次使用自动安装 `codegraph` CLI + MCP Server 配置
 - ✅ **增量更新** - CodeGraph 内置文件监听（2s 去抖）为主，PostToolUse 兜底 `sync`
 - ✅ **Worktree 支持** - 自动处理 worktree 环境
-- ✅ **Grep 软引导** - 提示优先使用 CodeGraph MCP 工具
-- ✅ **互斥检测** - 与 codemap-boost 互斥，防冲突
+- ✅ **Grep 软引导** - 运行时提示优先使用 CodeGraph MCP 工具，不写持久 MD 提示词
+- ✅ **互斥建议** - 建议与 codemap-boost 二选一，避免重复图谱 hook 和重复引导
 
 ## 技术栈对比
 
@@ -66,7 +66,7 @@ npm install -g @colbymchenry/codegraph
 
 ## 与 codemap-boost 的区别
 
-**不能同时安装** - 两个插件会在 CLAUDE.md 中冲突。
+**建议不要同时安装** - 两个插件都会维护图谱并在 Grep/Agent 时提供运行时引导，同时安装会重复触发 hook。
 
 ### 选择建议
 
@@ -76,9 +76,8 @@ npm install -g @colbymchenry/codegraph
 ### 从 codemap-boost 迁移
 
 1. 卸载 codemap-boost
-2. 删除 `~/.claude/CLAUDE.md` 中的 `codemap-boost-snippet` 段落
-3. 安装 codemap-pro
-4. 重启 Claude Code
+2. 安装 codemap-pro
+3. 重启 Claude Code
 
 ## 支持的语言
 
@@ -90,10 +89,6 @@ TypeScript, JavaScript, Python, Go, Rust, Java, C#, PHP, Ruby, C, C++, Objective
 
 ```
 SessionStart
-├── claudemd_inject.js
-│   ├── 检测 codemap-boost（互斥）
-│   ├── 注入/更新 CLAUDE.md 提示规则
-│   └── 触发后台预热安装
 └── cg_init.js (async)
     ├── 检测 codegraph CLI 可用性
     ├── 检测 .codegraph/codegraph.db
@@ -185,14 +180,13 @@ codegraph init -i
 rm /tmp/codegraph-build-*.lock
 ```
 
-### 与 codemap-boost 冲突
+### 与 codemap-boost 重复运行
 
-**症状**：CLAUDE.md 提示规则混乱
+**症状**：Grep/Agent 运行时提示重复，或两个图谱目录都在后台更新
 
 **解决**：
 1. 只保留一个插件
-2. 编辑 `~/.claude/CLAUDE.md`，删除冲突的 snippet 段落
-3. 重启 Claude Code
+2. 重启 Claude Code
 
 ### MCP 工具不可用
 
@@ -247,9 +241,9 @@ codegraph install --target=claude --yes
 codegraph uninstall
 ```
 
-### 3. 清理 CLAUDE.md 提示规则
+### 3. 清理旧版 CLAUDE.md 提示规则
 
-编辑 `~/.claude/CLAUDE.md`，删除整个 "## 代码结构图触发规则 (CodeGraph)" 段落（标记 `<!-- codemap-pro-snippet-v1 -->`）。
+当前版本不再写入 `CLAUDE.md` / `AGENTS.md`。如果你安装过旧版，可删除 `~/.claude/CLAUDE.md` 中标记为 `<!-- codemap-pro-snippet-v1 -->` 的历史片段。
 
 ### 4. （可选）清理残留标记与缓存
 
@@ -307,9 +301,6 @@ node hooks/js/lib/ensure_deps.js --prewarm
 
 # 测试初始化
 node hooks/js/cg_init/cg_init.js
-
-# 测试 CLAUDE.md 注入
-node hooks/js/claudemd_inject/claudemd_inject.js
 
 # 测试 Grep 软引导
 node hooks/js/grep_nudge/grep_nudge.js

@@ -1,6 +1,6 @@
 # /codemap-boost-setup — 前置依赖检测 + 可选自动安装
 
-**可选命令**。codemap-boost 装好后 CLAUDE.md 触发规则会由 SessionStart hook 自动追加，无需手动跑这个命令。
+**可选命令**。codemap-boost 装好后会在 SessionStart 后台预热图谱依赖并自动维护图谱，不再向 `CLAUDE.md` / `AGENTS.md` 注入持久提示词。
 
 它做两件事：**检测前置依赖是否齐全**；缺失时**询问你是否让我直接帮你装**（pip 包可自动装，需管理员的只打印命令）。
 
@@ -82,7 +82,6 @@ graphify --version
 执行（依次校验所有 hook 文件能被 node 解析；不实际运行业务逻辑）：
 
 ```bash
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/claudemd_inject/claudemd_inject.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_update/crg_update.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_worktree/crg_worktree.js"
@@ -122,8 +121,8 @@ codemap-boost-setup 完成：
   ✓ code-review-graph MCP server <已注册/本次注册>
   ✓ hook 文件 node --check 通过（含 EnterWorktree 钩子）
 
-CLAUDE.md 触发规则由 SessionStart hook 自动维护，无需手动配置。
-Token 优化规则已内置，CRG 工具默认使用 minimal 模式。
+不会写入 CLAUDE.md / AGENTS.md；图谱使用建议仅通过 Grep/Agent 运行时短提示提供。
+CRG 工具建议每个任务最多 3 次，确需大规模重构评审时可放宽。
 后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
 ```
 
@@ -137,4 +136,4 @@ Token 优化规则已内置，CRG 工具默认使用 minimal 模式。
 - 全程用 `python -m pip` 而非裸 `pip`，规避 PATH 上失效 shim 残留
 - 前置依赖**全部必需**，缺任一项必须明确告知用户或代装，不提供"跳过"选项
 - 任一步骤失败必须明确报告，不得静默跳过
-- 不修改用户 CLAUDE.md —— 该工作由 `claudemd_inject` SessionStart hook 自动完成且已幂等
+- 不修改用户 CLAUDE.md / AGENTS.md；不得新增持久提示词注入
