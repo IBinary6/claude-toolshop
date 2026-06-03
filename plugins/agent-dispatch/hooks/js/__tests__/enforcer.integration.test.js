@@ -64,6 +64,18 @@ function assertBlock(result, toolName) {
   const r = runHook({ tool_name: 'mcp__plugin_claude-mem_search', tool_input: {} });
   assertPass(r);
 }
+{
+  const r = runHook({ tool_name: 'mcp__code_review_graph__get_minimal_context_tool', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__codegraph__search', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__graphify__query', tool_input: {} });
+  assertPass(r);
+}
 
 // --- mcp_block_exact: 精确 deny 名单优先于前缀白名单 ---
 {
@@ -113,14 +125,18 @@ function assertBlock(result, toolName) {
   assertBlock(r, 'Bash');
 }
 
-// --- unknown command → block ---
+// --- 默认安全 Bash head → pass ---
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' } });
-  assertBlock(r, 'Bash');
+  assertPass(r);
 }
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'python script.py' } });
-  assertBlock(r, 'Bash');
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'codegraph sync && graphify --version' } });
+  assertPass(r);
 }
 
 // --- heavy MCP → block ---
@@ -176,7 +192,7 @@ function assertBlock(result, toolName) {
 
 // --- block message format validation (中文短版) ---
 {
-  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'unknown-tool --version' } });
   const parsed = JSON.parse(r.stdout);
   assert.ok(parsed.reason.includes('🈲BLOCKED'), 'block 消息应包含 🈲BLOCKED 标识');
   assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');

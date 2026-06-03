@@ -66,3 +66,8 @@ logs/
 .claude/sessions/
 .claude/todos/
 .claude-cpp-style
+# CRG generated output
+.code-review-graph/
+.cloudreviewgraph/
+graphify-out/
+.agent-dispatch/

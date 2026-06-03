@@ -11,7 +11,7 @@ if (!fs.existsSync(path.join(dir, '.git'))) {
 }
 
 const gitignorePath = path.join(dir, '.gitignore');
-const ENTRIES = ['.codegraph/'];
+const ENTRIES = ['.codegraph/', '.code-review-graph/', '.cloudreviewgraph/', 'graphify-out/'];
 
 let content = '';
 if (fs.existsSync(gitignorePath)) {

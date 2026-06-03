@@ -33,6 +33,10 @@ assert.equal(isWhitelistedTool('mcp__context7__query', config), false);
 assert.equal(isWhitelistedMcp('mcp__plugin_context-mode_ctx_execute', config), true);
 assert.equal(isWhitelistedMcp('mcp__plugin_claude-mem_search', config), true);
 assert.equal(isWhitelistedMcp('mcp__sequential-thinking_think', config), true);
+assert.equal(isWhitelistedMcp('mcp__code_review_graph__get_minimal_context_tool', config), true);
+assert.equal(isWhitelistedMcp('mcp__code-review-graph__get_minimal_context_tool', config), true);
+assert.equal(isWhitelistedMcp('mcp__codegraph__search', config), true);
+assert.equal(isWhitelistedMcp('mcp__graphify__query', config), true);
 assert.equal(isWhitelistedMcp('mcp__context7__query-docs', config), false);
 assert.equal(isWhitelistedMcp('mcp__tavily-cross-platform__search', config), false);
 assert.equal(isWhitelistedMcp('mcp__deepwiki__fetch', config), false);
@@ -49,6 +53,7 @@ assert.equal(isMcpBlocked('mcp__plugin_context-mode_context-mode__ctx_fetch_and_
 // 其他 MCP 工具不受影响
 assert.equal(isMcpBlocked('mcp__tavily-cross-platform__search', config), false);
 assert.equal(isMcpBlocked('mcp__plugin_claude-mem_search', config), false);
+assert.equal(isMcpBlocked('mcp__code_review_graph__get_minimal_context_tool', config), false);
 // 前缀匹配仍然返回 true（deny 优先逻辑在 enforcer 中实现）
 assert.equal(isWhitelistedMcp('mcp__plugin_context-mode_context-mode__ctx_execute', config), true);
 
@@ -109,8 +114,11 @@ assert.equal(classifySegment(['git', 'status'], config), 'safe');
 assert.equal(classifySegment(['git', 'commit', '-m', 'msg'], config), 'safe');
 assert.equal(classifySegment(['git', 'push', '--force'], config), 'unsafe');
 assert.equal(classifySegment(['git'], config), 'unsafe');
-assert.equal(classifySegment(['npm', 'test'], config), 'unsafe');
-assert.equal(classifySegment(['python', 'script.py'], config), 'unsafe');
+assert.equal(classifySegment(['npm', 'test'], config), 'safe');
+assert.equal(classifySegment(['python', 'script.py'], config), 'safe');
+assert.equal(classifySegment(['codegraph', 'sync'], config), 'safe');
+assert.equal(classifySegment(['code-review-graph', 'status'], config), 'safe');
+assert.equal(classifySegment(['graphify', '--version'], config), 'safe');
 assert.equal(classifySegment(['echo', 'hi', '>', 'file.txt'], config), 'safe');
 assert.equal(classifySegment([], config), 'empty');
 
@@ -122,9 +130,10 @@ assert.equal(isSafeBashCommand('fd -t f . && rg pattern', config), true);
 assert.equal(isSafeBashCommand('git add . && git commit -m "test"', config), true);
 assert.equal(isSafeBashCommand('ls | grep foo | wc -l', config), true);
 assert.equal(isSafeBashCommand('git push --force', config), false);
-assert.equal(isSafeBashCommand('npm test', config), false);
+assert.equal(isSafeBashCommand('npm test', config), true);
+assert.equal(isSafeBashCommand('codegraph sync && graphify --version', config), true);
 assert.equal(isSafeBashCommand('echo $(whoami)', config), false);
-assert.equal(isSafeBashCommand('python script.py', config), false);
+assert.equal(isSafeBashCommand('python script.py', config), true);
 assert.equal(isSafeBashCommand('safe && npm run build', config), false);
 assert.equal(isSafeBashCommand('', config), false);
 assert.equal(isSafeBashCommand(null, config), false);
