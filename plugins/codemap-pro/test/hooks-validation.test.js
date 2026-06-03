@@ -210,6 +210,12 @@ try {
   assert(typeof ensureDeps.ensureCodegraph === 'function', 'ensureCodegraph 函数存在');
   assert(typeof ensureDeps.spawnPrewarm === 'function', 'spawnPrewarm 函数存在');
   assert(typeof ensureDeps.writeMarker === 'function', 'writeMarker 函数存在');
+  let setupMcpCalls = 0;
+  ensureDeps.ensureCodegraph({
+    probe: () => true,
+    setupMcp: () => { setupMcpCalls++; return true; }
+  });
+  assert(setupMcpCalls === 0, 'ensureCodegraph 静默路径不自动配置 MCP');
   const nestedMarker = path.join(
     require('os').tmpdir(),
     `codemap-pro-marker-${process.pid}`,
@@ -223,7 +229,7 @@ try {
   } finally {
     fs.rmSync(path.dirname(path.dirname(nestedMarker)), { recursive: true, force: true });
   }
-  passCount += 4;
+  passCount += 5;
 } catch (err) {
   failCount++;
   log(`✗ ensure_deps.js 加载失败: ${err.message}`, 'red');

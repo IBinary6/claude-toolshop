@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawnSync, spawn } = require('child_process');
 
 const isWindows = process.platform === 'win32';
@@ -21,11 +22,11 @@ function pluginDataDir() {
 /**
  * 标记文件绝对路径（用于“安装已失败、勿重试”）。
  * 安装目标在 PLUGIN_DATA，失败标记也应随之落 PLUGIN_DATA（持久、可写）；
- * PLUGIN_DATA 缺失时回退插件根，保持旧行为不崩。
+ * PLUGIN_DATA 缺失时回退系统临时目录，避免污染 marketplace 插件缓存导致更新失败。
  */
 function markerPath(name) {
   const dataDir = pluginDataDir();
-  return path.join(dataDir || PLUGIN_ROOT, name);
+  return path.join(dataDir || path.join(os.tmpdir(), 'cpp-style-enforcer'), name);
 }
 
 /** 安全检测：标记文件是否存在 */
@@ -35,7 +36,11 @@ function markerExists(p) {
 
 /** 安全写标记，失败静默 */
 function writeMarker(p) {
-  try { if (p) fs.writeFileSync(p, '1'); } catch (_) {}
+  try {
+    if (!p) return;
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, '1');
+  } catch (_) {}
 }
 
 /**

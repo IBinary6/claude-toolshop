@@ -203,11 +203,29 @@ const pluginRoot = path.join(__dirname, '..', '..', '..');
   }
 }
 
-// ---- markerPath: 返回插件目录下稳定路径 ----
+// ---- markerPath: 有 PLUGIN_DATA 时使用持久数据目录，缺失时绝不污染插件根 ----
 {
-  const p = markerPath('.iconv-install-failed');
-  assert.ok(path.isAbsolute(p), 'markerPath 返回绝对路径');
-  assert.ok(p.endsWith('.iconv-install-failed'), 'markerPath 保留文件名');
+  const oldData = process.env.CLAUDE_PLUGIN_DATA;
+  try {
+    delete process.env.CLAUDE_PLUGIN_DATA;
+    const fallback = markerPath('.iconv-install-failed');
+    assert.ok(path.isAbsolute(fallback), 'markerPath fallback 返回绝对路径');
+    assert.ok(fallback.endsWith('.iconv-install-failed'), 'markerPath fallback 保留文件名');
+    assert.ok(!path.resolve(fallback).startsWith(path.resolve(pluginRoot)),
+      '缺 CLAUDE_PLUGIN_DATA 时失败标记不得写进插件根，避免 marketplace update 工作树变脏');
+
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cse-plugin-data-'));
+    process.env.CLAUDE_PLUGIN_DATA = dataDir;
+    const dataMarker = markerPath('.clang-format-install-failed');
+    assert.strictEqual(path.dirname(dataMarker), dataDir, '有 CLAUDE_PLUGIN_DATA 时写入持久数据目录');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  } finally {
+    if (oldData === undefined) {
+      delete process.env.CLAUDE_PLUGIN_DATA;
+    } else {
+      process.env.CLAUDE_PLUGIN_DATA = oldData;
+    }
+  }
   console.log('ensure_deps: markerPath PASS');
 }
 

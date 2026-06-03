@@ -84,6 +84,7 @@ Schema：
 | `iconv-lite` | GBK 文件需要 | GBK→UTF-8 转码 | 缺失时 SessionStart 后台 `npm install`；装不上则 GBK 文件跳过 BOM（不转码、不损坏） |
 
 - **自举在 SessionStart 后台 detached 进程做**：不阻塞、不占 timeout、静默；安装失败写标记不重复重试。
+- **不污染插件缓存**：`iconv-lite` 安装到 `CLAUDE_PLUGIN_DATA`；失败标记优先写 `CLAUDE_PLUGIN_DATA`，缺失时写系统临时目录，不写 marketplace 插件根，避免 update 时因运行时文件导致工作树变脏。
 - **编辑期只检测不安装**：PostToolUse 流水线只检测可用性，不在编辑时同步安装（避免阻塞编辑）。
 - 任一依赖缺失（含安装失败）→ 对应步骤静默降级，不报错、不阻塞。
 

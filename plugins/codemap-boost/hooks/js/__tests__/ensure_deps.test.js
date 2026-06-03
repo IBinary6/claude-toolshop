@@ -37,7 +37,7 @@ function cleanup(p) { try { fs.unlinkSync(p); } catch (_) {} }
 
 // --- 模块契约 ---
 test('module requires & exports expected fns', () => {
-  for (const k of ['ensureCrg', 'ensureGraphify', 'ensureCli', 'probeCommand', 'pipInstall', 'markerPath', 'spawnPrewarm']) {
+  for (const k of ['ensureCrg', 'ensureGraphify', 'ensureCrgMcp', 'ensureCli', 'probeCommand', 'pipInstall', 'markerPath', 'spawnPrewarm']) {
     assert.strictEqual(typeof mod[k], 'function', `missing export: ${k}`);
   }
 });
@@ -109,6 +109,24 @@ test('ensureCrg: installs pip package "code-review-graph[all]"', () => {
     markerPath: tmpMarker('crg-pkg'),
   });
   assert.strictEqual(installedPkg, 'code-review-graph[all]');
+});
+
+// --- MCP 注册守卫：预热路径只检测，不自动写配置或失败标记 ---
+test('ensureCrgMcp: detection only, unregistered -> false without marker write', () => {
+  const marker = tmpMarker('mcp-no-write');
+  const r = mod.ensureCrgMcp({
+    isRegistered: () => false,
+    markerPath: marker,
+  });
+  assert.strictEqual(r, false);
+  assert.strictEqual(fs.existsSync(marker), false, 'MCP detection must not write marker/config files');
+});
+
+test('ensureCrgMcp: registered -> true', () => {
+  const r = mod.ensureCrgMcp({
+    isRegistered: () => true,
+  });
+  assert.strictEqual(r, true);
 });
 
 // --- probeCommand 对不存在命令安全降级 ---

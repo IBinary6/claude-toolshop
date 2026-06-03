@@ -56,19 +56,27 @@ npm install -g @colbymchenry/codegraph --no-audit --no-fund
 
 ### Step 5: 验证 CodeGraph MCP 注册
 
-执行：
+先检查 `~/.claude.json` 或 `~/.claude/settings.json` 中是否已有 `mcpServers.codegraph`。如果已存在，进入 Step 6。
+
+如果未注册，必须用 AskUserQuestion 询问用户：
+
+- 选项 A：「帮我注册」→ 执行：
 
 ```bash
 codegraph install --target=claude --yes
 ```
 
-该命令应幂等；成功后提示用户重启 Claude Code 以加载 MCP Server。
+成功后提示用户重启 Claude Code 以加载 MCP Server。
 
-如果失败，报告 stderr，并打印手动命令：
+- 选项 B：「打印命令，我自己注册」→ 打印：
 
 ```bash
 codegraph install --target=claude --yes
 ```
+
+告知注册后需重启 Claude Code，然后停下。
+
+如果执行失败，报告 stderr，并打印同一手动命令。
 
 ### Step 6: 验证 hook 文件语法
 

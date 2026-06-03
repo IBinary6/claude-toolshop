@@ -140,42 +140,23 @@ function ensureGraphify(opts) {
 }
 
 /**
- * 注册 code-review-graph MCP 服务器到 settings.json。
- * 幂等：已注册或曾失败过则跳过。失败写标记防重试。
+ * 检测 code-review-graph MCP 服务器是否已注册。
+ * 静默预热路径不得自动执行 `code-review-graph install`：该命令默认会按
+ * detected platforms 写入多套工具配置，容易污染项目工作树或覆盖用户已有配置。
+ * 显式注册请走 /codemap-boost-setup。
  * @param {object} [opts] 依赖注入（测试用）
- * @returns {boolean} 是否已注册（含本次注册成功和已存在）
+ * @returns {boolean} 是否已注册
  */
 function ensureCrgMcp(opts) {
   const o = opts || {};
-  const marker = o.markerPath || markerPath('.crg-mcp-register-failed');
-
-  // 已注册过（检查 settings.json）
-  try {
+  const isRegistered = o.isRegistered || (() => {
     const { isCrgMcpRegistered } = require('./utils');
-    if (isCrgMcpRegistered()) return true;
-  } catch (_) {}
+    return isCrgMcpRegistered();
+  });
 
-  // 曾失败过 → 不重试
-  if (markerExists(marker)) return false;
-
-  // 执行 code-review-graph install（自动写入 settings.json）
   try {
-    const r = spawnSync('code-review-graph', ['install'], {
-      stdio: 'ignore',
-      timeout: 30000,
-      windowsHide: isWindows,
-    });
-    if (!r.error && r.status === 0) {
-      // 验证是否真的写入了
-      try {
-        const { isCrgMcpRegistered } = require('./utils');
-        if (isCrgMcpRegistered()) return true;
-      } catch (_) {}
-    }
+    return !!isRegistered();
   } catch (_) {}
-
-  // 失败写标记
-  writeMarker(marker);
   return false;
 }
 

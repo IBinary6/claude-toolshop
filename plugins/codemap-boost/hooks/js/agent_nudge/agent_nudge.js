@@ -14,11 +14,7 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'SUBAGENT PROMPT MUST include CRG rules: ' +
-      '(1) First call mcp__code-review-graph__get_minimal_context_tool(detail_level="minimal"). ' +
-      '(2) Symbols/functions/classes/calls → semantic_search_nodes_tool or query_graph_tool. ' +
-      '(3) Grep only for plain-text/string/comment search. ' +
-      '(4) Max 3 CRG calls per task.'
+      'For code structure tasks, prefer code-review-graph MCP tools; use Grep only for plain-text/string/comment search.'
   }
 };
 

@@ -100,14 +100,14 @@ node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
 
 1. **方法 A（推荐）**：读取 `~/.claude/settings.json`，解析 JSON，检查 `mcpServers` 字段中是否有 `code-review-graph` 键。
 
-2. **方法 B（备选）**：执行 `code-review-graph install --dry-run`（如果该命令支持 dry-run 参数）。
+2. **方法 B（备选）**：执行 `code-review-graph install --dry-run --platform claude-code --no-skills --no-hooks --no-instructions`（如果该命令支持 dry-run 参数）。
 
 **结果判断**：
 
 - **已注册** → 继续 Step 7
 - **未注册** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我注册」→ 执行 `code-review-graph install`。成功继续 Step 7，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己注册」→ 打印 `code-review-graph install`，告知注册后需重启 Claude Code，停下。
+  - 选项 A：「帮我注册」→ 执行 `code-review-graph install --platform claude-code --no-skills --no-hooks --no-instructions --yes`。成功继续 Step 7，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己注册」→ 打印 `code-review-graph install --platform claude-code --no-skills --no-hooks --no-instructions --yes`，告知注册后需重启 Claude Code，停下。
 
 ### Step 7: 汇报结果
 
@@ -122,7 +122,6 @@ codemap-boost-setup 完成：
   ✓ hook 文件 node --check 通过（含 EnterWorktree 钩子）
 
 不会写入 CLAUDE.md / AGENTS.md；图谱使用建议仅通过 Grep/Agent 运行时短提示提供。
-CRG 工具建议每个任务最多 3 次，确需大规模重构评审时可放宽。
 后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
 ```
 

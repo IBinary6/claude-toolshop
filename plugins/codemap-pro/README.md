@@ -5,7 +5,7 @@
 ## 特性
 
 - ✅ **自动初始化** - SessionStart 检测并自动构建代码图谱
-- ✅ **自动安装** - 首次使用自动安装 `codegraph` CLI + MCP Server 配置
+- ✅ **自动安装** - 首次使用自动安装 `codegraph` CLI；MCP Server 通过 setup 显式注册
 - ✅ **增量更新** - CodeGraph 内置文件监听（2s 去抖）为主，PostToolUse 兜底 `sync`
 - ✅ **Worktree 支持** - 自动处理 worktree 环境
 - ✅ **Grep 软引导** - 运行时提示优先使用 CodeGraph MCP 工具，不写持久 MD 提示词
@@ -30,7 +30,8 @@
 1. 安装插件
 2. 启动 Claude Code 会话
 3. 等待后台自动安装（首次约 30s-60s）
-4. 如自动安装失败，运行 `/codemap-pro-setup` 做显式检测和修复
+4. 运行 `/codemap-pro-setup` 显式检测和注册 MCP
+5. 如自动安装失败，按 setup 提示修复
 
 ### 方式 2：手动预安装
 
@@ -38,7 +39,8 @@
 # 全局安装 codegraph
 npm install -g @colbymchenry/codegraph
 
-# 插件会自动配置 MCP Server
+# 显式配置 MCP Server
+codegraph install --target=claude --yes
 ```
 
 ## 使用
@@ -114,9 +116,8 @@ EnterWorktree
 
 1. **检测** - `ensure_deps.js` 检测 `codegraph` CLI
 2. **安装** - 缺失时 `npm install -g @colbymchenry/codegraph`
-3. **配置 MCP** - 自动执行 `codegraph install --target=claude --yes`
-4. **写入配置** - 自动写入 `~/.claude.json` 的 `mcpServers`
-5. **失败标记** - 安装失败写 `.codegraph-install-failed`，不重复尝试
+3. **MCP 注册** - 不在后台自动执行；运行 `/codemap-pro-setup` 后由用户确认
+4. **失败标记** - 安装失败写 `.codegraph-install-failed`，不重复尝试
 
 ### 锁机制
 

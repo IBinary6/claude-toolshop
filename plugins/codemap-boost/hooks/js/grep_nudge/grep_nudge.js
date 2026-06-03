@@ -51,12 +51,8 @@ function isPathInRepo(targetPath, repoRoot) {
 
 // CRG 推荐（路径在 repo 内）
 const CRG_CONTEXT =
-  'MUST use mcp__code-review-graph tools for symbol, function, class, call, and reference lookups — NOT Grep. ' +
-  'Grep is only for plain-text/string/comment search. ' +
-  'TOKEN RULES: Always call get_minimal_context_tool FIRST (~100 tokens). ' +
-  'Always pass detail_level="minimal" unless you specifically need full output. ' +
-  'Max 3 CRG calls per task. ' +
-  'CRG is indexed and authoritative for code structure.';
+  'Use code-review-graph MCP tools for code structure (symbols/functions/classes/calls/refs). ' +
+  'Use Grep only for plain-text/string/comment search.';
 
 // 降级推荐（路径在 repo 外）
 const EXTERNAL_CONTEXT =

@@ -14,10 +14,7 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'SUBAGENT PROMPT MUST include codegraph rules: ' +
-      '(1) Use mcp__codegraph tools first for all symbol/function/class/call/reference lookups. ' +
-      '(2) Grep only for plain-text/string/comment search. ' +
-      '(3) Max 3 codegraph calls per task.'
+      'For code structure tasks, prefer codegraph MCP tools; use Grep only for plain-text/string/comment search.'
   }
 };
 

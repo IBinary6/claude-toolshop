@@ -24,7 +24,7 @@ code-review-graph --version # 可选
 graphify --version          # 可选
 ```
 
-CRG / graphify 装哪个就启用哪个，**不装也不报错**——hook 内部 `commandExists` 静默降级。装上 Python + pip 后，SessionStart 会后台尝试 `pip install code-review-graph` / `pip install graphifyy` 自举缺失项；装不上则降级跳过，安装只尝试一次。
+CRG / graphify 装哪个就启用哪个，**不装也不报错**——hook 内部 `commandExists` 静默降级。装上 Python + pip 后，SessionStart 会后台尝试 `pip install code-review-graph` / `pip install graphifyy` 自举缺失项；装不上则降级跳过，安装只尝试一次。后台自举不会自动注册 MCP；如需 MCP 工具，请显式运行 `code-review-graph install --platform claude-code --no-skills --no-hooks --no-instructions --yes`。
 
 ---
 
