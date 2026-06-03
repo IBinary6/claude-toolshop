@@ -7,7 +7,7 @@
 //   - 命令已可用时 NOT 触发安装（避免对已装环境无谓 pip）。
 //   - 缺失时调用 pip 装、装后复检可用则返回 true（自举生效）。
 //   - 装失败写标记，二次调用读标记直接降级、NOT 重试（防重复装）。
-//   - ensureGraphify 用的 pip 包名必须是 graphifyy（双 y，最关键的 bug）。
+//   - ensureGraphify 用的 pip 包名必须是 graphifyy[all]（双 y + extras，最关键的 bug）。
 //   - probeCommand 对不存在命令安全返回 false 且不抛（降级不崩）。
 
 const assert = require('assert');
@@ -90,25 +90,25 @@ test('ensureCli: install fails -> writes marker -> 2nd call skips install', () =
 });
 
 // --- 包名 bug 守卫：graphify 命令 → graphifyy 包 ---
-test('ensureGraphify: installs pip package "graphifyy" (double y), not "graphify"', () => {
+test('ensureGraphify: installs pip package "graphifyy[all]" (double y), not "graphify"', () => {
   let installedPkg = null;
   mod.ensureGraphify({
     probe: () => false,
     install: (pkg) => { installedPkg = pkg; return false; }, // 装失败即可，只验包名
     markerPath: tmpMarker('graphify-pkg'),
   });
-  assert.strictEqual(installedPkg, 'graphifyy', 'graphify CLI must be installed via pip package "graphifyy"');
+  assert.strictEqual(installedPkg, 'graphifyy[all]', 'graphify CLI must be installed via pip package "graphifyy[all]"');
 });
 
-// --- 包名守卫：crg 命令与包名同名 ---
-test('ensureCrg: installs pip package "code-review-graph"', () => {
+// --- 包名守卫：crg 命令与 extras ---
+test('ensureCrg: installs pip package "code-review-graph[all]"', () => {
   let installedPkg = null;
   mod.ensureCrg({
     probe: () => false,
     install: (pkg) => { installedPkg = pkg; return false; },
     markerPath: tmpMarker('crg-pkg'),
   });
-  assert.strictEqual(installedPkg, 'code-review-graph');
+  assert.strictEqual(installedPkg, 'code-review-graph[all]');
 });
 
 // --- probeCommand 对不存在命令安全降级 ---

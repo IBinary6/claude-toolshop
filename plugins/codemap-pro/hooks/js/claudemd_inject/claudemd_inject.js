@@ -23,6 +23,12 @@ try {
 
 const target = path.join(os.homedir(), '.claude', 'CLAUDE.md');
 
+function ensureTargetDir() {
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+  } catch (_) {}
+}
+
 // 版本标记 - 用于幂等更新
 const SNIPPET_VERSION = 'codemap-pro-snippet-v1';
 const SECTION_START = '## 代码结构图触发规则 (CodeGraph)';
@@ -79,6 +85,7 @@ if (existing.includes(SECTION_START)) {
     : existing.length;
 
   try {
+    ensureTargetDir();
     fs.writeFileSync(
       target,
       existing.slice(0, prefixEnd) + SNIPPET + existing.slice(suffixStart),
@@ -91,6 +98,7 @@ if (existing.includes(SECTION_START)) {
 
 // 3. 全新 → 追加
 try {
+  ensureTargetDir();
   fs.appendFileSync(target, SNIPPET, 'utf-8');
 } catch (_) {}
 

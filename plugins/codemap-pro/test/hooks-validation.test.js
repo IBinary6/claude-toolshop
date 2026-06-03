@@ -206,7 +206,21 @@ try {
   const ensureDeps = require(path.join(pluginRoot, 'hooks/js/lib/ensure_deps.js'));
   assert(typeof ensureDeps.ensureCodegraph === 'function', 'ensureCodegraph 函数存在');
   assert(typeof ensureDeps.spawnPrewarm === 'function', 'spawnPrewarm 函数存在');
-  passCount += 2;
+  assert(typeof ensureDeps.writeMarker === 'function', 'writeMarker 函数存在');
+  const nestedMarker = path.join(
+    require('os').tmpdir(),
+    `codemap-pro-marker-${process.pid}`,
+    'nested',
+    '.codegraph-install-failed'
+  );
+  try {
+    fs.rmSync(path.dirname(path.dirname(nestedMarker)), { recursive: true, force: true });
+    ensureDeps.writeMarker(nestedMarker);
+    assert(fs.existsSync(nestedMarker), 'writeMarker 会自动创建父目录');
+  } finally {
+    fs.rmSync(path.dirname(path.dirname(nestedMarker)), { recursive: true, force: true });
+  }
+  passCount += 4;
 } catch (err) {
   failCount++;
   log(`✗ ensure_deps.js 加载失败: ${err.message}`, 'red');

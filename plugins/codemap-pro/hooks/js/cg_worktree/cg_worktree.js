@@ -27,6 +27,9 @@ const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
 
 // 前置门禁
 if (!commandExists('codegraph')) {
+  try {
+    require('../lib/ensure_deps').spawnPrewarm();
+  } catch (_) {}
   process.exit(0);
 }
 

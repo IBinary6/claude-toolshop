@@ -15,9 +15,14 @@ assert.strictEqual(tpl.copyrightInfo.company, '', 'company 缺省空串');
 assert.strictEqual(tpl.copyrightInfo.author, '', 'author 缺省空串');
 assert.strictEqual(tpl.copyrightInfo.dateFormat, 'YYYY/MM/DD HH:mm', 'dateFormat 缺省值');
 
-// plugin.json 版本必须为 0.3.2
+// plugin.json / package.json / marketplace.json 版本必须一致，避免发布口径漂移
 const pj = JSON.parse(fs.readFileSync(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf-8'));
-assert.strictEqual(pj.version, '0.3.2', '版本应升到 0.3.2');
+const pkg = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'package.json'), 'utf-8'));
+const market = JSON.parse(fs.readFileSync(path.join(pluginRoot, '..', '..', '.claude-plugin', 'marketplace.json'), 'utf-8'));
+const marketEntry = market.plugins.find((p) => p.name === 'cpp-style-enforcer');
+assert.ok(marketEntry, 'marketplace.json 应包含 cpp-style-enforcer');
+assert.strictEqual(pkg.version, pj.version, 'package.json 版本应与 plugin.json 一致');
+assert.strictEqual(marketEntry.version, pj.version, 'marketplace.json 版本应与 plugin.json 一致');
 
 // 目录骨架存在
 for (const d of ['hooks/js/lib', 'hooks/js/steps', 'hooks/js/__tests__']) {

@@ -1,6 +1,6 @@
 # bugdb-knowledge — 本地知识库插件
 
-> 版本 v0.1.3
+> 版本 v0.1.4
 
 基于 SQLite + FTS5 全文检索的 Claude Code 插件，为开发过程提供**持久化经验积累**。
 

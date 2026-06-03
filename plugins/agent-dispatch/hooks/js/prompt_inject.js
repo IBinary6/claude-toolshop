@@ -37,7 +37,7 @@ function main() {
 
   const message = [
     '⚠️ 上次工具调用被拦截。继续当前任务时请注意：',
-    '• 复杂操作使用 Agent({ description, prompt }) 派遣子代理',
+    '• 复杂操作使用 Agent({ description, prompt }) 委派子代理',
     '• 子代理修改文件后需在报告中列出路径，主 agent 据此重读保持缓存一致',
   ].join('\n');
 

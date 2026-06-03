@@ -178,3 +178,18 @@ def test_hook_missing_tool_response_field_silent(tmp_path):
     res = _run_hook({"tool_name": "Bash"}, tmp_path)
     assert res.returncode == 0
     assert res.stdout == ""
+
+
+def test_hook_config_timeouts_are_seconds():
+    """hooks.json 的 timeout 单位应为秒，避免误写毫秒导致 hook 卡死过久。"""
+    hooks_path = PLUGIN_DIR / "hooks" / "hooks.json"
+    data = json.loads(hooks_path.read_text(encoding="utf-8"))
+    timeouts = [
+        hook["timeout"]
+        for entries in data["hooks"].values()
+        for entry in entries
+        for hook in entry.get("hooks", [])
+        if "timeout" in hook
+    ]
+    assert timeouts
+    assert all(1 <= timeout <= 60 for timeout in timeouts)

@@ -42,6 +42,7 @@ function markerExists(p) {
 
 function writeMarker(p) {
   try {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, String(Date.now()), 'utf-8');
   } catch (_) {}
 }
@@ -169,15 +170,19 @@ function ensureCodegraph(opts) {
 function spawnPrewarm() {
   const { spawn } = require('child_process');
 
-  const child = spawn(process.execPath, [__filename, '--prewarm'], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: isWindows,
-    env: process.env
-  });
+  try {
+    const child = spawn(process.execPath, [__filename, '--prewarm'], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: isWindows,
+      env: process.env
+    });
 
-  child.unref();
-  return child;
+    child.unref();
+    return child;
+  } catch (_) {
+    return null;
+  }
 }
 
 // CLI 入口 - 仅在 --prewarm 模式执行

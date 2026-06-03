@@ -84,7 +84,7 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
     {
       "type": "command",
       "command": "node \"$HOME/.claude/hooks/js/bugdb_check/bugdb_check.js\"",
-      "timeout": 5000
+      "timeout": 5
     }
   ]
 }
@@ -102,7 +102,7 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
     {
       "type": "command",
       "command": "node \"$HOME/.claude/hooks/js/bugdb_check/bugdb_python_check.js\"",
-      "timeout": 5000
+      "timeout": 5
     }
   ]
 }

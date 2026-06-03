@@ -21,7 +21,8 @@ const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
 const cwdKey = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
 const buildLockFile = path.join(os.tmpdir(), `codegraph-build-${cwdKey}.lock`);
 const syncLockFile = path.join(os.tmpdir(), `codegraph-sync-${cwdKey}.lock`);
-const LOCK_STALE_MS = 10 * 60 * 1000;
+const SYNC_LOCK_STALE_MS = 10 * 60 * 1000;
+const BUILD_LOCK_STALE_MS = 4 * 60 * 60 * 1000;
 
 if (!commandExists('codegraph')) {
   try {
@@ -54,13 +55,14 @@ function isPidAlive(pid) {
  * 判断锁是否仍有效，陈旧锁会被自动清理。
  *
  * @param {string} file 锁文件路径。
+ * @param {number} staleMs 陈旧锁阈值。
  * @returns {boolean} 锁仍有效时返回 true。
  */
-function isLockActive(file) {
+function isLockActive(file, staleMs) {
   try {
     const pid = parseInt(fs.readFileSync(file, 'utf-8').trim(), 10) || 0;
     const st = fs.statSync(file);
-    if (Date.now() - st.mtimeMs > LOCK_STALE_MS || !isPidAlive(pid)) {
+    if (Date.now() - st.mtimeMs > staleMs || !isPidAlive(pid)) {
       try {
         fs.unlinkSync(file);
       } catch (_) {}
@@ -116,30 +118,36 @@ function startBackground(args, lockFile, logName) {
     }
   `;
 
-  const proc = spawn(process.execPath, ['-e', wrapperCode], {
-    cwd,
-    detached: true,
-    windowsHide: isWindows,
-    stdio: 'ignore',
-    env: process.env,
-  });
   try {
-    fs.writeFileSync(lockFile, String(proc.pid));
-  } catch (_) {}
-  proc.unref();
+    const proc = spawn(process.execPath, ['-e', wrapperCode], {
+      cwd,
+      detached: true,
+      windowsHide: isWindows,
+      stdio: 'ignore',
+      env: process.env,
+    });
+    try {
+      fs.writeFileSync(lockFile, String(proc.pid));
+    } catch (_) {}
+    proc.unref();
+  } catch (_) {
+    try {
+      fs.unlinkSync(lockFile);
+    } catch (_) {}
+  }
 }
 
 const dbFile = path.join(cwd, '.codegraph', 'codegraph.db');
 
 if (fs.existsSync(dbFile)) {
-  if (isLockActive(syncLockFile) || !tryAcquireLock(syncLockFile)) {
+  if (isLockActive(syncLockFile, SYNC_LOCK_STALE_MS) || !tryAcquireLock(syncLockFile)) {
     process.exit(0);
   }
   startBackground(['sync', cwd], syncLockFile, 'sync-posttool');
   process.exit(0);
 }
 
-if (isLockActive(buildLockFile) || !tryAcquireLock(buildLockFile)) {
+if (isLockActive(buildLockFile, BUILD_LOCK_STALE_MS) || !tryAcquireLock(buildLockFile)) {
   process.exit(0);
 }
 
