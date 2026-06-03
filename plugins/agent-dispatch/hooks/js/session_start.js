@@ -24,19 +24,29 @@ const { readStdinJson, log } = require('./lib/utils');
 const CURRENT_SCHEMA_VERSION = 2;
 const GLOBAL_DIR = path.join(os.homedir(), '.agent-dispatch');
 const GLOBAL_CONFIG_PATH = path.join(GLOBAL_DIR, 'config.json');
+const DEFAULT_OVERRIDES = {
+  tools_add: [],
+  tools_remove: [],
+  mcp_prefixes_add: [],
+  mcp_prefixes_remove: [],
+  mcp_block_exact_add: [],
+  mcp_block_exact_remove: [],
+  bash_heads_add: [],
+  bash_heads_remove: []
+};
 
 const GLOBAL_SKELETON = {
   schema_version: CURRENT_SCHEMA_VERSION,
   _doc: '全局 agent-dispatch 配置 — 对所有项目生效的默认覆盖',
   modules: {},
-  overrides: {}
+  overrides: DEFAULT_OVERRIDES
 };
 
 const PROJECT_SKELETON = {
   schema_version: CURRENT_SCHEMA_VERSION,
   _doc: '项目级配置。修改此文件覆盖全局设置，空 overrides = 继承全局。',
   modules: {},
-  overrides: {}
+  overrides: DEFAULT_OVERRIDES
 };
 
 // ─── 辅助函数 ───
@@ -162,6 +172,25 @@ function migrateLegacyConfig(gitRoot) {
   }
 }
 
+function ensureConfigShape(obj) {
+  let changed = false;
+  if (!obj.modules || typeof obj.modules !== 'object' || Array.isArray(obj.modules)) {
+    obj.modules = {};
+    changed = true;
+  }
+  if (!obj.overrides || typeof obj.overrides !== 'object' || Array.isArray(obj.overrides)) {
+    obj.overrides = {};
+    changed = true;
+  }
+  for (const key of Object.keys(DEFAULT_OVERRIDES)) {
+    if (!Array.isArray(obj.overrides[key])) {
+      obj.overrides[key] = [];
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 /**
  * Schema 版本检查 + 原地升级
  * 如果文件存在且 schema_version 缺失或过旧，添加/更新字段
@@ -171,8 +200,12 @@ function upgradeSchemaVersion(configPath) {
   const obj = safeReadJson(configPath);
   if (!obj) return;
 
+  let changed = ensureConfigShape(obj);
   if (!obj.schema_version || obj.schema_version < CURRENT_SCHEMA_VERSION) {
     obj.schema_version = CURRENT_SCHEMA_VERSION;
+    changed = true;
+  }
+  if (changed) {
     try {
       fs.writeFileSync(configPath, JSON.stringify(obj, null, 2), 'utf8');
       log(`[agent-dispatch] upgraded schema → v${CURRENT_SCHEMA_VERSION}: ${configPath}`);

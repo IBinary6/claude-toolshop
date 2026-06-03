@@ -30,6 +30,7 @@ Schema：
   "enabled": true,
   "mode": "incremental",
   "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
+  "legacyChecks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": true },
   "copyrightInfo": { "company": "", "author": "", "dateFormat": "YYYY/MM/DD HH:mm" }
 }
 ```
@@ -42,23 +43,24 @@ Schema：
 | `checks.copyright` | 版权头。`company` 为空 = 不写头，cpplint 同步屏蔽 `legal/copyright` |
 | `checks.cpplint` | cpplint 风格检查（违规拦截编辑 / 阻止提交） |
 | `checks.bom` | 补 UTF-8 BOM（CMake 项目自动跳过） |
+| `legacyChecks.*` | `incremental` 下老文件（已在 HEAD 中存在）使用的检查项，默认只开 `bom` |
 | `copyrightInfo.dateFormat` | 当前时间的**显示格式**（占位符 `YYYY/MM/DD/HH/mm`） |
 
-各 `checks` 缺失字段默认 `true`；配置损坏或缺失时回退硬编码安全默认，绝不崩。
+各 `checks` 缺失字段默认 `true`；各 `legacyChecks` 缺失时默认 `clangFormat/copyright/cpplint=false`、`bom=true`。配置损坏或缺失时回退硬编码安全默认，绝不崩。
 
-### 三档行为（新老判定 = git 是否跟踪）
+### 三档行为（新老判定 = 是否已在 HEAD 中存在）
 
 | 场景 | 行为 |
 |---|---|
 | 新项目 / `mode:full` | 所有文件全套：clang-format（**整文件全格，含 `#include` 排序**）+ 版权头 + cpplint + BOM |
-| 老项目新文件（`incremental` 且**未被 git 跟踪**） | 同样全套（整文件全格） |
-| 老项目老文件（`incremental` 且**已被 git 跟踪**） | **补 BOM + clang-format 仅格改动行**（内联 `SortIncludes:Never`，`#include` 永不被动排序）；**不版权 / 不 lint** |
+| 老项目新文件（`incremental` 且**未在 HEAD 中存在**，包含未跟踪或已 `git add` 但未提交的文件） | 同样全套（整文件全格） |
+| 老项目老文件（`incremental` 且**已在 HEAD 中存在**） | 默认**只补 UTF-8 BOM**（无 BOM 则补 BOM）；**不 format / 不版权 / 不 lint** |
 
 非 git 仓库下所有文件视为「新」（走全套，整文件格式化）。
 
 ### 要点
 
-- **clang-format 双模式**：走全套的文件**整文件格式化**（`-style=file -fallback-style=Google`，`#include` 正常排序）；老项目老文件**仅格 git 改动行**（`--lines` + 内联 `SortIncludes:Never`，include 永不被动排序）。
+- **clang-format 双模式**：走全套的文件**整文件格式化**（`-style=file -fallback-style=Google`，`#include` 正常排序）。老项目老文件默认不格式化；只有显式设置 `legacyChecks.clangFormat:true` 时，才仅格式化 git 改动行（`--lines` + 内联 `SortIncludes:Never`，include 永不被动排序）。
 - **自动生成 `.clang-format`**：走全套且项目根（git 根）缺 `.clang-format`（或 `_clang-format`）时，自动生成一份 `BasedOnStyle: Google`——让 **VS 2017+ / clangd / 本插件**三方读同一份配置，风格一致不打架。**已存在绝不覆盖，非 git 项目不生成**。老文件「不排 include」靠插件调用时内联 `SortIncludes:Never`，**不写进**项目 `.clang-format`，故不影响新文件 / VS 的正常排序。
 - **CMake 项目**（从文件向上找到 `CMakeLists.txt`）一律**不补 BOM**，其余检查照常。
 - **dateFormat** 是当前时间显示格式模板：必须含 `YYYY`+`MM`+`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。

@@ -32,6 +32,8 @@ description: 查看或配置 agent-dispatch：开关模块、调整白名单
 - **移除白名单工具**：`overrides.tools_remove: ["ToolName"]`
 - **添加安全 Bash 命令**：`overrides.bash_heads_add: ["cargo", "npm"]`
 - **添加 MCP 前缀**：`overrides.mcp_prefixes_add: ["mcp__my_custom_"]`
+- **移除 MCP 前缀**：`overrides.mcp_prefixes_remove: ["mcp__sequential-thinking"]`
+- **添加/移除 MCP 精确黑名单**：`overrides.mcp_block_exact_add` / `overrides.mcp_block_exact_remove`
 
 操作流程：
 1. 确定修改目标：全局配置（`~/.agent-dispatch/config.json`）还是项目配置（`<git_root>/.agent-dispatch/config.json`）
@@ -45,3 +47,4 @@ description: 查看或配置 agent-dispatch：开关模块、调整白名单
 - 项目配置目录 `.agent-dispatch/` 已自动加入 `.gitignore`（默认不提交）
 - 如需团队共享配置，从 `.gitignore` 中移除 `.agent-dispatch/` 即可
 - SessionStart hook 会自动引导目录结构，通常无需手动创建
+- 修改全局配置后无需改插件默认文件；hook 每次运行都会重新读取 `~/.agent-dispatch/config.json` 并按 add/remove 数组合并、去重和过滤

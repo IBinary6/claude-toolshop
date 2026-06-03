@@ -29,6 +29,19 @@ function loadGlobalConfig() {
   }
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function uniq(values) {
+  return Array.from(new Set(values));
+}
+
+function addRemove(existing, add, remove) {
+  const removed = new Set(asArray(remove));
+  return uniq([...asArray(existing), ...asArray(add)]).filter((item) => !removed.has(item));
+}
+
 /**
  * 查找项目级配置文件（向上遍历，最多 10 层）
  * 优先查找新路径 .agent-dispatch/config.json，回退查找旧路径 .agent-dispatch.json
@@ -67,33 +80,17 @@ function mergeConfig(defaults, overrides) {
   }
 
   const ov = overrides.overrides || {};
-  if (ov.tools_add && ov.tools_add.length) {
-    result.whitelist.tools.push(...ov.tools_add);
-  }
-  if (ov.tools_remove && ov.tools_remove.length) {
-    const rm = new Set(ov.tools_remove);
-    result.whitelist.tools = result.whitelist.tools.filter((t) => !rm.has(t));
-  }
-  if (ov.mcp_prefixes_add && ov.mcp_prefixes_add.length) {
-    result.whitelist.mcp_prefixes.push(...ov.mcp_prefixes_add);
-  }
+  result.whitelist.tools = addRemove(result.whitelist.tools, ov.tools_add, ov.tools_remove);
+  result.whitelist.mcp_prefixes = addRemove(result.whitelist.mcp_prefixes, ov.mcp_prefixes_add, ov.mcp_prefixes_remove);
   if (!result.whitelist.mcp_block_exact) {
     result.whitelist.mcp_block_exact = [];
   }
-  if (ov.mcp_block_exact_add && ov.mcp_block_exact_add.length) {
-    result.whitelist.mcp_block_exact.push(...ov.mcp_block_exact_add);
-  }
-  if (ov.mcp_block_exact_remove && ov.mcp_block_exact_remove.length) {
-    const rm = new Set(ov.mcp_block_exact_remove);
-    result.whitelist.mcp_block_exact = result.whitelist.mcp_block_exact.filter((t) => !rm.has(t));
-  }
-  if (ov.bash_heads_add && ov.bash_heads_add.length) {
-    result.whitelist.bash_safe_heads.push(...ov.bash_heads_add);
-  }
-  if (ov.bash_heads_remove && ov.bash_heads_remove.length) {
-    const rm = new Set(ov.bash_heads_remove);
-    result.whitelist.bash_safe_heads = result.whitelist.bash_safe_heads.filter((h) => !rm.has(h));
-  }
+  result.whitelist.mcp_block_exact = addRemove(
+    result.whitelist.mcp_block_exact,
+    ov.mcp_block_exact_add,
+    ov.mcp_block_exact_remove
+  );
+  result.whitelist.bash_safe_heads = addRemove(result.whitelist.bash_safe_heads, ov.bash_heads_add, ov.bash_heads_remove);
 
   return result;
 }

@@ -6,6 +6,7 @@
 
 | Hook 时机 | 脚本 | 作用 |
 |---|---|---|
+| SessionStart | `hooks/js/session_start.js` | 自动创建全局/项目配置骨架，并把项目 `.agent-dispatch/` 加入 `.gitignore` |
 | PreToolUse | `hooks/js/enforcer.js` | 白名单检查：非白名单工具 block，提示用 Agent tool 委派 |
 | UserPromptSubmit | `hooks/js/prompt_inject.js` | 可选：被 block 后的下一条 prompt 注入一次 dispatcher 角色指令（默认**开启**） |
 
@@ -69,6 +70,8 @@ Agent({ description: "...", prompt: "..." })
 | `mcp__plugin_context-mode_` | 沙盒执行器，本身节省上下文 |
 | `mcp__plugin_claude-mem_` | 记忆检索，已分层 |
 | `mcp__sequential-thinking` | 思考链，输出短 |
+| `mcp__code_review_graph__` / `mcp__code-review-graph__` | 代码图谱审查工具，主 agent 可直接查询上下文 |
+| `mcp__codegraph__` / `mcp__graphify__` | 绘图/图谱类工具，主 agent 可直接查询和更新 |
 
 ### 安全 Bash 命令（放行）
 
@@ -93,9 +96,16 @@ Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add
 
 安装后使用内置默认规则，无需任何配置文件。
 
-### 项目级覆盖（可选）
+SessionStart 会自动创建两层可编辑配置：
 
-在项目根目录创建 `.agent-dispatch.json`，只写想改的部分：
+| 层级 | 路径 | 作用 |
+|---|---|---|
+| 全局配置 | `~/.agent-dispatch/config.json` | 对所有项目生效，适合放个人常用白名单/黑名单 |
+| 项目配置 | `<git_root>/.agent-dispatch/config.json` | 覆盖全局配置，只对当前仓库生效 |
+
+项目配置目录 `.agent-dispatch/` 会在运行时自动加入当前仓库 `.gitignore`。默认不提交；如需团队共享，把 `.gitignore` 中的 `.agent-dispatch/` 删除即可。
+
+### 黑白名单过滤
 
 ```json
 {
@@ -107,6 +117,9 @@ Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add
     "tools_add": ["SomeCustomTool"],
     "tools_remove": ["WebSearch"],
     "mcp_prefixes_add": ["mcp__my_custom_"],
+    "mcp_prefixes_remove": ["mcp__sequential-thinking"],
+    "mcp_block_exact_add": ["mcp__my_custom__dangerous_write"],
+    "mcp_block_exact_remove": ["mcp__plugin_context-mode_context-mode__ctx_execute"],
     "bash_heads_add": ["cargo", "npm", "pnpm"],
     "bash_heads_remove": ["rm"]
   }
@@ -116,9 +129,14 @@ Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add
 合并逻辑：
 ```
 final_tools      = (默认 + tools_add) - tools_remove
-final_mcp        = 默认 + mcp_prefixes_add
+final_mcp        = (默认 + mcp_prefixes_add) - mcp_prefixes_remove
+final_mcp_block  = (默认 + mcp_block_exact_add) - mcp_block_exact_remove
 final_bash_heads = (默认 + bash_heads_add) - bash_heads_remove
 ```
+
+所有列表会去重。修改 `~/.agent-dispatch/config.json` 后，下次 hook 运行会重新读取并合并，不需要改插件内置 `defaults/dispatch-rules.json`。这样自动同步 JSON 配置时只需要写增删量过滤规则，而不是复制整份默认配置。
+
+旧版项目根 `.agent-dispatch.json` 仍兼容；SessionStart 会在新项目优先创建 `<git_root>/.agent-dispatch/config.json`。
 
 也可使用 `/agent-dispatch-setup` skill 交互式配置。
 
@@ -129,7 +147,7 @@ final_bash_heads = (默认 + bash_heads_add) - bash_heads_remove
 | enforcer | **开启** | PreToolUse 白名单拦截 |
 | prompt_inject | **开启** | UserPromptSubmit 注入 dispatcher 指令（被 block 后下一条 prompt 注入一次） |
 
-在 `.agent-dispatch.json` 中设置 `modules.enforcer: false` 可临时关闭拦截。
+在全局或项目 `config.json` 中设置 `modules.enforcer: false` 可临时关闭拦截。
 
 ## 从全局 subagent_enforce 迁移
 

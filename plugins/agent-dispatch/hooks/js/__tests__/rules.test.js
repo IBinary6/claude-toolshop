@@ -16,7 +16,7 @@ const {
   isSafeBashCommand,
 } = require('../lib/rules');
 
-const { loadDefaults } = require('../lib/config');
+const { loadDefaults, mergeConfig } = require('../lib/config');
 const config = loadDefaults();
 
 // --- isWhitelistedTool ---
@@ -145,5 +145,34 @@ assert.equal(isSafeBashCommand('safe && npm run build', config), false);
 assert.equal(isSafeBashCommand('', config), false);
 assert.equal(isSafeBashCommand(null, config), false);
 assert.equal(isSafeBashCommand(undefined, config), false);
+
+// --- mergeConfig override filter ---
+{
+  const merged = mergeConfig(config, {
+    modules: { prompt_inject: false },
+    overrides: {
+      tools_add: ['CustomTool', 'Read'],
+      tools_remove: ['WebSearch'],
+      mcp_prefixes_add: ['mcp__custom_', 'mcp__code_review_graph__'],
+      mcp_prefixes_remove: ['mcp__sequential-thinking'],
+      mcp_block_exact_add: ['mcp__custom__danger'],
+      mcp_block_exact_remove: ['mcp__plugin_context-mode_context-mode__ctx_execute'],
+      bash_heads_add: ['custom-cli', 'npm'],
+      bash_heads_remove: ['rm']
+    }
+  });
+  assert.equal(merged.modules.prompt_inject, false);
+  assert.equal(merged.whitelist.tools.includes('CustomTool'), true);
+  assert.equal(merged.whitelist.tools.includes('WebSearch'), false);
+  assert.equal(merged.whitelist.tools.filter((t) => t === 'Read').length, 1);
+  assert.equal(merged.whitelist.mcp_prefixes.includes('mcp__custom_'), true);
+  assert.equal(merged.whitelist.mcp_prefixes.includes('mcp__sequential-thinking'), false);
+  assert.equal(merged.whitelist.mcp_prefixes.filter((p) => p === 'mcp__code_review_graph__').length, 1);
+  assert.equal(merged.whitelist.mcp_block_exact.includes('mcp__custom__danger'), true);
+  assert.equal(merged.whitelist.mcp_block_exact.includes('mcp__plugin_context-mode_context-mode__ctx_execute'), false);
+  assert.equal(merged.whitelist.bash_safe_heads.includes('custom-cli'), true);
+  assert.equal(merged.whitelist.bash_safe_heads.includes('rm'), false);
+  assert.equal(merged.whitelist.bash_safe_heads.filter((h) => h === 'npm').length, 1);
+}
 
 console.log('✓ rules.test.js — all assertions passed');
