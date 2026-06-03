@@ -44,6 +44,9 @@ const SNIPPET = `
       if (e.code !== 'ENOENT') return;
     }
 
+    // codemap-pro 与 codemap-boost 互斥；若 CodeGraph 规则已存在，保持既有优先级。
+    if (existing.includes('codemap-pro-snippet')) return;
+
     // 已是最新版本 -> 不动
     if (existing.includes(SNIPPET_VERSION)) return;
 

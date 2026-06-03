@@ -76,6 +76,18 @@ function assertBlock(result, toolName) {
   const r = runHook({ tool_name: 'mcp__graphify__query', tool_input: {} });
   assertPass(r);
 }
+{
+  const r = runHook({ tool_name: 'mcp__code-review-graph__semantic_search_nodes_tool', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__codegraph__context', tool_input: {} });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__graphify__build', tool_input: {} });
+  assertPass(r);
+}
 
 // --- mcp_block_exact: 精确 deny 名单优先于前缀白名单 ---
 {
@@ -136,6 +148,10 @@ function assertBlock(result, toolName) {
 }
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'codegraph sync && graphify --version' } });
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'codegraph status && graphify --version' } });
   assertPass(r);
 }
 

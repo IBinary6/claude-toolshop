@@ -6,7 +6,7 @@
 
 - ✅ **自动初始化** - SessionStart 检测并自动构建代码图谱
 - ✅ **自动安装** - 首次使用自动安装 `codegraph` CLI + MCP Server 配置
-- ✅ **增量更新** - 依赖 CodeGraph 内置文件监听（2s 去抖）
+- ✅ **增量更新** - CodeGraph 内置文件监听（2s 去抖）为主，PostToolUse 兜底 `sync`
 - ✅ **Worktree 支持** - 自动处理 worktree 环境
 - ✅ **Grep 软引导** - 提示优先使用 CodeGraph MCP 工具
 - ✅ **互斥检测** - 与 codemap-boost 互斥，防冲突
@@ -30,6 +30,7 @@
 1. 安装插件
 2. 启动 Claude Code 会话
 3. 等待后台自动安装（首次约 30s-60s）
+4. 如自动安装失败，运行 `/codemap-pro-setup` 做显式检测和修复
 
 ### 方式 2：手动预安装
 
@@ -46,6 +47,8 @@ npm install -g @colbymchenry/codegraph
 1. 检测 `.codegraph/codegraph.db` 是否存在
 2. 不存在 → 后台构建图谱（`codegraph init -i`）
 3. 存在 → 依赖 MCP Server 的 auto-sync 增量更新
+
+编辑文件或运行 Bash 后，`cg_sync` 会做兜底同步：已有 `.codegraph/codegraph.db` 时后台 `codegraph sync`，缺失时后台 `codegraph init -i`。
 
 ### 可用的 MCP 工具
 
@@ -100,6 +103,11 @@ PreToolUse:Grep
 └── grep_nudge.js
     └── 注入 additionalContext（软引导，不阻塞）
 
+PostToolUse:Edit|Write|Bash
+└── cg_sync.js (async)
+    ├── .codegraph/codegraph.db 存在 → 后台 sync
+    └── 不存在 → 后台 init -i
+
 EnterWorktree
 └── cg_worktree.js (async)
     ├── 检测 .codegraph/codegraph.db
@@ -133,6 +141,8 @@ EnterWorktree
 
 构建日志位于 `.codegraph/logs/`:
 - `init-<timestamp>.log` - 初始化日志
+- `init-posttool-<timestamp>.log` - 编辑后兜底初始化日志
+- `sync-posttool-<timestamp>.log` - 编辑后兜底同步日志
 - `init-worktree-<timestamp>.log` - Worktree 初始化日志
 - `sync-worktree-<timestamp>.log` - Worktree 同步日志
 
@@ -269,8 +279,8 @@ rm -rf <project-root>/.codegraph/
 
 ## 常见问题
 
-**Q：为什么没有 PostToolUse hook？**
-A：CodeGraph MCP Server 内置文件监听（2s 去抖），自动增量同步。PostToolUse 主动 sync 会产生写竞争。
+**Q：为什么还有 PostToolUse hook？**
+A：CodeGraph MCP Server 内置文件监听（2s 去抖）是主路径；PostToolUse 只做兜底同步，并通过锁避免频繁重复任务。
 
 **Q：如何确认图谱是否构建成功？**
 A：检查 `.codegraph/codegraph.db` 文件是否存在，或运行 `codegraph status`。

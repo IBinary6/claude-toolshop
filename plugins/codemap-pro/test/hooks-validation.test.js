@@ -110,13 +110,15 @@ validateTimeout(hooksConfig.hooks.PostToolUse, 'PostToolUse');
 // Test 5: 验证 async 语义
 log('\nTest 5: async 参数验证', 'yellow');
 const asyncHooks = [
-  { event: 'SessionStart', index: 1, name: 'cg_init.js' }
+  { event: 'SessionStart', entryIndex: 0, hookIndex: 1, name: 'cg_init.js' },
+  { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_sync.js' },
+  { event: 'PostToolUse', entryIndex: 1, hookIndex: 0, name: 'cg_worktree.js' }
 ];
 
 for (const item of asyncHooks) {
   const hooks = hooksConfig.hooks[item.event];
-  if (hooks && hooks[0] && hooks[0].hooks && hooks[0].hooks[item.index]) {
-    const hook = hooks[0].hooks[item.index];
+  if (hooks && hooks[item.entryIndex] && hooks[item.entryIndex].hooks && hooks[item.entryIndex].hooks[item.hookIndex]) {
+    const hook = hooks[item.entryIndex].hooks[item.hookIndex];
     if (hook.async === true) {
       passCount++;
       log(`✓ ${item.name} 正确设置 async=true`, 'green');
@@ -130,10 +132,12 @@ for (const item of asyncHooks) {
 // Test 6: 验证所有 hook 脚本文件存在
 log('\nTest 6: Hook 脚本文件存在性验证', 'yellow');
 const expectedFiles = [
+  'commands/codemap-pro-setup.md',
   'hooks/js/lib/utils.js',
   'hooks/js/lib/ensure_deps.js',
   'hooks/js/claudemd_inject/claudemd_inject.js',
   'hooks/js/cg_init/cg_init.js',
+  'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_worktree/cg_worktree.js',
   'hooks/js/grep_nudge/grep_nudge.js'
 ];
@@ -213,7 +217,9 @@ log('\nTest 10: Hook 脚本语法检查', 'yellow');
 const scriptsToTest = [
   'hooks/js/claudemd_inject/claudemd_inject.js',
   'hooks/js/cg_init/cg_init.js',
+  'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_worktree/cg_worktree.js',
+  'hooks/js/cg_gitignore/cg_gitignore.js',
   'hooks/js/grep_nudge/grep_nudge.js'
 ];
 

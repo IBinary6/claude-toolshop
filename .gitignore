@@ -67,6 +67,7 @@ logs/
 .claude/todos/
 .claude-cpp-style
 # CRG generated output
+.codegraph/
 .code-review-graph/
 .cloudreviewgraph/
 graphify-out/
