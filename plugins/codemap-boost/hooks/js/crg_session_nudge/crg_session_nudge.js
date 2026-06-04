@@ -18,7 +18,8 @@ const payload = {
       '- mcp__code-review-graph__semantic_search_nodes_tool（符号语义搜索）\n' +
       '- mcp__code-review-graph__query_graph_tool（callers/callees/imports）\n' +
       '- mcp__code-review-graph__get_review_context_tool（改动影响面）\n' +
-      '仅在 CRG 未命中或纯文本搜索时降级到 Grep。\n' +
+      '仅在 CRG 未命中时降级：先用 mcp__serena__* 语义搜索（find_symbol/find_declaration），' +
+      '纯文本/字符串/注释搜索才降级到 Grep。\n' +
       'Token 优化规则（必须遵守）：\n' +
       '1. 首次调用必须是 get_minimal_context_tool（~100 tokens，返回图谱概览）\n' +
       '2. 所有支持 detail_level 的工具默认传 detail_level="minimal"\n' +

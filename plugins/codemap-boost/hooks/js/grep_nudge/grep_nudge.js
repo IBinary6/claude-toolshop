@@ -55,6 +55,7 @@ const CRG_CONTEXT =
   'prefer code-review-graph MCP tools — they are faster and more token-efficient than Grep. ' +
   'Start with mcp__code-review-graph__get_minimal_context_tool, ' +
   'then semantic_search_nodes_tool or query_graph_tool. ' +
+  'If CRG returns no results, fall back to mcp__serena__find_symbol / find_declaration (semantic). ' +
   'Use Grep ONLY for plain-text / string / comment content search.';
 
 // 降级推荐（路径在 repo 外）

@@ -20,7 +20,7 @@ const payload = {
       '- Symbol/function/class: mcp__code-review-graph__semantic_search_nodes_tool\n' +
       '- Callers/callees/imports: mcp__code-review-graph__query_graph_tool\n' +
       '- Change impact: mcp__code-review-graph__detect_changes_tool or get_impact_radius_tool\n' +
-      'Grep = plain-text/string/comment ONLY. ' +
+      'Fallback order when CRG has no result: mcp__serena__find_symbol (semantic) → Grep (plain-text only). ' +
       'ctx_batch_execute/ctx_execute = large command output (build logs, git logs) ONLY.'
   }
 };
