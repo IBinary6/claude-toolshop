@@ -111,22 +111,48 @@ test('ensureCrg: installs pip package "code-review-graph[all]"', () => {
   assert.strictEqual(installedPkg, 'code-review-graph[all]');
 });
 
-// --- MCP 注册守卫：预热路径只检测，不自动写配置或失败标记 ---
-test('ensureCrgMcp: detection only, unregistered -> false without marker write', () => {
-  const marker = tmpMarker('mcp-no-write');
+// --- MCP 自动注册：未注册时执行 install，成功后复检 ---
+test('ensureCrgMcp: unregistered -> register -> recheck ok -> true', () => {
+  const marker = tmpMarker('mcp-register-ok');
+  let registered = false;
+  let registerCalls = 0;
   const r = mod.ensureCrgMcp({
-    isRegistered: () => false,
+    isRegistered: () => registered,
+    register: () => { registerCalls++; registered = true; return true; },
     markerPath: marker,
   });
-  assert.strictEqual(r, false);
-  assert.strictEqual(fs.existsSync(marker), false, 'MCP detection must not write marker/config files');
+  assert.strictEqual(r, true);
+  assert.strictEqual(registerCalls, 1, 'MCP register must run when server is missing');
+  assert.strictEqual(fs.existsSync(marker), false, 'successful MCP registration must not write failure marker');
 });
 
-test('ensureCrgMcp: registered -> true', () => {
+test('ensureCrgMcp: registered -> true, register NOT called', () => {
+  let registerCalls = 0;
   const r = mod.ensureCrgMcp({
     isRegistered: () => true,
+    register: () => { registerCalls++; return true; },
   });
   assert.strictEqual(r, true);
+  assert.strictEqual(registerCalls, 0, 'register must not run when MCP is already registered');
+});
+
+test('ensureCrgMcp: register fails -> writes marker -> 2nd call skips register', () => {
+  const marker = tmpMarker('mcp-register-fail');
+  let registerCalls = 0;
+  const opts = {
+    isRegistered: () => false,
+    register: () => { registerCalls++; return false; },
+    markerPath: marker,
+  };
+  const r1 = mod.ensureCrgMcp(opts);
+  assert.strictEqual(r1, false);
+  assert.strictEqual(registerCalls, 1);
+  assert.ok(fs.existsSync(marker), 'failure marker should be written');
+
+  const r2 = mod.ensureCrgMcp(opts);
+  assert.strictEqual(r2, false);
+  assert.strictEqual(registerCalls, 1, 'marker must prevent repeated MCP registration attempts');
+  cleanup(marker);
 });
 
 // --- probeCommand 对不存在命令安全降级 ---

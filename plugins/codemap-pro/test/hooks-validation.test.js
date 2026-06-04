@@ -215,7 +215,7 @@ try {
     probe: () => true,
     setupMcp: () => { setupMcpCalls++; return true; }
   });
-  assert(setupMcpCalls === 0, 'ensureCodegraph 静默路径不自动配置 MCP');
+  assert(setupMcpCalls === 1, 'ensureCodegraph 静默路径会自动配置 MCP');
   const nestedMarker = path.join(
     require('os').tmpdir(),
     `codemap-pro-marker-${process.pid}`,

@@ -5,7 +5,7 @@
  * 职责:
  * 1. 检测 codegraph CLI 可用性
  * 2. 不可用 → 自动 npm install -g @colbymchenry/codegraph
- * 3. MCP 配置只在 /codemap-pro-setup 中经用户确认后执行
+ * 3. 安装成功 → 自动配置 MCP (codegraph install --target=claude --yes)
  * 4. 失败 → 写标记防重试
  *
  * 参考: codemap-boost/hooks/js/lib/ensure_deps.js (pip 自举模式)
@@ -82,8 +82,7 @@ function npmInstallGlobal(pkg) {
 }
 
 /**
- * 配置 MCP Server - codegraph install --target=claude --yes。
- * 注意：静默预热路径不调用本函数，避免覆盖用户已有 MCP/env 配置。
+ * 配置 MCP Server - codegraph install --target=claude --yes
  */
 function configureMcp() {
   try {
@@ -108,9 +107,10 @@ function ensureCodegraph(opts) {
   const o = opts || {};
   const probe = o.probe || probeCommand;
   const install = o.install || npmInstallGlobal;
+  const setupMcp = o.setupMcp || configureMcp;
   const marker = o.markerPath || markerPath('.codegraph-install-failed');
 
-  // 1. 已可用 → 不在静默路径自动配置 MCP
+  // 1. 已可用 → 确保 MCP 已配置
   let ok = false;
   try {
     ok = !!probe('codegraph');
@@ -119,6 +119,10 @@ function ensureCodegraph(opts) {
   }
 
   if (ok) {
+    // 尝试配置 MCP（幂等，已配置会跳过）
+    try {
+      setupMcp();
+    } catch (_) {}
     return true;
   }
 
@@ -144,6 +148,10 @@ function ensureCodegraph(opts) {
     }
 
     if (ok) {
+      // 配置 MCP
+      try {
+        setupMcp();
+      } catch (_) {}
       return true;
     }
   }
