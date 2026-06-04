@@ -86,6 +86,7 @@ const dbFile = path.join(cwd, '.codegraph', 'codegraph.db');
 if (fs.existsSync(dbFile)) {
   // DB 已存在 → 跳过初始化
   // MCP Server 的 auto-sync (2s 去抖) 会处理增量更新
+  process.stdout.write('🗺️ [CodeGraph] 图谱就绪，自动增量更新已激活\n');
   process.exit(0);
 }
 

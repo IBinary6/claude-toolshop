@@ -51,7 +51,11 @@ function isPathInRepo(targetPath, repoRoot) {
 
 // CodeGraph 推荐（路径在 repo 内）
 const CG_CONTEXT =
-  'Use mcp__codegraph for code structure (symbols/calls/refs). Grep only for text/comments.';
+  'WAIT: For code structure search (symbols, functions, classes, callers, refs), ' +
+  'prefer codegraph MCP tools — they are faster and more token-efficient than Grep. ' +
+  'Use the available mcp__codegraph__* tools for structural lookup. ' +
+  'If codegraph returns no results, fall back to mcp__serena__find_symbol / find_declaration (semantic). ' +
+  'Use Grep ONLY for plain-text / string / comment content search.';
 
 // 降级推荐（路径在 repo 外）
 const EXTERNAL_CONTEXT =
