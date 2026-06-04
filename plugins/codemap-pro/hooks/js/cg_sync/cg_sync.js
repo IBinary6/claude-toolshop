@@ -25,9 +25,6 @@ const SYNC_LOCK_STALE_MS = 10 * 60 * 1000;
 const BUILD_LOCK_STALE_MS = 4 * 60 * 60 * 1000;
 
 if (!commandExists('codegraph')) {
-  try {
-    require('../lib/ensure_deps').spawnPrewarm();
-  } catch (_) {}
   process.exit(0);
 }
 

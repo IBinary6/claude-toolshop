@@ -5,10 +5,11 @@
 // 覆盖意图（规则 9：测试编码行为为何重要）：
 //   - 模块可 require 且导出齐全（坏掉则各 hook 自举入口直接崩）。
 //   - 命令已可用时 NOT 触发安装（避免对已装环境无谓 pip）。
-//   - 缺失时调用 pip 装、装后复检可用则返回 true（自举生效）。
+//   - 显式 setup helper 缺失时调用 pip 装、装后复检可用则返回 true。
 //   - 装失败写标记，二次调用读标记直接降级、NOT 重试（防重复装）。
 //   - ensureGraphify 用的 pip 包名必须是 graphifyy[all]（双 y + extras，最关键的 bug）。
 //   - probeCommand 对不存在命令安全返回 false 且不抛（降级不崩）。
+//   - spawnPrewarm 保持 no-op，防止 hook 后台自动安装依赖。
 
 const assert = require('assert');
 const os = require('os');
@@ -111,7 +112,7 @@ test('ensureCrg: installs pip package "code-review-graph[all]"', () => {
   assert.strictEqual(installedPkg, 'code-review-graph[all]');
 });
 
-// --- MCP 自动注册：未注册时执行 install，成功后复检 ---
+// --- MCP 显式注册 helper：未注册时执行 install，成功后复检 ---
 test('ensureCrgMcp: unregistered -> register -> recheck ok -> true', () => {
   const marker = tmpMarker('mcp-register-ok');
   let registered = false;
@@ -159,6 +160,10 @@ test('ensureCrgMcp: register fails -> writes marker -> 2nd call skips register',
 test('probeCommand: nonexistent command -> false, no throw', () => {
   const r = mod.probeCommand('definitely-not-a-real-cmd-xyz-123');
   assert.strictEqual(r, false);
+});
+
+test('spawnPrewarm: deprecated no-op, does not start background installer', () => {
+  assert.strictEqual(mod.spawnPrewarm(), null);
 });
 
 console.log(`\nensure_deps: ${pass} passed${process.exitCode ? ' (with failures)' : ''}`);

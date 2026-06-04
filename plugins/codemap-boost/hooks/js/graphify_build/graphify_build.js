@@ -43,7 +43,7 @@ logLine(`cwd=${cwd} CLAUDE_WORKING_DIRECTORY=${process.env.CLAUDE_WORKING_DIRECT
 // 1) 静默退出条件: 非 git 仓库 / graphify 未安装
 if (!isGitRepo(cwd)) { process.exit(0); }
 if (!commandExists('graphify')) {
-  logLine('graphify 不在 PATH, 跳过 (pip install graphifyy)');
+  logLine('graphify 不在 PATH, 跳过 (pip install "graphifyy[all]")');
   process.exit(0);
 }
 

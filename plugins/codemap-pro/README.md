@@ -5,7 +5,7 @@
 ## 特性
 
 - ✅ **自动初始化** - SessionStart 检测并自动构建代码图谱
-- ✅ **自动安装** - 首次使用自动安装 `codegraph` CLI + MCP Server 配置
+- ✅ **显式 setup** - 首次使用前安装 `codegraph` CLI + MCP Server 配置
 - ✅ **增量更新** - CodeGraph 内置文件监听（2s 去抖）为主，PostToolUse 兜底 `sync`
 - ✅ **Worktree 支持** - 自动处理 worktree 环境
 - ✅ **Grep 软引导** - 运行时提示优先使用 CodeGraph MCP 工具，不写持久 MD 提示词
@@ -24,13 +24,13 @@
 
 ## 安装
 
-### 方式 1：自动安装（推荐）
+### 方式 1：setup 安装（推荐）
 
-插件会自动检测 `codegraph` CLI，缺失时自动安装：
+插件不会在 hook 中自动安装 `codegraph` CLI。首次使用前运行 setup：
 1. 安装插件
-2. 启动 Claude Code 会话
-3. 等待后台自动安装和 MCP 注册（首次约 30s-60s）
-4. 如自动安装失败，运行 `/codemap-pro-setup` 做显式检测和修复
+2. 运行 `/codemap-pro-setup`
+3. 按提示安装 `codegraph` CLI 并注册 MCP
+4. 重启 Claude Code，让 MCP Server 和 hook 元数据刷新
 
 ### 方式 2：手动预安装
 
@@ -38,7 +38,7 @@
 # 全局安装 codegraph
 npm install -g @colbymchenry/codegraph
 
-# 插件也会自动配置 MCP Server；手动预装时可先执行
+# 手动预装时也需要显式配置 MCP Server
 codegraph install --target=claude --yes
 ```
 
@@ -111,13 +111,13 @@ EnterWorktree
     └── 存在 → 后台 sync
 ```
 
-### 自动化安装流程
+### setup 安装流程
 
 1. **检测** - `ensure_deps.js` 检测 `codegraph` CLI
-2. **安装** - 缺失时 `npm install -g @colbymchenry/codegraph`
-3. **配置 MCP** - 自动执行 `codegraph install --target=claude --yes`
-4. **写入配置** - 自动写入 `~/.claude.json` 的 `mcpServers`
-5. **失败标记** - 安装失败写 `.codegraph-install-failed`，不重复尝试
+2. **安装** - setup 中经用户确认后执行 `npm install -g @colbymchenry/codegraph`
+3. **配置 MCP** - setup 中执行 `codegraph install --target=claude --yes`
+4. **写入配置** - CodeGraph CLI 写入 `~/.claude.json` 的 `mcpServers`
+5. **后续运行** - CLI 已在 PATH 后，hook 自动 init/sync，不再重复 setup
 
 ### 锁机制
 
@@ -144,7 +144,7 @@ EnterWorktree
 
 ## 故障排除
 
-### codegraph 安装失败
+### codegraph 未安装或 PATH 未刷新
 
 **症状**：SessionStart 无反应，`.codegraph/` 目录不存在
 
@@ -157,10 +157,6 @@ npm install -g @colbymchenry/codegraph
 codegraph install --target=claude --yes
 
 # 删除失败标记
-rm ~/.claude/plugins/data/*/codegraph-install-failed
-# 或
-rm /tmp/codegraph-install-failed
-
 # 重启 Claude Code
 ```
 
@@ -280,8 +276,8 @@ A：CodeGraph MCP Server 内置文件监听（2s 去抖）是主路径；PostToo
 **Q：如何确认图谱是否构建成功？**
 A：检查 `.codegraph/codegraph.db` 文件是否存在，或运行 `codegraph status`。
 
-**Q：为什么自动安装需要这么久？**
-A：首次安装需要下载依赖（约 20-30MB），并编译 tree-sitter 解析器。
+**Q：为什么 setup 安装需要这么久？**
+A：首次安装需要下载依赖（约 20-30MB），并编译 tree-sitter 解析器。安装完成后后续会话不需要重复 setup。
 
 **Q：支持 monorepo 吗？**
 A：支持。每个子项目独立初始化图谱。
@@ -297,8 +293,8 @@ A：支持。每个子项目独立初始化图谱。
 ### 测试
 
 ```bash
-# 测试依赖检测
-node hooks/js/lib/ensure_deps.js --prewarm
+# 测试依赖检测 helper
+node -e "console.log(require('./hooks/js/lib/ensure_deps').ensureCodegraph())"
 
 # 测试初始化
 node hooks/js/cg_init/cg_init.js

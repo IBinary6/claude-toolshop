@@ -11,20 +11,20 @@
 | 依赖 | 最低版本 | 必需 | 用途 |
 |------|---------|------|------|
 | Node.js | 18+ | **是** | hook 运行时 |
-| Python | 3.10+ | 推荐 | pip 自举缺失 CLI；CRG / graphify 本身依赖 Python |
+| Python | 3.10+ | 推荐 | 显式 setup 安装缺失 CLI；CRG / graphify 本身依赖 Python |
 | code-review-graph CLI | — | 可选但推荐 | CRG 图谱构建/更新 |
-| graphify CLI | — | 可选但推荐 | graphify 图谱构建（pip 包名 `graphifyy`，提供 `graphify` 命令） |
+| graphify CLI | — | 可选但推荐 | graphify 图谱构建（pip 包名 `graphifyy[all]`，提供 `graphify` 命令） |
 
 验证：
 
 ```bash
 node --version              # >= v18
-python --version            # >= 3.10（pip 自举需要）
+python --version            # >= 3.10（显式 setup 安装依赖需要）
 code-review-graph --version # 可选
 graphify --version          # 可选
 ```
 
-CRG / graphify 装哪个就启用哪个，**不装也不报错**——hook 内部 `commandExists` 静默降级。装上 Python + pip 后，SessionStart 会后台尝试 `pip install code-review-graph` / `pip install graphifyy` 自举缺失项；装不上则降级跳过，安装只尝试一次。`code-review-graph` CLI 可用后会自动执行 `code-review-graph install` 注册 MCP；如自动注册失败，可手动运行同一命令。
+CRG / graphify 装哪个就启用哪个，**不装也不报错**——hook 内部 `commandExists` 静默降级。hook 不会自动执行 `pip install`，也不会自动注册 MCP；请通过 `/codemap-boost-setup` 或手动命令安装依赖并执行 `code-review-graph install`。依赖装进 PATH 后，SessionStart / PostToolUse 会自动 build/update 图谱。
 
 ---
 
@@ -149,7 +149,7 @@ node --check "$HOME/.claude/hooks/js/grep_nudge/grep_nudge.js"
 # 2. lib 模块可加载
 node -e "console.log(typeof require('$HOME/.claude/hooks/js/lib/utils').commandExists)"
 # 预期输出: function
-node -e "console.log(typeof require('$HOME/.claude/hooks/js/lib/ensure_deps').spawnPrewarm)"
+node -e "console.log(typeof require('$HOME/.claude/hooks/js/lib/ensure_deps').ensureGraphify)"
 # 预期输出: function
 ```
 

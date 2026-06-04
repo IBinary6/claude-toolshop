@@ -1,6 +1,6 @@
-# /codemap-boost-setup — 前置依赖检测 + 可选自动安装
+# /codemap-boost-setup — 前置依赖检测 + 显式安装
 
-**可选命令**。codemap-boost 装好后会在 SessionStart 后台预热图谱依赖并自动维护图谱，不再向 `CLAUDE.md` / `AGENTS.md` 注入持久提示词。
+**建议首次使用前执行**。codemap-boost 的 hook 不会自动安装依赖；本命令用于显式检测、安装 `code-review-graph` / `graphifyy[all]`，并注册 MCP。依赖装进 PATH 后，SessionStart / PostToolUse 会自动维护图谱，不需要每次启动 Claude Code 都重新 setup。
 
 它做两件事：**检测前置依赖是否齐全**；缺失时**询问你是否让我直接帮你装**（pip 包可自动装，需管理员的只打印命令）。
 
@@ -74,8 +74,8 @@ graphify --version
 
 - **存在** → 继续 Step 6
 - **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 执行 `python -m pip install graphifyy`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 4 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 6，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install graphifyy`，告知装完重开 Claude Code，停下。
+  - 选项 A：「帮我装」→ 执行 `python -m pip install "graphifyy[all]"`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 4 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 6，失败报告 stderr 并停下。
+  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install "graphifyy[all]"`，告知装完重开 Claude Code，停下。
 
 ### Step 6: 验证 hook 文件可被 Node 解析
 

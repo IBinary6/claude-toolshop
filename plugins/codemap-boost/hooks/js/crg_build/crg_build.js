@@ -33,11 +33,6 @@ function logLine(msg) {
 
 logLine(`cwd=${cwd} CLAUDE_WORKING_DIRECTORY=${process.env.CLAUDE_WORKING_DIRECTORY || '(unset)'}`);
 
-// SessionStart 负责顺手预热依赖；失败不影响图谱初始化。
-try {
-  require('../lib/ensure_deps').spawnPrewarm();
-} catch (_) {}
-
 // CRG CLI 不在 PATH -> 静默退出
 if (!commandExists('code-review-graph')) {
   logLine('code-review-graph 不在 PATH, 跳过');

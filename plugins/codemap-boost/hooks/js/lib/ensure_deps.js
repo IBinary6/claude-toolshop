@@ -1,21 +1,21 @@
 'use strict';
-// ABOUTME: codemap-boost 依赖自举 — 缺 code-review-graph / graphify 时 pip 自动装。
-// ABOUTME: 两者都是 pip CLI（装到用户级 python 环境，无 node_modules 问题）。
+// ABOUTME: codemap-boost 显式 setup 依赖 helper。
+// ABOUTME: hook 不自动安装依赖；缺 CLI 时静默跳过，setup 经用户确认后安装。
 //
 // 设计要点（参考 cpp-style-enforcer 的 ensure_deps）：
 //   - 检测命令是否可用（commandExists 或 `<cmd> --version` 试跑）。
 //   - 缺失且未失败过 → `python -m pip install <pkg>`（python 回退 python3）。
 //   - 包名：code-review-graph → pip 包 `code-review-graph`；
 //           graphify 命令     → pip 包 `graphifyy`（注意双 y）。
-//   - 失败写标记防重复装（落 PLUGIN_DATA，缺失回退 os.tmpdir）。
+//   - 失败写标记防重复装（落 CLAUDE_PLUGIN_DATA，缺失回退 os.tmpdir）。
 //   - python 缺失则无法 pip → 跳过返回 false（前置之一就是 python ≥3.10）。
 //   - 全程不抛，失败安全降级返回 false。
-//   - 安装时机：SessionStart 后台 detached 预热（spawnPrewarm），不阻塞、不超时。
+//   - 安装时机：仅限 /codemap-boost-setup 显式流程，不从 hook 后台触发。
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync, spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 
 const isWindows = process.platform === 'win32';
 
@@ -180,24 +180,15 @@ function ensureCrgMcp(opts) {
 }
 
 /**
- * 后台 detached 预热子进程：跑本模块 CLI（--prewarm 分支）执行两个 ensure。
- * 立即返回不阻塞调用方；子进程 unref 后独立存活；输出全部丢弃保持静默。
- * spawn 失败不抛，返回 null。
- * @returns {import('child_process').ChildProcess|null}
+ * 兼容旧调用的 no-op。
+ *
+ * 旧版本会从 SessionStart 后台安装依赖；现在依赖安装必须由
+ * /codemap-boost-setup 显式触发，因此这里固定返回 null。
+ *
+ * @returns {null}
  */
 function spawnPrewarm() {
-  try {
-    const child = spawn(process.execPath, [__filename, '--prewarm'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: isWindows,
-      env: process.env,
-    });
-    child.unref();
-    return child;
-  } catch (_) {
-    return null;
-  }
+  return null;
 }
 
 module.exports = {
@@ -211,10 +202,7 @@ module.exports = {
   spawnPrewarm,
 };
 
-// CLI: 后台预热入口。仅做安装/检测，绝不输出。
+// CLI: 兼容旧 --prewarm 入口。现在不做自动安装。
 if (require.main === module && process.argv.includes('--prewarm')) {
-  try { ensureCrg(); } catch (_) {}
-  try { ensureGraphify(); } catch (_) {}
-  try { ensureCrgMcp(); } catch (_) {}
   process.exit(0);
 }

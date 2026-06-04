@@ -3,7 +3,7 @@
  * codemap-pro SessionStart 钩子 - 智能初始化
  *
  * 职责:
- * 1. 检测 codegraph CLI 可用性 → 不可用则后台预热安装
+ * 1. 检测 codegraph CLI 可用性 → 不可用则静默跳过
  * 2. 检测 .codegraph/codegraph.db 存在性
  *    - 不存在 → 后台 `codegraph init -i` (detached + lock)
  *    - 存在 → 跳过（MCP auto-sync 会处理增量更新）
@@ -28,10 +28,7 @@ const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
 
 // 前置门禁
 if (!commandExists('codegraph')) {
-  // CLI 不可用 → 触发后台预热安装
-  try {
-    require('../lib/ensure_deps').spawnPrewarm();
-  } catch (_) {}
+  // CLI 不可用 → 等用户运行 /codemap-pro-setup 显式安装。
   process.exit(0);
 }
 
