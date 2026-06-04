@@ -14,7 +14,14 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'For code structure tasks, prefer code-review-graph MCP tools; use Grep only for plain-text/string/comment search.'
+      'MANDATORY for this subagent: Use code-review-graph MCP tools for code structure — ' +
+      'do NOT use Grep or ctx_batch_execute for symbol/structural lookup:\n' +
+      '- Start: mcp__code-review-graph__get_minimal_context_tool (~100 tokens)\n' +
+      '- Symbol/function/class: mcp__code-review-graph__semantic_search_nodes_tool\n' +
+      '- Callers/callees/imports: mcp__code-review-graph__query_graph_tool\n' +
+      '- Change impact: mcp__code-review-graph__detect_changes_tool or get_impact_radius_tool\n' +
+      'Grep = plain-text/string/comment ONLY. ' +
+      'ctx_batch_execute/ctx_execute = large command output (build logs, git logs) ONLY.'
   }
 };
 

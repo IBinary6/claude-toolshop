@@ -90,6 +90,7 @@ function isGraphValid() {
 
 // 图谱目录存在且有效 -> 不动
 if (fs.existsSync(graphDir) && isGraphValid()) {
+  process.stdout.write('🗺️ [CRG] 图谱就绪，自动增量更新已激活\n');
   process.exit(0);
 }
 
