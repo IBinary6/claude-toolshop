@@ -18,7 +18,7 @@
     {
       "name": "codemap-boost",
       "source": "./plugins/codemap-boost",
-      "version": "0.2.12",
+      "version": "0.2.13",
       "description": "自动维护 code-review-graph / graphify 代码结构图：setup 显式安装依赖与注册 MCP，SessionStart 智能初始化、PostToolUse 增量更新、EnterWorktree 图谱重建/增量更新、PreToolUse:Grep/Agent 运行时提示优先用图谱搜索，不写持久 MD 提示词。所有 hook 在依赖工具缺失时静默降级。"
     },
     {
@@ -36,7 +36,7 @@
     {
       "name": "codemap-pro",
       "source": "./plugins/codemap-pro",
-      "version": "0.1.11",
+      "version": "0.1.12",
       "description": "CodeGraph 代码图谱增强：setup 显式安装 CLI + 注册 MCP，tree-sitter AST 精准解析 20+ 语言，SessionStart 自动构建，PostToolUse 兜底同步，Grep/Agent 运行时引导优先用图谱，Worktree 独立索引，自动写入 .gitignore，不写持久 MD 提示词。比文本搜索快 10 倍，零网络依赖。"
     }
   ]
