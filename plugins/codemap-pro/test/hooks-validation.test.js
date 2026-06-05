@@ -135,7 +135,6 @@ const expectedFiles = [
   'commands/codemap-pro-setup.md',
   'hooks/js/lib/utils.js',
   'hooks/js/lib/ensure_deps.js',
-  'hooks/js/claudemd_inject/claudemd_inject.js',
   'hooks/js/cg_init/cg_init.js',
   'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_worktree/cg_worktree.js',
@@ -239,7 +238,6 @@ try {
 // Test 10: 测试 hook 脚本可以独立运行（语法检查）
 log('\nTest 10: Hook 脚本语法检查', 'yellow');
 const scriptsToTest = [
-  'hooks/js/claudemd_inject/claudemd_inject.js',
   'hooks/js/cg_init/cg_init.js',
   'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_worktree/cg_worktree.js',

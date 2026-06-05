@@ -51,16 +51,16 @@ function isPathInRepo(targetPath, repoRoot) {
 
 // CodeGraph 推荐（路径在 repo 内）
 const CG_CONTEXT =
-  'WAIT: For code structure search (symbols, functions, classes, callers, refs), ' +
-  'prefer codegraph MCP tools — they are faster and more token-efficient than Grep. ' +
-  'Use the available mcp__codegraph__* tools for structural lookup. ' +
-  'If codegraph returns no results, fall back to mcp__serena__find_symbol / find_declaration (semantic). ' +
-  'Use Grep ONLY for plain-text / string / comment content search.';
+  'For code structure search, use codegraph MCP tools instead of Grep:\n' +
+  '  mcp__codegraph__* symbol search → file_path + line\n' +
+  '  mcp__codegraph__* call chain    → callers/callees/imports\n' +
+  'When codegraph misses: mcp__serena__find_symbol / find_declaration → semantic\n' +
+  'Grep: plain text / strings / comments only.';
 
 // 降级推荐（路径在 repo 外）
 const EXTERNAL_CONTEXT =
-  'Target path is OUTSIDE the current repository — codegraph cannot help here. ' +
-  'For cross-repo symbol/structure lookups, prefer mcp__serena tools (find_symbol, find_declaration, get_symbols_overview). ' +
+  'Target path is OUTSIDE the repository — codegraph cannot help here. ' +
+  'Use mcp__serena tools (find_symbol, find_declaration) for cross-repo symbol lookup. ' +
   'Grep is acceptable for plain-text search in external paths.';
 
 async function main() {

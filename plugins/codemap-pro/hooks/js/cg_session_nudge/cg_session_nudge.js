@@ -15,14 +15,14 @@ const payload = {
     hookEventName: 'SessionStart',
     additionalContext:
       '本仓库已安装 codegraph 代码图谱（tree-sitter AST，20+ 语言）。\n' +
-      '搜索优先级：codegraph → ctx/serena → Grep（用第一个够用的，跳过后面的）\n\n' +
-      'codegraph — 结构定位，最省 token：\n' +
-      '  mcp__codegraph__*           → 符号搜索（file_path + 行号）、调用链、引用\n' +
-      '  得到行号后：Read(offset=行号, limit=N) 精准读，不整文件读\n\n' +
-      'ctx/serena — codegraph 未命中或需内容分析时：\n' +
-      '  ctx_execute_file            → 大文件统计分析\n' +
-      '  serena find_symbol          → 语义 / 跨文件理解\n\n' +
-      'Grep — 纯文本 / 字符串字面量 / 注释搜索'
+      '搜索优先级：codegraph → serena → ctx → Grep（够用即止）\n\n' +
+      'codegraph — AST 结构定位，最省 token：\n' +
+      '  mcp__codegraph__* 符号搜索 → file_path + 行号；再 Read(offset=行号, limit=N)\n' +
+      '  mcp__codegraph__* 调用链   → callers/callees/imports\n\n' +
+      'serena — LSP 语义（codegraph 未命中）：mcp__serena__find_symbol / find_declaration / find_implementations\n' +
+      'ctx_execute_file — 大文件分析沙箱（原始数据不进上下文）\n' +
+      'ctx_search — 搜 session 记忆 / 已索引内容\n' +
+      'Grep — 纯文本 / 字符串 / 注释（最后手段）'
   }
 };
 

@@ -14,13 +14,14 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'Search priority: codegraph → ctx/serena → Grep (use the first that fits, skip the rest)\n\n' +
-      'codegraph — structure & location (most token-efficient):\n' +
-      '  mcp__codegraph__*  → symbol search (file_path + line); then Read(offset=line, limit=N)\n\n' +
-      'ctx/serena — when codegraph misses or content analysis needed:\n' +
-      '  ctx_execute_file   → large file stats/analysis\n' +
-      '  serena find_symbol → semantic/cross-file understanding\n\n' +
-      'Grep — plain text / strings / comments only'
+      'Search priority: codegraph → serena → ctx → Grep\n\n' +
+      'codegraph (AST structure, cheapest):\n' +
+      '  mcp__codegraph__* symbol search → file_path + line; Read(offset=line, limit=N)\n' +
+      '  mcp__codegraph__* call chain    → callers/callees/imports\n\n' +
+      'serena (LSP semantic, when codegraph misses): find_symbol / find_declaration / find_implementations\n' +
+      'ctx_execute_file → large file analysis (raw data stays out of context)\n' +
+      'ctx_search → session memory / indexed content\n' +
+      'Grep → plain text / strings / comments only'
   }
 };
 
