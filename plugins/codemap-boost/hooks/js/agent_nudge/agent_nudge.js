@@ -14,14 +14,16 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'MANDATORY for this subagent: Use code-review-graph MCP tools for code structure — ' +
-      'do NOT use Grep or ctx_batch_execute for symbol/structural lookup:\n' +
-      '- Start: mcp__code-review-graph__get_minimal_context_tool (~100 tokens)\n' +
-      '- Symbol/function/class: mcp__code-review-graph__semantic_search_nodes_tool\n' +
-      '- Callers/callees/imports: mcp__code-review-graph__query_graph_tool\n' +
-      '- Change impact: mcp__code-review-graph__detect_changes_tool or get_impact_radius_tool\n' +
-      'Fallback order when CRG has no result: mcp__serena__find_symbol (semantic) → Grep (plain-text only). ' +
-      'ctx_batch_execute/ctx_execute = large command output (build logs, git logs) ONLY.'
+      'Code navigation guidance for this subagent:\n\n' +
+      'CRG tools (code-review-graph) — use for structure, not content:\n' +
+      '- get_minimal_context_tool → graph overview, call first (~100 tokens)\n' +
+      '- semantic_search_nodes_tool → returns file_path + line_start + line_end + signature\n' +
+      '- query_graph_tool → callers / callees / imports (returns file_path)\n' +
+      '- get_review_context_tool → change impact + test gaps (~90% token savings vs reading files)\n' +
+      'After getting line numbers: use Read(offset=line_start, limit=N) — targeted read, not full file\n\n' +
+      'When CRG has no result → serena find_symbol / find_declaration (semantic)\n' +
+      'When searching text/strings/comments → Grep\n' +
+      'ctx_batch_execute/ctx_execute → large command output only (build logs, git logs)'
   }
 };
 

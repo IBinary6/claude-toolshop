@@ -14,15 +14,16 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'SessionStart',
     additionalContext:
-      '本仓库已安装 codegraph 代码图谱（tree-sitter AST，20+ 语言）。代码搜索任务优先使用图谱工具（更省 token、更精准）：\n' +
-      '- 使用 mcp__codegraph__* 工具进行符号搜索、调用链查询、引用分析\n' +
-      '- codegraph 基于 AST 精准解析，比文本搜索快 10 倍\n' +
-      '仅在 codegraph 未命中时降级：先用 mcp__serena__* 语义搜索（find_symbol/find_declaration），' +
-      '纯文本/字符串/注释搜索才降级到 Grep。\n' +
-      'Token 优化规则（必须遵守）：\n' +
-      '1. 代码结构搜索先用 codegraph MCP 工具，不要直接 Grep\n' +
-      '2. ctx_batch_execute/ctx_execute 用于处理大体积命令输出（build log/git log/大 JSON），' +
-      '代码结构搜索用图谱而非 ctx 工具。'
+      '本仓库已安装 codegraph 代码图谱（tree-sitter AST，20+ 语言）。\n\n' +
+      '【用图谱定位符号和关系】\n' +
+      '- mcp__codegraph__* → 符号搜索（文件路径 + 行号）、调用链、引用分析\n' +
+      '- 得到位置后：Read(offset=行号, limit=N) 精准读目标代码，不要整文件读\n\n' +
+      '【codegraph 不覆盖的场景 → 降级】\n' +
+      '- serena find_symbol / find_declaration → 语义理解、接口定义\n' +
+      '- Grep → 纯文本 / 字符串字面量 / 注释内容搜索\n' +
+      '- ctx_execute_file → 大文件统计分析（不是代码结构搜索）\n\n' +
+      '搜索优先级：codegraph 定位 → serena 语义 → Grep 纯文本\n' +
+      'ctx_batch_execute/ctx_execute 仅用于大体积命令输出（build log / git log / 大 JSON）'
   }
 };
 

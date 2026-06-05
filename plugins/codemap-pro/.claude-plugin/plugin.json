@@ -1,6 +1,6 @@
 {
   "name": "codemap-pro",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "CodeGraph 代码图谱增强：setup 显式安装 CLI + 注册 MCP，tree-sitter AST 精准解析 20+ 语言，SessionStart 自动构建，PostToolUse 兜底同步，Grep/Agent 运行时引导优先用图谱，Worktree 独立索引，自动写入 .gitignore，不写持久 MD 提示词。比文本搜索快 10 倍，零网络依赖。",
   "author": {
     "name": "IBinary6"

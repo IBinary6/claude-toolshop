@@ -33,9 +33,17 @@ function logLine(msg) {
 
 logLine(`cwd=${cwd} CLAUDE_WORKING_DIRECTORY=${process.env.CLAUDE_WORKING_DIRECTORY || '(unset)'}`);
 
-// CRG CLI 不在 PATH -> 静默退出
+// CRG CLI 不在 PATH -> 提示用户安装，然后退出
 if (!commandExists('code-review-graph')) {
   logLine('code-review-graph 不在 PATH, 跳过');
+  try {
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: '⚠️ [codemap-boost] code-review-graph CLI 未安装，图谱自动更新不可用。请运行 /codemap-boost-setup 完成安装。'
+      }
+    }) + '\n');
+  } catch (e) {}
   process.exit(0);
 }
 

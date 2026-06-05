@@ -14,12 +14,13 @@ const payload = {
   hookSpecificOutput: {
     hookEventName: 'PreToolUse',
     additionalContext:
-      'MANDATORY for this subagent: Use codegraph MCP tools for code structure — ' +
-      'do NOT use Grep or ctx_batch_execute for symbol/structural lookup:\n' +
-      '- Use available mcp__codegraph__* tools for symbol search, callers, callees, and references\n' +
-      '- codegraph uses tree-sitter AST, supports 20+ languages, faster than text search\n' +
-      'Fallback order when codegraph has no result: mcp__serena__find_symbol (semantic) → Grep (plain-text only). ' +
-      'ctx_batch_execute/ctx_execute = large command output (build logs, git logs) ONLY.'
+      'Code navigation guidance for this subagent:\n\n' +
+      'codegraph tools (tree-sitter AST, 20+ languages) — use for structure, not content:\n' +
+      '- mcp__codegraph__* → symbol search (file + line), callers, callees, references\n' +
+      'After getting line numbers: use Read(offset=line, limit=N) — targeted read, not full file\n\n' +
+      'When codegraph has no result → serena find_symbol / find_declaration (semantic)\n' +
+      'When searching text/strings/comments → Grep\n' +
+      'ctx_batch_execute/ctx_execute → large command output only (build logs, git logs)'
   }
 };
 
