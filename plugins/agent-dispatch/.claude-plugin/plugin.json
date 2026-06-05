@@ -1,6 +1,6 @@
 {
   "name": "agent-dispatch",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "智能调度：白名单制强制主 agent 委派工作给子代理，保护上下文窗口",
   "author": {
     "name": "IBinary6"

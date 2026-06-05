@@ -36,7 +36,7 @@ function assertBlock(result, toolName) {
   assert.notEqual(result.stdout, '', 'expected block JSON output');
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.decision, 'block');
-  assert.ok(parsed.reason.includes('BLOCKED'), `reason should mention BLOCKED: ${parsed.reason}`);
+  assert.ok(parsed.reason.includes('拦截'), `reason should mention 拦截: ${parsed.reason}`);
   if (toolName) {
     assert.ok(parsed.reason.includes(toolName), `reason should mention ${toolName}: ${parsed.reason}`);
   }
@@ -210,12 +210,12 @@ function assertBlock(result, toolName) {
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'unknown-tool --version' } });
   const parsed = JSON.parse(r.stdout);
-  assert.ok(parsed.reason.includes('🈲BLOCKED'), 'block 消息应包含 🈲BLOCKED 标识');
+  assert.ok(parsed.reason.includes('⛔🔒 拦截'), 'block 消息应包含 ⛔🔒 拦截 标识');
   assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
   assert.ok(parsed.reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
   assert.ok(parsed.reason.split('\n').length <= 3, 'block 消息应不超过 3 行（精简版）');
   // 防缓存失效：必须提示子代理改文件后回传被改文件路径，主 agent 才能重读保持一致
-  assert.ok(/被改文件|修改.*文件.*路径|文件.*路径/.test(parsed.reason),
+  assert.ok(/列出路径|修改.*文件.*路径|文件.*路径/.test(parsed.reason),
     'block 消息应提示子代理回传被修改的文件路径（防主 agent 缓存失效）');
 }
 
