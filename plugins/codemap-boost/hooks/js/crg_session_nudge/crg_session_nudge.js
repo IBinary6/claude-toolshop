@@ -4,7 +4,21 @@
 
 'use strict';
 
-const { commandExists } = require('../lib/utils');
+const fs = require('fs');
+const path = require('path');
+const { commandExists, isGitRepo } = require('../lib/utils');
+
+const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+
+// 非 git 仓库 → 清理残留目录后静默退出
+if (!isGitRepo(cwd)) {
+  const residualDirs = ['.code-review-graph', 'graphify-out'];
+  for (const d of residualDirs) {
+    const full = path.join(cwd, d);
+    try { fs.rmSync(full, { recursive: true, force: true }); } catch (_) {}
+  }
+  process.exit(0);
+}
 
 if (!commandExists('code-review-graph')) {
   process.exit(0);

@@ -74,6 +74,7 @@ function tryAcquireBuildLock() {
 }
 
 function startBackgroundInit() {
+  if (!isGitRepo(cwd)) { return; }
   if (!tryAcquireBuildLock()) {
     logLine('build lock 被抢, 跳过');
     return;
