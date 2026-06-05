@@ -1,6 +1,6 @@
 {
   "name": "cpp-style-enforcer",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "C++ 代码风格强制（Google C++ Style）：legacyChecks 控制老文件行为（默认只补 BOM），新文件/新项目走全套；版权头去掉 (c) 并加文件相对路径行。各检查项可独立开关，版权信息可配置。",
   "author": { "name": "IBinary6" },
   "homepage": "https://github.com/IBinary6/claude-toolshop/tree/main/plugins/cpp-style-enforcer",

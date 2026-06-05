@@ -103,8 +103,33 @@ copyrightInfo (object)
 `;
 
 /**
+ * 把 .claude-cpp-style/ 追加到项目根 .gitignore（幂等：已有则不重复写）。
+ * 文件不存在时新建；写失败静默吞掉。
+ * @param {string} root git 仓库根
+ */
+function ensureGitignore(root) {
+  try {
+    const gitignorePath = path.join(root, '.gitignore');
+    const entry = '.claude-cpp-style/';
+    let existing = '';
+    try {
+      existing = fs.readFileSync(gitignorePath, 'utf-8');
+    } catch (_) {
+      // 文件不存在，existing 保持空字符串，后续直接写入
+    }
+    // 已包含 .claude-cpp-style 或 .claude-cpp-style/ → 不重复写
+    if (/^\.claude-cpp-style\/?$/m.test(existing)) return;
+    const suffix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+    fs.appendFileSync(gitignorePath, `${suffix}${entry}\n`, 'utf-8');
+  } catch (_) {
+    // 写失败不影响主流程
+  }
+}
+
+/**
  * 走全套流程且项目根缺少 .claude-cpp-style/cpp-style.json 时，从全局模板拷一份到项目根。
  * 同时生成 README.txt 说明各字段用途（已存在不覆盖）。
+ * 同时确保 .gitignore 包含 .claude-cpp-style/（不依赖外部 gitignore_guard）。
  *
  * - root 为 null（非 git）→ 不生成（无可靠项目根概念）。
  * - root/.claude-cpp-style/cpp-style.json 已存在 → 绝不覆盖，直接返回。
@@ -148,6 +173,9 @@ function ensureProjectConfig(root, templatePath = userTemplatePath()) {
   } catch (_) {
     // 生成失败不影响主流程
   }
+
+  // 自持：确保 .gitignore 包含 .claude-cpp-style/，不依赖外部 hook
+  ensureGitignore(root);
 }
 
 module.exports = { ensureProjectConfig };

@@ -13,6 +13,25 @@ const MARK_DATE = '// Date';
 /** 文件名行白名单：// 开头后跟相对路径（含目录斜线或纯文件名带 C/C++ 后缀） */
 const FILENAME_LINE = /^\/\/ \S+\.(?:c|cc|cpp|cxx|h|hpp|hxx)\s*$/i;
 
+/**
+ * 宽松扫描文件前 maxLines 行，检测是否存在任何版权/许可证内容。
+ * 不限注释风格（// /* # 等），覆盖外来格式版权头。
+ * 用于防止在非标准版权头上方叠加我们的标准头。
+ *
+ * @param {string[]} lines
+ * @param {number} [maxLines=25]
+ * @returns {boolean}
+ */
+function hasAnyCopyrightContent(lines, maxLines = 25) {
+  // 匹配常见版权/许可证关键词，不区分大小写
+  const re = /copyright|licence|license|spdx|©|\(c\)\s*\d/i;
+  const limit = Math.min(lines.length, maxLines);
+  for (let i = 0; i < limit; i++) {
+    if (re.test(lines[i])) return true;
+  }
+  return false;
+}
+
 function validateDateFormat(fmt) {
   if (typeof fmt !== 'string') return DEFAULT_DATE_FORMAT;
   if (fmt.includes('YYYY') && fmt.includes('MM') && fmt.includes('DD')) return fmt;
@@ -101,8 +120,7 @@ function parseHeaderBlock(lines) {
 
 /**
  * 字段级幂等版权头写入，最小化 git 变动：
- *   - Copyright / Author / 文件路径行：已有则保留原文，缺失才补充
- *   - Date：缺失则写入；已有今日日期则跳过；已有但非今日则更新
+ *   - Copyright / Author / Date / 文件路径行：已有则保留原文，缺失才补充，绝不覆盖。
  *   - 重复语义行去重、头内夹注释保留，重建后与原文全等则不写盘。
  *
  * @param {string} filePath
@@ -130,20 +148,16 @@ function applyCopyright(filePath, copyrightInfo, root) {
   const { copyright: existCopy, author: existAuthor, date: existDate,
     relPathLine: existRelPath, bodyStart, extraComments } = parseHeaderBlock(lines);
 
-  // 计算 Date 是否为今日
-  let dateIsToday = false;
-  if (existDate) {
-    const m = existDate.match(buildDateRegex(fmt));
-    dateIsToday = !!(m && m.groups &&
-      m.groups.Y === String(now.getFullYear()) &&
-      m.groups.M === String(now.getMonth() + 1).padStart(2, '0') &&
-      m.groups.D === String(now.getDate()).padStart(2, '0'));
-  }
+  // 外来格式版权头保护：文件前 25 行检测到版权关键词但没有我们的标准 // Copyright 行
+  // → 格式千变万化（/* */、(c)、SPDX 等），直接跳过，原文不动，防止双头叠加。
+  if (!existCopy && hasAnyCopyrightContent(lines)) return false;
 
-  // 计算各字段最终值（已有 → 保留；缺失 → 用新值；Date 非今日 → 更新）
+  // Copyright：已有则保留（年份/公司不覆盖），缺失才补充
+  // Author：配置了就用配置值（替换原来别人的），未配置则保留原文
+  // Date：一旦写入永不刷新（保留文件首次创建时间）
   const copyLine = existCopy || `${MARK_COPYRIGHT} ${now.getFullYear()} ${company}`;
-  const authorLine = existAuthor || (author ? `${MARK_AUTHOR} ${author}` : null);
-  const dateLine = (existDate && dateIsToday) ? existDate : `${MARK_DATE} ${dateStr}`;
+  const authorLine = author ? `${MARK_AUTHOR} ${author}` : existAuthor;
+  const dateLine = existDate || `${MARK_DATE} ${dateStr}`;
   const relLine = relPathTarget || (root ? existRelPath : null);
 
   const newHdrLines = [
@@ -171,4 +185,4 @@ function applyCopyright(filePath, copyrightInfo, root) {
   }
 }
 
-module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex, parseHeaderBlock };
+module.exports = { applyCopyright, formatDate, validateDateFormat, buildDateRegex, parseHeaderBlock, hasAnyCopyrightContent };

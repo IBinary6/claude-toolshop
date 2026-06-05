@@ -2,7 +2,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { applyCopyright } = require('../steps/copyright.js');
+const { applyCopyright, hasAnyCopyrightContent } = require('../steps/copyright.js');
 
 const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'copyright-'));
@@ -47,7 +47,7 @@ try {
   const t5 = fs.readFileSync(f5, 'utf-8');
   assert.ok(/Date \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/.test(t5), 'dateFormat 缺 YMD 回退默认格式');
 
-  // 同日去重：第二次（即使分钟不同）不刷新 —— 模拟已有今日头
+  // 已有 Date（任意日期）→ 一律不刷新，原文保留
   const today = new Date();
   const yyyy = String(today.getFullYear());
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -56,34 +56,32 @@ try {
   const f6 = write('f.cpp', Buffer.from(existing, 'utf-8'));
   const before6 = fs.readFileSync(f6);
   applyCopyright(f6, info());
-  assert.ok(fs.readFileSync(f6).equals(before6), '同日（分钟不同）→ 不刷新整次跳过');
+  assert.ok(fs.readFileSync(f6).equals(before6), '已有 Date → 不触碰，文件不变');
 
-  // 跨天 → 更新
+  // 跨天日期 → 仍保留原日期，不更新为今天
   const existingOld = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n\nint g;\n`;
   const f7 = write('g.cpp', Buffer.from(existingOld, 'utf-8'));
   applyCopyright(f7, info());
   const t7 = fs.readFileSync(f7, 'utf-8');
-  assert.ok(t7.includes(`Date ${yyyy}/${mm}/${dd}`), '跨天 → Date 更新为今天');
-  assert.ok(!t7.includes('2000/01/01'), '旧 Date 被替换');
+  assert.ok(t7.includes('Date 2000/01/01 00:00'), '跨天日期 → Date 原值保留');
+  assert.ok(!t7.includes(`Date ${yyyy}/${mm}/${dd}`), '今日日期不覆盖已有 Date');
 
-  // 旧版权块与用户普通注释零空行粘连：更新时只替换版权语义行，普通注释保留
+  // 旧版权块与用户普通注释零空行粘连：Date 不更新，普通注释保留
   const glued = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n// 这是用户自己的说明注释\nint h;\n`;
   const f8 = write('h.cpp', Buffer.from(glued, 'utf-8'));
   applyCopyright(f8, info());
   const t8 = fs.readFileSync(f8, 'utf-8');
   assert.ok(t8.includes('// 这是用户自己的说明注释'), '粘连的用户普通注释不被误删');
-  assert.ok(t8.includes(`Date ${yyyy}/${mm}/${dd}`), '版权头 Date 更新为今天');
-  assert.ok(!t8.includes('2000/01/01'), '旧版权 Date 被替换');
+  assert.ok(t8.includes('Date 2000/01/01 00:00'), '粘连场景 Date 仍保留原值');
   assert.ok(/int h;/.test(t8), '原代码保留');
 
-  // 形似文件名的用户注释（非 C/C++ 源码后缀）紧贴版权块：更新时应保留，不被当文件名行吞掉
+  // 形似文件名的用户注释（非 C/C++ 源码后缀）紧贴版权块：保留，Date 不更新
   const gluedMd = `// Copyright (c) 2000 ACME\n// Author kevin\n// Date 2000/01/01 00:00\n// 说明.md\nint j;\n`;
   const f10 = write('j.cpp', Buffer.from(gluedMd, 'utf-8'));
   applyCopyright(f10, info());
   const t10 = fs.readFileSync(f10, 'utf-8');
   assert.ok(t10.includes('// 说明.md'), '形似文件名的用户注释（.md）应保留');
-  assert.ok(t10.includes(`Date ${yyyy}/${mm}/${dd}`), 'Date 更新为今天');
-  assert.ok(!t10.includes('2000/01/01'), '旧 Date 被替换');
+  assert.ok(t10.includes('Date 2000/01/01 00:00'), '形似文件名场景 Date 保留原值');
   assert.ok(/int j;/.test(t10), '原代码保留');
 
   // 真正的 C/C++ 文件名行（.cpp）仍应被吞掉
@@ -103,8 +101,44 @@ try {
   assert.ok(!b9.slice(3, 6).equals(BOM), 'BOM 不重复');
   assert.ok(b9.slice(3).toString('utf-8').includes('// 这是用户自己的说明注释'), 'BOM 文件中用户注释保留');
 
+  // Author 替换：文件有别人的 author → 替换为配置 author
+  const foreignAuthor = `// Copyright 2020 ACME\n// Author alice@other.com\n// Date 2020/01/01 00:00\n\nint m;\n`;
+  const f12 = write('m.cpp', Buffer.from(foreignAuthor, 'utf-8'));
+  applyCopyright(f12, info());
+  const t12 = fs.readFileSync(f12, 'utf-8');
+  assert.ok(t12.includes('// Author kevin'), 'Author 替换为配置 author');
+  assert.ok(!t12.includes('alice@other.com'), '别人的 Author 被替换');
+  assert.ok(t12.includes('Date 2020/01/01 00:00'), 'Author 替换时 Date 仍保留');
+
+  // Author 未配置 → 保留原文
+  const f13 = write('n.cpp', Buffer.from(foreignAuthor, 'utf-8'));
+  applyCopyright(f13, info({ author: '' }));
+  const t13 = fs.readFileSync(f13, 'utf-8');
+  assert.ok(t13.includes('alice@other.com'), 'author 未配置时保留原文');
+
+  // 外来格式版权头（/* */ 块注释）→ 跳过，原文不动
+  const block = `/* Copyright (c) 2024 Foo Inc. All rights reserved. */\n#include <foo.h>\n`;
+  const f14 = write('o.cpp', Buffer.from(block, 'utf-8'));
+  const before14 = fs.readFileSync(f14);
+  applyCopyright(f14, info());
+  assert.ok(fs.readFileSync(f14).equals(before14), '/* */ 外来版权头 → 原文不动');
+
+  // 外来格式（// (c) 风格）→ 跳过
+  const cinStyle = `// (c) 2024 Bar Corp\n// All rights reserved.\nint p;\n`;
+  const f15 = write('p.cpp', Buffer.from(cinStyle, 'utf-8'));
+  const before15 = fs.readFileSync(f15);
+  applyCopyright(f15, info());
+  assert.ok(fs.readFileSync(f15).equals(before15), '// (c) 外来版权头 → 原文不动');
+
+  // hasAnyCopyrightContent 单元测试
+  assert.ok(hasAnyCopyrightContent(['/* Copyright (c) 2024 Foo */', '#include <x>']), '块注释 copyright 检测');
+  assert.ok(hasAnyCopyrightContent(['// SPDX-License-Identifier: MIT']), 'SPDX 检测');
+  assert.ok(hasAnyCopyrightContent(['// (c) 2024 Acme']), '(c) 风格检测');
+  assert.ok(!hasAnyCopyrightContent(['#pragma once', '#include <string>']), '无版权内容 → false');
+
   console.log('copyright.test.js PASS');
 } finally {
   for (const p of created) { try { fs.unlinkSync(p); } catch (_) {} }
   try { fs.rmdirSync(tmp); } catch (_) {}
 }
+
