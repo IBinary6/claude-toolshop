@@ -117,6 +117,7 @@ if (!tryAcquireBuildLock()) {
 const wrapperCode = `
   const { spawnSync } = require('child_process');
   const fs = require('fs');
+  try { fs.writeFileSync(${JSON.stringify(buildLockFile)}, String(process.pid)); } catch(e) {}
   let out;
   try {
     out = fs.openSync(${JSON.stringify(logFile)}, 'a');

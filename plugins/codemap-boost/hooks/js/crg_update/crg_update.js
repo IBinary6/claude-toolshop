@@ -35,6 +35,8 @@ const buildLogFile = path.join(os.tmpdir(), 'crg-build.log');
 const cwdKey = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
 const sentinelFile = path.join(os.tmpdir(), `crg-update-debounce-${cwdKey}.lock`);
 const buildLockFile = path.join(os.tmpdir(), `crg-build-${cwdKey}.lock`);
+const updateLockFile = path.join(os.tmpdir(), `crg-update-run-${cwdKey}.lock`);
+const UPDATE_STALE_MS = 5 * 60 * 1000; // 5min, incremental update 不会超过这个时间
 
 function logLine(msg) {
   try {
@@ -98,6 +100,7 @@ function startBackgroundBuild() {
   const wrapperCode = `
     const { spawnSync } = require('child_process');
     const fs = require('fs');
+    try { fs.writeFileSync(${JSON.stringify(buildLockFile)}, String(process.pid)); } catch(e) {}
     let out;
     try {
       out = fs.openSync(${JSON.stringify(buildLogFile)}, 'a');
@@ -124,14 +127,25 @@ function startBackgroundBuild() {
 }
 
 function runUpdate() {
+  // 防止多 session 并发 update 同一 repo
+  try {
+    const st = fs.statSync(updateLockFile);
+    if (Date.now() - st.mtimeMs < UPDATE_STALE_MS) {
+      logLine('update 已在运行, 跳过');
+      return;
+    }
+    fs.unlinkSync(updateLockFile);
+  } catch (e) {}
   let out;
   try {
+    fs.writeFileSync(updateLockFile, '1'); // mtime 即时间戳
     out = fs.openSync(logFile, 'a');
     const proc = spawn('code-review-graph', ['update', '--repo', cwd], {
       cwd, detached: true, windowsHide: true, stdio: ['ignore', out, out],
     });
     proc.unref();
   } catch (e) {
+    try { fs.unlinkSync(updateLockFile); } catch (_) {}
     if (typeof out === 'number') {
       try { fs.closeSync(out); } catch (_) {}
     }
