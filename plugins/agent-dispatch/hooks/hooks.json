@@ -13,6 +13,16 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|mcp__.*",
         "hooks": [
           {
