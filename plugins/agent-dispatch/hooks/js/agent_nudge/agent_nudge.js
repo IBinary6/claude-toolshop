@@ -4,7 +4,8 @@
 
 'use strict';
 
-const { readStdinJson } = require('./lib/utils');
+const path = require('path');
+const { readStdinJson } = require(path.resolve(__dirname, '../lib/utils'));
 
 const RESEARCH_TYPES = new Set(['Explore', 'Plan', 'architect']);
 
