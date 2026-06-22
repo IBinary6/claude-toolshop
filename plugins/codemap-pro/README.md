@@ -49,6 +49,8 @@ codegraph install --target=claude --yes
 2. 不存在 → 后台构建图谱（`codegraph init -i`）
 3. 存在 → 依赖 MCP Server 的 auto-sync 增量更新
 
+SessionStart 不会自动修改项目 `.gitignore`。如需避免误提交图谱产物，请在项目中显式加入 `.codegraph/`。
+
 编辑文件或运行 Bash 后，`cg_sync` 会做兜底同步：已有 `.codegraph/codegraph.db` 时后台 `codegraph sync`，缺失时后台 `codegraph init -i`。
 
 ### 可用的 MCP 工具
@@ -104,7 +106,7 @@ PostToolUse:Edit|Write|Bash
     ├── .codegraph/codegraph.db 存在 → 后台 sync
     └── 不存在 → 后台 init -i
 
-EnterWorktree
+CwdChanged
 └── cg_worktree.js (async)
     ├── 检测 .codegraph/codegraph.db
     ├── 不存在 → 后台 init -i
@@ -260,7 +262,7 @@ rm -f /tmp/codegraph-build-*.lock
 # 卸载全局 codegraph CLI
 npm uninstall -g @colbymchenry/codegraph
 
-# 删除各项目的图谱目录（已被 .gitignore，不影响仓库）
+# 删除各项目的图谱目录（建议先确认已加入 .gitignore）
 rm -rf <project-root>/.codegraph/
 ```
 

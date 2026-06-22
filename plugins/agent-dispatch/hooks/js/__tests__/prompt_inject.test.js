@@ -6,21 +6,36 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 
 const INJECT = path.resolve(__dirname, '..', 'prompt_inject.js');
-const MARKER_NAME = '.agent-dispatch-blocked';
+
+function markerPathFor(tmpDir, input) {
+  const sessionId = input.session_id || input.sessionId || '';
+  const cwd = input.cwd || process.cwd();
+  const key = crypto.createHash('sha1')
+    .update(`${sessionId}\n${path.resolve(cwd)}`)
+    .digest('hex')
+    .slice(0, 16);
+  return path.join(tmpDir, `.agent-dispatch-blocked-${key}`);
+}
 
 /**
  * 运行 prompt_inject，并控制标记文件状态
  * @param {object} opts
  * @param {boolean} opts.hasMarker - 是否预先写入标记文件
  * @param {boolean} opts.promptInjectEnabled - config 中是否启用 prompt_inject
- * @param {string|null} opts.overrideCwd - 覆盖 cwd（用于测试项目级配置）
+ * @param {string|null} opts.overrideCwd - 覆盖进程 cwd（用于测试项目级配置）
+ * @param {string|null} opts.inputCwd - hook stdin cwd
  */
-function runInject({ hasMarker = false, promptInjectEnabled = true, overrideCwd = null } = {}) {
+function runInject({ hasMarker = false, promptInjectEnabled = true, overrideCwd = null, inputCwd = null } = {}) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-test-'));
   const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-home-'));
-  const markerFile = path.join(tmpDir, MARKER_NAME);
+  const input = { hook_event_name: 'UserPromptSubmit', prompt: 'hello' };
+  // cwd 决定 config 从哪里加载 .agent-dispatch.json
+  const cwd = overrideCwd || path.resolve(__dirname, '..', '..', '..');
+  input.cwd = inputCwd || cwd;
+  const markerFile = markerPathFor(tmpDir, input);
 
   // 写 marker（模拟上次发生过 block）
   if (hasMarker) {
@@ -44,11 +59,8 @@ function runInject({ hasMarker = false, promptInjectEnabled = true, overrideCwd 
     TMP: tmpDir,
   };
 
-  // cwd 决定 config 从哪里加载 .agent-dispatch.json
-  const cwd = overrideCwd || path.resolve(__dirname, '..', '..', '..');
-
   const r = spawnSync('node', [INJECT], {
-    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', prompt: 'hello' }),
+    input: JSON.stringify(input),
     encoding: 'utf-8',
     timeout: 10000,
     cwd,
@@ -96,22 +108,44 @@ function runInject({ hasMarker = false, promptInjectEnabled = true, overrideCwd 
     '注入消息应要求子代理回传被改文件路径、主 agent 重读以保持缓存一致');
 }
 
+// --- 其他 cwd/session 的标记不应串到当前 prompt ---
+{
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-scope-'));
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-scope-home-'));
+  const currentInput = { hook_event_name: 'UserPromptSubmit', prompt: 'hello', cwd: path.join(tmpDir, 'repo-a') };
+  const otherInput = { hook_event_name: 'UserPromptSubmit', prompt: 'hello', cwd: path.join(tmpDir, 'repo-b') };
+  fs.mkdirSync(currentInput.cwd, { recursive: true });
+  fs.mkdirSync(otherInput.cwd, { recursive: true });
+  fs.writeFileSync(markerPathFor(tmpDir, otherInput), String(Date.now()));
+  const r = spawnSync('node', [INJECT], {
+    input: JSON.stringify(currentInput),
+    encoding: 'utf-8',
+    timeout: 10000,
+    cwd: path.resolve(__dirname, '..', '..', '..'),
+    env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir },
+  });
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(fakeHome, { recursive: true, force: true });
+  assert.equal((r.stdout || '').trim(), '', '其他 cwd 的 marker 不应触发当前 prompt');
+}
+
 // --- prompt_inject 关闭时 → 不注入 ---
 {
   // 需要让 hook 的 cwd 指向含 .agent-dispatch.json 的目录，config 才会生效
   const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-disabled-'));
   const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'inject-disabled-home-'));
-  const markerFile = path.join(cfgDir, MARKER_NAME);
+  const input = { hook_event_name: 'UserPromptSubmit', prompt: 'hello', cwd: cfgDir };
+  const markerFile = markerPathFor(cfgDir, input);
   fs.writeFileSync(markerFile, String(Date.now())); // 有标记
   fs.writeFileSync(
     path.join(cfgDir, '.agent-dispatch.json'),
     JSON.stringify({ modules: { prompt_inject: false } })
   );
   const r = spawnSync('node', [INJECT], {
-    input: JSON.stringify({ hook_event_name: 'UserPromptSubmit', prompt: 'hello' }),
+    input: JSON.stringify(input),
     encoding: 'utf-8',
     timeout: 10000,
-    cwd: cfgDir,
+    cwd: path.resolve(__dirname, '..', '..', '..'),
     env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, TMPDIR: cfgDir, TEMP: cfgDir, TMP: cfgDir },
   });
   fs.rmSync(cfgDir, { recursive: true, force: true });

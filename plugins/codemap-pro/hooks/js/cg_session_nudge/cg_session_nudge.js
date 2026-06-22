@@ -4,19 +4,12 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const { commandExists, isGitRepo } = require('../lib/utils');
 
 const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
 
-// 非 git 仓库 → 清理残留目录后静默退出
+// 非 git 仓库 → 静默退出。不要在用户 cwd 下做删除动作。
 if (!isGitRepo(cwd)) {
-  const residualDirs = ['.codegraph'];
-  for (const d of residualDirs) {
-    const full = path.join(cwd, d);
-    try { fs.rmSync(full, { recursive: true, force: true }); } catch (_) {}
-  }
   process.exit(0);
 }
 

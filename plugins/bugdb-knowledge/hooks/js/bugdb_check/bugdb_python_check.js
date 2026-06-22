@@ -10,31 +10,51 @@ const { spawnSync } = require('child_process');
 const MIN_MAJOR = 3;
 const MIN_MINOR = 11;
 
+function splitArgs(value) {
+    return String(value || '').trim().split(/\s+/).filter(Boolean);
+}
+
+function pythonCandidates() {
+    if (process.env.BUGDB_PYTHON) {
+        return [{ cmd: process.env.BUGDB_PYTHON, args: splitArgs(process.env.BUGDB_PYTHON_ARGS) }];
+    }
+    const candidates = [
+        { cmd: 'python', args: [] },
+        { cmd: 'python3', args: [] },
+    ];
+    if (process.platform === 'win32') {
+        candidates.push({ cmd: 'py', args: ['-3.11'] });
+    }
+    return candidates;
+}
+
 function detectPython() {
     // 返回 { ok, version } —— ok 表示存在且 >= 3.11。
-    const py = process.env.BUGDB_PYTHON || 'python';
-    let res;
-    try {
-        res = spawnSync(py, ['-c', 'import sys;print("%d.%d.%d"%sys.version_info[:3])'], {
-            timeout: 3000,
-            encoding: 'utf-8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-        });
-    } catch (e) {
-        return { ok: false, version: null };
+    for (const py of pythonCandidates()) {
+        let res;
+        try {
+            res = spawnSync(py.cmd, [...py.args, '-c', 'import sys;print("%d.%d.%d"%sys.version_info[:3])'], {
+                timeout: 3000,
+                encoding: 'utf-8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+            });
+        } catch (e) {
+            continue;
+        }
+        if (!res || res.status !== 0 || !res.stdout) {
+            continue;
+        }
+        const version = res.stdout.trim();
+        const m = version.match(/^(\d+)\.(\d+)\./);
+        if (!m) {
+            return { ok: false, version };
+        }
+        const major = Number(m[1]);
+        const minor = Number(m[2]);
+        const ok = major > MIN_MAJOR || (major === MIN_MAJOR && minor >= MIN_MINOR);
+        return { ok, version };
     }
-    if (!res || res.status !== 0 || !res.stdout) {
-        return { ok: false, version: null };
-    }
-    const version = res.stdout.trim();
-    const m = version.match(/^(\d+)\.(\d+)\./);
-    if (!m) {
-        return { ok: false, version };
-    }
-    const major = Number(m[1]);
-    const minor = Number(m[2]);
-    const ok = major > MIN_MAJOR || (major === MIN_MAJOR && minor >= MIN_MINOR);
-    return { ok, version };
+    return { ok: false, version: null };
 }
 
 function buildHint(detected) {

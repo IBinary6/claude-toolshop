@@ -38,6 +38,16 @@ function isDangerousGit(gitArgs, config) {
   return config.whitelist.git_dangerous_patterns.some((pat) => new RegExp(pat).test(joined));
 }
 
+function isDangerousBashSegment(tokens, config) {
+  const joined = tokens.join(' ');
+  const patterns = config.whitelist.bash_dangerous_patterns || [];
+  return patterns.some((pat) => new RegExp(pat).test(joined));
+}
+
+function hasOutputRedirect(tokens) {
+  return tokens.some((t) => t === '>' || t === '>>' || /^\d?>>/.test(t) || /^&>/.test(t));
+}
+
 function isReadonlyGit(gitArgs, config) {
   return config.whitelist.git_readonly.some((cmd) =>
     cmd.every((tok, i) => gitArgs[i] === tok)
@@ -50,7 +60,10 @@ function isSafeGitWrite(gitArgs, config) {
 }
 
 function classifySegment(tokens, config) {
-  const cleaned = tokens.filter((t) => !['>', '>>', '<', '<<'].includes(t));
+  if (hasOutputRedirect(tokens)) return 'unsafe';
+  if (isDangerousBashSegment(tokens, config)) return 'unsafe';
+
+  const cleaned = tokens.filter((t) => !['<', '<<'].includes(t));
   if (cleaned.length === 0) return 'empty';
   const head = cleaned[0];
 
@@ -87,6 +100,7 @@ module.exports = {
   tokenize,
   splitSegments,
   isDangerousGit,
+  isDangerousBashSegment,
   isReadonlyGit,
   isSafeGitWrite,
   classifySegment,

@@ -48,7 +48,7 @@ function assertBlock(result, toolName) {
   assertPass(r);
 }
 
-// --- whitelisted tool (Read is in whitelist but wouldn't match the hook matcher in prod,
+// --- whitelisted tool (Write is in whitelist but wouldn't match the hook matcher in prod,
 //     however enforcer.js still checks whitelist internally for robustness) ---
 {
   const r = runHook({ tool_name: 'Write', tool_input: { file_path: '/tmp/x.txt', content: 'hi' } });
@@ -136,6 +136,22 @@ function assertBlock(result, toolName) {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git reset --hard' } });
   assertBlock(r, 'Bash');
 }
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git clean -f' } });
+  assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/x' } });
+  assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'docker rm -f prod' } });
+  assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'kubectl delete pod x' } });
+  assertBlock(r, 'Bash');
+}
 
 // --- 默认安全 Bash head → pass ---
 {
@@ -206,14 +222,34 @@ function assertBlock(result, toolName) {
   assert.equal((r.stdout || '').trim(), '', 'enforcer disabled should pass through');
 }
 
+// --- enforcer disabled via hook input cwd, even when process cwd differs ---
+{
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-input-cwd-disabled-'));
+  fs.writeFileSync(path.join(tmpDir, '.agent-dispatch.json'), JSON.stringify({
+    modules: { enforcer: false }
+  }));
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-input-cwd-home-'));
+  const r = spawnSync('node', [ENFORCER], {
+    input: JSON.stringify({ cwd: tmpDir, tool_name: 'Bash', tool_input: { command: 'unknown-tool --version' } }),
+    encoding: 'utf-8',
+    timeout: 10000,
+    cwd: path.resolve(__dirname, '..', '..', '..'),
+    env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome },
+  });
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.rmSync(fakeHome, { recursive: true, force: true });
+  assert.equal(r.status, 0);
+  assert.equal((r.stdout || '').trim(), '', 'input.cwd project config should disable enforcer');
+}
+
 // --- block message format validation (中文短版) ---
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'unknown-tool --version' } });
   const parsed = JSON.parse(r.stdout);
-  assert.ok(parsed.reason.includes('⛔🔒 拦截'), 'block 消息应包含 ⛔🔒 拦截 标识');
+  assert.ok(parsed.reason.includes('拦截'), 'block 消息应包含拦截标识');
   assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
   assert.ok(parsed.reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
-  assert.ok(parsed.reason.split('\n').length <= 3, 'block 消息应不超过 3 行（精简版）');
+  assert.ok(parsed.reason.split('\n').length <= 4, 'block 消息应不超过 4 行（精简版）');
   // 防缓存失效：必须提示子代理改文件后回传被改文件路径，主 agent 才能重读保持一致
   assert.ok(/列出路径|修改.*文件.*路径|文件.*路径/.test(parsed.reason),
     'block 消息应提示子代理回传被修改的文件路径（防主 agent 缓存失效）');

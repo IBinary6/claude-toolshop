@@ -10,6 +10,7 @@ const {
   tokenize,
   splitSegments,
   isDangerousGit,
+  isDangerousBashSegment,
   isReadonlyGit,
   isSafeGitWrite,
   classifySegment,
@@ -92,6 +93,14 @@ assert.equal(isDangerousGit(['restore', '--', '.'], config), true);
 assert.equal(isDangerousGit(['push', 'origin', 'main'], config), false);
 assert.equal(isDangerousGit(['commit', '-m', 'msg'], config), false);
 assert.equal(isDangerousGit(['reset', '--soft', 'HEAD~1'], config), false);
+assert.equal(isDangerousGit(['clean', '-f'], config), true);
+
+// --- isDangerousBashSegment ---
+assert.equal(isDangerousBashSegment(['rm', '-rf', '/tmp/x'], config), true);
+assert.equal(isDangerousBashSegment(['docker', 'rm', '-f', 'prod'], config), true);
+assert.equal(isDangerousBashSegment(['kubectl', 'delete', 'pod', 'x'], config), true);
+assert.equal(isDangerousBashSegment(['helm', 'uninstall', 'prod'], config), true);
+assert.equal(isDangerousBashSegment(['docker', 'ps'], config), false);
 
 // --- isReadonlyGit ---
 assert.equal(isReadonlyGit(['status'], config), true);
@@ -106,8 +115,8 @@ assert.equal(isReadonlyGit(['push'], config), false);
 // --- isSafeGitWrite ---
 assert.equal(isSafeGitWrite(['add', '.'], config), true);
 assert.equal(isSafeGitWrite(['commit', '-m', 'test'], config), true);
-assert.equal(isSafeGitWrite(['push', 'origin', 'main'], config), true);
-assert.equal(isSafeGitWrite(['merge', 'feature'], config), true);
+assert.equal(isSafeGitWrite(['push', 'origin', 'main'], config), false);
+assert.equal(isSafeGitWrite(['merge', 'feature'], config), false);
 assert.equal(isSafeGitWrite([], config), false);
 assert.equal(isSafeGitWrite(['unknown-subcmd'], config), false);
 
@@ -117,6 +126,8 @@ assert.equal(classifySegment(['fd', '--type', 'f'], config), 'safe');
 assert.equal(classifySegment(['git', 'status'], config), 'safe');
 assert.equal(classifySegment(['git', 'commit', '-m', 'msg'], config), 'safe');
 assert.equal(classifySegment(['git', 'push', '--force'], config), 'unsafe');
+assert.equal(classifySegment(['rm', '-rf', '/tmp/x'], config), 'unsafe');
+assert.equal(classifySegment(['echo', 'hi', '>', 'file.txt'], config), 'unsafe');
 assert.equal(classifySegment(['git'], config), 'unsafe');
 assert.equal(classifySegment(['npm', 'test'], config), 'safe');
 assert.equal(classifySegment(['python', 'script.py'], config), 'safe');
@@ -124,7 +135,7 @@ assert.equal(classifySegment(['codegraph', 'sync'], config), 'safe');
 assert.equal(classifySegment(['codegraph', 'status'], config), 'safe');
 assert.equal(classifySegment(['code-review-graph', 'status'], config), 'safe');
 assert.equal(classifySegment(['graphify', '--version'], config), 'safe');
-assert.equal(classifySegment(['echo', 'hi', '>', 'file.txt'], config), 'safe');
+assert.equal(classifySegment(['env', 'rm', '-rf', '/tmp/x'], config), 'unsafe');
 assert.equal(classifySegment([], config), 'empty');
 
 // --- isSafeBashCommand ---
@@ -135,12 +146,20 @@ assert.equal(isSafeBashCommand('fd -t f . && rg pattern', config), true);
 assert.equal(isSafeBashCommand('git add . && git commit -m "test"', config), true);
 assert.equal(isSafeBashCommand('ls | grep foo | wc -l', config), true);
 assert.equal(isSafeBashCommand('git push --force', config), false);
+assert.equal(isSafeBashCommand('git clean -f', config), false);
+assert.equal(isSafeBashCommand('rm -rf /tmp/x', config), false);
+assert.equal(isSafeBashCommand('docker rm -f prod', config), false);
+assert.equal(isSafeBashCommand('kubectl delete pod x', config), false);
+assert.equal(isSafeBashCommand('echo hi > file.txt', config), false);
 assert.equal(isSafeBashCommand('npm test', config), true);
 assert.equal(isSafeBashCommand('codegraph sync && graphify --version', config), true);
 assert.equal(isSafeBashCommand('echo $(whoami)', config), false);
 assert.equal(isSafeBashCommand('python script.py', config), true);
 assert.equal(isSafeBashCommand('codegraph status && code-review-graph status', config), true);
 assert.equal(isSafeBashCommand('graphify --version', config), true);
+assert.equal(isSafeBashCommand('env rm -rf /tmp/x', config), false);
+assert.equal(isSafeBashCommand('env kubectl delete pod x', config), false);
+assert.equal(isSafeBashCommand('printenv', config), true);
 assert.equal(isSafeBashCommand('safe && npm run build', config), false);
 assert.equal(isSafeBashCommand('', config), false);
 assert.equal(isSafeBashCommand(null, config), false);

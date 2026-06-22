@@ -4,7 +4,7 @@ C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude
 
 ## v0.3.0 行为
 
-单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 在临时副本上运行**不损坏源文件**。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），依赖（clang-format / iconv-lite）SessionStart 后台自动补齐，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。
+单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 在临时副本上运行**不损坏源文件**。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），运行期只检测依赖、不做网络安装，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。
 
 ### 工作原理
 
@@ -73,22 +73,22 @@ Schema：
 
 ## 依赖
 
-**前提：用户须自备 Python 3 + Node.js**（插件不代装这两者）。其余依赖在 SessionStart 后台**自动补齐**，全程不阻塞、静默、失败安全降级。
+**前提：用户须自备 Python 3 + Node.js**（插件不代装这两者）。运行期只检测依赖，不在 SessionStart / PostToolUse 中自动执行 `npm install` 或 `pip install`，避免编辑 hook 被网络安装阻塞或超时。
 
 | 依赖 | 必需 | 用途 | 自举方式 |
 |---|---|---|---|
 | Node.js 18+ | 是（前提） | hook 运行时 | 用户自备 |
 | Python 3 | 是（前提） | 跑内嵌 `cpplint.py`；clang-format 的 pip 安装与 `python -m clang_format` 调用也靠它 | 用户自备 |
 | cpplint | 内置 | C++ 风格检查 | 内嵌 `cpplint/cpplint.py`，靠 Python 运行，无需安装 |
-| clang-format | 格式化需要 | 格式化 | 缺失时 SessionStart 后台 `pip install clang-format`；检测支持 PATH / `python -m clang_format` / Python Scripts 目录三种调用方式；装不上则静默跳过格式化 |
-| `iconv-lite` | GBK 文件需要 | GBK→UTF-8 转码 | 缺失时 SessionStart 后台 `npm install`；装不上则 GBK 文件跳过 BOM（不转码、不损坏） |
+| clang-format | 格式化需要 | 格式化 | 检测支持 PATH / `python -m clang_format` / Python Scripts 目录三种调用方式；缺失则静默跳过格式化 |
+| `iconv-lite` | GBK 文件需要 | GBK→UTF-8 转码 | 缺失则 GBK 文件跳过 BOM（不转码、不损坏） |
 
-- **自举在 SessionStart 后台 detached 进程做**：不阻塞、不占 timeout、静默；安装失败写标记不重复重试。
-- **不污染插件缓存**：`iconv-lite` 安装到 `CLAUDE_PLUGIN_DATA`；失败标记优先写 `CLAUDE_PLUGIN_DATA`，缺失时写系统临时目录，不写 marketplace 插件根，避免 update 时因运行时文件导致工作树变脏。
+- **手动预热可用**：如需让插件尝试补齐可选依赖，可手动运行 `node hooks/js/lib/ensure_deps.js --prewarm`；普通 hook 路径不会自动安装。
+- **不污染插件缓存**：失败标记优先写 `CLAUDE_PLUGIN_DATA`，缺失时写系统临时目录，不写 marketplace 插件根，避免 update 时因运行时文件导致工作树变脏。
 - **编辑期只检测不安装**：PostToolUse 流水线只检测可用性，不在编辑时同步安装（避免阻塞编辑）。
-- 任一依赖缺失（含安装失败）→ 对应步骤静默降级，不报错、不阻塞。
+- 任一依赖缺失 → 对应步骤静默降级，不报错、不阻塞。
 
-> **GBK 转码说明**：将 GBK 编码的 C/C++ 文件转为带 BOM 的 UTF-8 依赖 `iconv-lite`（已在 `package.json` 声明为 dependency，并由 SessionStart 后台自动安装兜底）。若 `iconv-lite` 最终仍缺失，GBK 文件会被判为 `unknown` 并**跳过 BOM 处理**——文件不被转码、也**不被损坏**，其余非 GBK 文件不受影响。
+> **GBK 转码说明**：将 GBK 编码的 C/C++ 文件转为带 BOM 的 UTF-8 依赖 `iconv-lite`（已在 `package.json` 声明为 dependency）。若 `iconv-lite` 缺失，GBK 文件会被判为 `unknown` 并**跳过 BOM 处理**——文件不被转码、也**不被损坏**，其余非 GBK 文件不受影响。
 
 ## 命令
 

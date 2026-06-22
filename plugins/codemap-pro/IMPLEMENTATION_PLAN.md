@@ -15,7 +15,6 @@
 | 时机 | 脚本 | 作用 |
 |---|---|---|
 | SessionStart | `hooks/js/cg_init/cg_init.js` | 检测并后台初始化 CodeGraph |
-| SessionStart | `hooks/js/cg_gitignore/cg_gitignore.js` | 将图谱输出目录写入 `.gitignore` |
 | PreToolUse:Grep | `hooks/js/grep_nudge/grep_nudge.js` | 运行时提示优先使用图谱 |
 | PreToolUse:Agent | `hooks/js/agent_nudge/agent_nudge.js` | 子代理任务中加入短图谱提示 |
 | PostToolUse | `hooks/js/cg_update/cg_update.js` | 编辑后增量更新 |

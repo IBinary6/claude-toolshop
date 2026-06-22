@@ -106,13 +106,14 @@ function validateTimeout(hooks, eventName) {
 validateTimeout(hooksConfig.hooks.SessionStart, 'SessionStart');
 validateTimeout(hooksConfig.hooks.PreToolUse, 'PreToolUse');
 validateTimeout(hooksConfig.hooks.PostToolUse, 'PostToolUse');
+validateTimeout(hooksConfig.hooks.CwdChanged, 'CwdChanged');
 
 // Test 5: 验证 async 语义
 log('\nTest 5: async 参数验证', 'yellow');
 const asyncHooks = [
   { event: 'SessionStart', entryIndex: 0, hookIndex: 0, name: 'cg_init.js' },
-  { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_sync.js' },
-  { event: 'PostToolUse', entryIndex: 1, hookIndex: 0, name: 'cg_worktree.js' }
+  { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_update.js' },
+  { event: 'CwdChanged', entryIndex: 0, hookIndex: 0, name: 'cg_worktree.js' }
 ];
 
 for (const item of asyncHooks) {
@@ -136,8 +137,10 @@ const expectedFiles = [
   'hooks/js/lib/utils.js',
   'hooks/js/lib/ensure_deps.js',
   'hooks/js/cg_init/cg_init.js',
-  'hooks/js/cg_sync/cg_sync.js',
+  'hooks/js/cg_update/cg_update.js',
+  'hooks/js/cg_gitignore/cg_gitignore.js',
   'hooks/js/cg_worktree/cg_worktree.js',
+  'hooks/js/agent_nudge/agent_nudge.js',
   'hooks/js/grep_nudge/grep_nudge.js'
 ];
 
@@ -185,6 +188,7 @@ function validateHookScripts(hooks, eventName) {
 validateHookScripts(hooksConfig.hooks.SessionStart, 'SessionStart');
 validateHookScripts(hooksConfig.hooks.PreToolUse, 'PreToolUse');
 validateHookScripts(hooksConfig.hooks.PostToolUse, 'PostToolUse');
+validateHookScripts(hooksConfig.hooks.CwdChanged, 'CwdChanged');
 
 const allHookCommands = JSON.stringify(hooksConfig.hooks);
 assert(!allHookCommands.includes('claudemd_inject'), 'hooks.json 不再注册 CLAUDE.md 注入 hook');

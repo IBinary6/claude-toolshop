@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// ABOUTME: Stop 钩子 - Claude 会话结束时清理 CRG/graphify 残留进程和 lock 文件
-// ABOUTME: 正常关闭 + 崩溃重启都能保证下次会话不受残留 lock 干扰
+// ABOUTME: SessionEnd 钩子 - 清理 CRG/graphify 过期 lock 文件
+// ABOUTME: 不主动杀后台构建，避免结束钩子误伤仍在运行的 build
 
 'use strict';
 
@@ -8,40 +8,36 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
 
 const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
 const cwdKey = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
+const BUILD_LOCK_STALE_MS = 4 * 60 * 60 * 1000;
+const UPDATE_LOCK_STALE_MS = 5 * 60 * 1000;
 
-// build lock 内有包装进程 PID，用 taskkill /T 杀进程树（包含 code-review-graph.exe）
 const buildLocks = [
   path.join(os.tmpdir(), `crg-build-${cwdKey}.lock`),
   path.join(os.tmpdir(), `graphify-build-${cwdKey}.lock`),
 ];
-// update lock 只靠 mtime，直接删即可
 const otherLocks = [
   path.join(os.tmpdir(), `crg-update-run-${cwdKey}.lock`),
   path.join(os.tmpdir(), `crg-update-debounce-${cwdKey}.lock`),
 ];
 
-for (const lockFile of buildLocks) {
+function removeIfStale(lockFile, staleMs) {
   try {
-    const pid = parseInt(fs.readFileSync(lockFile, 'utf-8').trim(), 10);
-    if (pid > 0) {
-      if (process.platform === 'win32') {
-        // /T 递归杀进程树，确保 code-review-graph.exe 子进程一并结束
-        spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)],
-          { stdio: 'ignore', windowsHide: true });
-      } else {
-        try { process.kill(-pid, 'SIGTERM'); } catch (e) {}
-      }
+    const stat = fs.statSync(lockFile);
+    if (Date.now() - stat.mtimeMs > staleMs) {
+      try { fs.unlinkSync(lockFile); } catch (e) {}
     }
   } catch (e) {}
-  try { fs.unlinkSync(lockFile); } catch (e) {}
+}
+
+for (const lockFile of buildLocks) {
+  removeIfStale(lockFile, BUILD_LOCK_STALE_MS);
 }
 
 for (const lockFile of otherLocks) {
-  try { fs.unlinkSync(lockFile); } catch (e) {}
+  removeIfStale(lockFile, UPDATE_LOCK_STALE_MS);
 }
 
 process.exit(0);

@@ -32,7 +32,7 @@
       "mcp__plugin_context-mode_context-mode__ctx_batch_execute"
     ],
     "bash_safe_heads": [
-      "ls", "pwd", "cd", "mkdir", "rm", "mv", "cp", "touch",
+      "ls", "pwd", "cd",
       "cat", "echo", "which", "where",
       "fd", "rg", "grep", "jq", "delta", "gh", "tsc", "pyright", "pdftotext",
       "head", "tail", "wc", "sort", "uniq",
@@ -47,9 +47,7 @@
       "gcc", "g++", "clang", "clang++",
       "cmake", "make", "ninja", "meson",
       "msbuild", "cl",
-      "docker", "docker-compose", "podman",
-      "kubectl", "helm",
-      "uname", "whoami", "hostname", "env", "printenv"
+      "uname", "whoami", "hostname", "printenv"
     ],
     "git_readonly": [
       ["status"], ["diff"], ["log"], ["show"], ["blame"], ["branch"],
@@ -61,18 +59,23 @@
       ["tag", "-l"], ["tag", "--list"]
     ],
     "git_safe_write": [
-      "add", "commit", "push", "pull", "fetch", "tag",
-      "switch", "checkout", "restore", "stash",
-      "merge", "rebase", "reset", "cherry-pick", "revert",
-      "rm", "mv", "clean", "worktree", "notes"
+      "add", "commit", "fetch"
     ],
     "git_dangerous_patterns": [
       "push.*--force", "push.*-f\\b",
       "reset.*--hard",
       "branch.*-D\\b",
+      "clean.*(?:^|\\s)-f\\b",
       "clean.*-f[dx]",
       "checkout.*--\\s+\\.",
       "restore.*--\\s+\\."
+    ],
+    "bash_dangerous_patterns": [
+      "^rm\\b",
+      "^docker(?:-compose)?\\s+(?:rm|rmi|stop|kill|down|system\\s+prune)\\b",
+      "^podman\\s+(?:rm|rmi|stop|kill|system\\s+prune)\\b",
+      "^kubectl\\s+(?:delete|apply|patch|replace|scale|drain)\\b",
+      "^helm\\s+(?:uninstall|delete|upgrade|install|rollback)\\b"
     ]
   },
   "overrides": {

@@ -2,27 +2,24 @@
 'use strict';
 
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
 const { readStdinJson, output, log } = require('./lib/utils');
 const { loadConfig } = require('./lib/config');
+const { blockedMarkerPath, hookCwd } = require('./lib/marker');
 const { isWhitelistedTool, isWhitelistedMcp, isSafeBashCommand, isMcpBlocked } = require('./lib/rules');
-
-const MARKER_FILE = path.join(os.tmpdir(), '.agent-dispatch-blocked');
 
 /**
  * 构建通用 block 消息（中文短版，系统指令语气）
  * 不硬编码任何具体 MCP 插件名，适用于所有被拦截的工具
  */
 function buildBlockMessage(toolName) {
-  return `⛔🔒 拦截：主 Agent 禁止直接调用 [${toolName}]，请派遣子代理执行！🚀\n📝 子代理修改文件后需在报告中列出路径，主 Agent 据此重读保持缓存一致 🔄\n💡 示例：Agent({ description: "...", prompt: "...改完后列出所有被修改的文件路径" }) 🎯`;
+  return `✨ 拦截：主 Agent 禁止直接调用 [${toolName}]，请派遣子代理执行！\n✨ 不论任务大小，"我自己做更快"不是例外。\n✨ 子代理修改文件后需在报告中列出路径，主 Agent 据此重读保持缓存一致。\n✨ 示例：Agent({ description: "...", prompt: "...改完后列出所有被修改的文件路径" })`;
 }
 
 /**
  * 写标记文件，供 prompt_inject 延迟激活使用
  */
-function writeBlockMarker() {
-  try { fs.writeFileSync(MARKER_FILE, String(Date.now()), 'utf8'); } catch {}
+function writeBlockMarker(input) {
+  try { fs.writeFileSync(blockedMarkerPath(input), String(Date.now()), 'utf8'); } catch {}
 }
 
 async function main() {
@@ -38,7 +35,8 @@ async function main() {
   // subagent 豁免：拥有 agent_id 的调用不受拦截
   if (input.agent_id) { process.exit(0); return; }
 
-  const config = loadConfig();
+  const cwd = hookCwd(input);
+  const config = loadConfig(cwd);
   if (!config.modules.enforcer) { process.exit(0); return; }
 
   const toolName = input.tool_name || '';
@@ -46,7 +44,7 @@ async function main() {
   // deny 优先：精确拦截名单中的工具，即使前缀白名单匹配也强制 block
   if (isMcpBlocked(toolName, config)) {
     log(`[agent-dispatch] HARD-BLOCKED (mcp_block_exact): ${toolName}`);
-    writeBlockMarker();
+    writeBlockMarker(input);
     output({ decision: 'block', reason: buildBlockMessage(toolName) });
     process.exit(0);
     return;
@@ -63,7 +61,7 @@ async function main() {
   }
 
   log(`[agent-dispatch] BLOCKED: ${toolName}`);
-  writeBlockMarker();
+  writeBlockMarker(input);
   output({ decision: 'block', reason: buildBlockMessage(toolName) });
   process.exit(0);
 }

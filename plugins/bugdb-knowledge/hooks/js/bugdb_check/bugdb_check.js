@@ -15,6 +15,24 @@ const CLI_PATH = path.join(PLUGIN_ROOT, 'bugdb', 'cli.py');
 // 智能预过滤：99% Bash 调用零开销
 const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
 
+function splitArgs(value) {
+    return String(value || '').trim().split(/\s+/).filter(Boolean);
+}
+
+function pythonCandidates() {
+    if (process.env.BUGDB_PYTHON) {
+        return [{ cmd: process.env.BUGDB_PYTHON, args: splitArgs(process.env.BUGDB_PYTHON_ARGS) }];
+    }
+    const candidates = [
+        { cmd: 'python', args: [] },
+        { cmd: 'python3', args: [] },
+    ];
+    if (process.platform === 'win32') {
+        candidates.push({ cmd: 'py', args: ['-3.11'] });
+    }
+    return candidates;
+}
+
 function readStdinSync() {
     // 同步读 stdin，避免 async 与 Claude Code hook 的早退竞争。
     try {
@@ -27,16 +45,17 @@ function readStdinSync() {
 function runSearch(errorLine) {
     // base64 包装传参，避免引号/换行/反斜杠注入到 shell。
     const payload = Buffer.from(errorLine, 'utf-8').toString('base64');
-    const py = process.env.BUGDB_PYTHON || 'python';
-    const res = spawnSync(py, [CLI_PATH, 'search', '--query-b64', payload, '--format', 'json'], {
-        timeout: 4000,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    if (res.status !== 0 || !res.stdout) {
-        return null;
+    for (const py of pythonCandidates()) {
+        const res = spawnSync(py.cmd, [...py.args, CLI_PATH, 'search', '--query-b64', payload, '--format', 'json'], {
+            timeout: 4000,
+            encoding: 'utf-8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        if (res.status === 0 && res.stdout) {
+            return res.stdout;
+        }
     }
-    return res.stdout;
+    return null;
 }
 
 function buildContext(top) {

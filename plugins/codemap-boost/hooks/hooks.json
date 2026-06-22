@@ -18,11 +18,6 @@
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_gitignore/crg_gitignore.js\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_session_nudge/crg_session_nudge.js\"",
             "timeout": 5
           }
@@ -40,9 +35,10 @@
             "async": true
           }
         ]
-      },
+      }
+    ],
+    "CwdChanged": [
       {
-        "matcher": "EnterWorktree",
         "hooks": [
           {
             "type": "command",
@@ -75,7 +71,7 @@
         ]
       }
     ],
-    "Stop": [
+    "SessionEnd": [
       {
         "matcher": "*",
         "hooks": [
