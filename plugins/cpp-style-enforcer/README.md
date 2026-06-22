@@ -4,7 +4,7 @@ C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude
 
 ## v0.3.0 行为
 
-单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 在临时副本上运行**不损坏源文件**。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），运行期只检测依赖、不做网络安装，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。
+单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 使用真实路径运行以避免 header guard / include order 误报，并保证源文件字节恢复。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），运行期只检测依赖、不做网络安装，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。
 
 ### 工作原理
 
@@ -64,7 +64,7 @@ Schema：
 - **自动生成 `.clang-format`**：走全套且项目根（git 根）缺 `.clang-format`（或 `_clang-format`）时，自动生成一份 `BasedOnStyle: Google`——让 **VS 2017+ / clangd / 本插件**三方读同一份配置，风格一致不打架。**已存在绝不覆盖，非 git 项目不生成**。老文件「不排 include」靠插件调用时内联 `SortIncludes:Never`，**不写进**项目 `.clang-format`，故不影响新文件 / VS 的正常排序。
 - **CMake 项目**（从文件向上找到 `CMakeLists.txt`）一律**不补 BOM**，其余检查照常。
 - **dateFormat** 是当前时间显示格式模板：必须含 `YYYY`+`MM`+`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。
-- **cpplint** 在 `os.tmpdir()` 下的**临时副本**上运行，**永不写回原文件**（进程被超时杀掉也只丢临时文件，源文件零损坏），仅产出违规报告（去重后取前 5 条）。
+- **cpplint** 使用真实路径运行，确保 header guard / include order 仍按真实文件名判断；无 BOM 文件零写入，有 BOM 文件仅在检查期间临时剥 BOM 并在 `finally` 中恢复原始字节。CRLF/LF 不作为 cpplint 规避项，检查后保持原行尾。
   - **软违规**：`build/header_guard` 与 `build/include_subdir` 为建议性提示（非强制 block）——可改用 `#pragma once` / 完整目录前缀，也可按项目习惯保留。其余为硬违规，强制修复。
   - filter 精简：新架构下走全套文件先 Google 整文件格式化再 lint，format 已对齐 Google，故无需旧的 `include_order` / `indent_namespace` / `comments` filter；仅按需屏蔽 `legal/copyright`。
 - **局部豁免** `#include` 排序：源码用 `// clang-format off` / `// clang-format on` 包住。
