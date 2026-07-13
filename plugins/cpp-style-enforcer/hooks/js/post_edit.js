@@ -7,7 +7,6 @@ const { loadConfig } = require('./lib/config');
 const { repoRoot, isNew } = require('./lib/git');
 const { ensureClangFormatConfig } = require('./lib/ensure_clang_format_config');
 const { ensureProjectConfig } = require('./lib/ensure_project_config');
-const { isCMakeProject } = require('./lib/project');
 const { applyClangFormat } = require('./steps/clang_format');
 const { applyBom } = require('./steps/bom');
 const { applyCopyright } = require('./steps/copyright');
@@ -38,7 +37,6 @@ async function main() {
   const isNewFile = fileIsNew !== false;
   // mode=full 或新文件 → 用 checks（全套）；老文件 incremental → 用 legacyChecks
   const effectiveChecks = (mode === 'full' || isNewFile) ? checks : legacyChecks;
-  const isCMake = step('isCMake', () => isCMakeProject(filePath)) === true;
 
   // 走全套时生成项目配置占位（新文件/full）；项目配置始终在首次触碰时生成
   if (mode === 'full' || isNewFile) {
@@ -51,9 +49,9 @@ async function main() {
     step('clang_format', () => applyClangFormat(filePath, { isNew: isNewFile, root }));
   }
 
-  // 2. BOM（独立于 mode；CMake 项目跳过）
-  if (effectiveChecks.bom && !isCMake) {
-    step('bom', () => applyBom(filePath, { isCMake }));
+  // 2. BOM（独立于 mode 和构建系统）
+  if (effectiveChecks.bom) {
+    step('bom', () => applyBom(filePath));
   }
 
   // 3. copyright（company 非空才写；传 root 用于生成相对路径行）

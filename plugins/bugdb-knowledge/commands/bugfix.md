@@ -1,3 +1,7 @@
+---
+description: 交互式整理错误、根因和修复步骤，并录入 BugDB 知识库
+---
+
 # /bugfix — 交互式录入知识库
 
 引用 bugdb-record Skill 规范，确保手动录入也遵循统一标准。

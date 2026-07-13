@@ -126,6 +126,10 @@ function assertBlock(result, toolName) {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'ls -la && fd -t f .' } });
   assertPass(r);
 }
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git push origin main' } });
+  assertPass(r);
+}
 
 // --- dangerous git → block ---
 {
@@ -151,6 +155,22 @@ function assertBlock(result, toolName) {
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'kubectl delete pod x' } });
   assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'echo ok;rm -rf .' } });
+  assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test&&rm -rf .' } });
+  assertBlock(r, 'Bash');
+}
+{
+  const r = runHook({ tool_name: 'PowerShell', tool_input: { command: 'echo ok>out.txt' } });
+  assertBlock(r, 'PowerShell');
+}
+{
+  const r = runHook({ tool_name: 'PowerShell', tool_input: { command: 'echo ok\\;rm -rf .' } });
+  assertBlock(r, 'PowerShell');
 }
 
 // --- 默认安全 Bash head → pass ---

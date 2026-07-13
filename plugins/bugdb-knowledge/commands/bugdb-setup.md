@@ -1,3 +1,7 @@
+---
+description: 检测并配置 bugdb-knowledge 的 Python 环境、依赖和项目触发规则
+---
+
 # /bugdb-setup — 一键完成插件配置
 
 安装 bugdb-knowledge 插件后执行此命令，自动完成环境检测、Python 包安装、CLAUDE.md 触发规则追加。

@@ -37,7 +37,7 @@ Agent({ description: "...", prompt: "..." })
 ## 安装
 
 ```
-/plugin install IBinary6/claude-toolshop agent-dispatch
+/plugin install agent-dispatch@claude-toolshop
 ```
 
 或手动部署，详见 [docs/MANUAL_INSTALL.md](./docs/MANUAL_INSTALL.md)。
@@ -76,18 +76,25 @@ Agent({ description: "...", prompt: "..." })
 ### 安全 Bash 命令（放行）
 
 ```
-ls, pwd, cd, mkdir, rm, mv, cp, touch, cat, echo, which, where,
+ls, pwd, cd, cat, echo, which, where,
 fd, rg, grep, jq, delta, gh, tsc, pyright, pdftotext,
-head, tail, wc, sort, uniq
+head, tail, wc, sort, uniq,
+node, npm, yarn, pnpm, bun,
+python, python3, pip, pipenv, poetry,
+codegraph, code-review-graph, graphify,
+rustc, cargo, go, java, javac, mvn, gradle, dotnet,
+ruby, gem, bundle, gcc, g++, clang, clang++,
+cmake, make, ninja, meson, msbuild, cl,
+uname, whoami, hostname, printenv
 ```
 
-Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add, commit, push 等）也放行。
+Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add, commit, fetch, push）也放行。
 
 ### 拦截
 
 - 重型 MCP 工具（context7, microsoft-learn, deepwiki, tavily, serena, exa 等）
 - 未知 Bash 命令头
-- 危险 git 操作（push --force, reset --hard, branch -D, clean -fdx, checkout -- ., restore -- .）
+- 危险 git 操作（push --force / --delete / 强制或删除 refspec、reset --hard、branch -D、clean -fdx、checkout -- .、restore -- .）
 - 含命令替换 `$(...)` 或反引号的 Bash
 
 ## 配置

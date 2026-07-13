@@ -1,6 +1,11 @@
 'use strict';
 
-const SEPARATORS = new Set(['&&', '||', ';', '|']);
+const SEPARATORS = new Set(['&&', '||', ';', '|', '&']);
+const TWO_CHAR_OPERATORS = new Set([
+  '&&', '||', '>>', '<<', '&>', '>|', '<>', '>&', '<&',
+]);
+const ONE_CHAR_OPERATORS = new Set([';', '|', '&', '>', '<']);
+const OUTPUT_REDIRECTS = new Set(['>', '>>', '&>', '>|', '<>', '>&']);
 
 function isWhitelistedTool(toolName, config) {
   return new Set(config.whitelist.tools).has(toolName);
@@ -16,12 +21,106 @@ function isMcpBlocked(toolName, config) {
 }
 
 function hasCommandSubstitution(command) {
-  return /\$\(|`/.test(command);
+  if (typeof command !== 'string') return false;
+
+  let quote = null;
+  let escaped = false;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      else if (quote === '"' && (ch === '`' || command.startsWith('$(', i))) return true;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '`' || command.startsWith('$(', i)
+        || command.startsWith('<(', i) || command.startsWith('>(', i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasAmbiguousCrossShellEscape(command) {
+  if (typeof command !== 'string') return false;
+  return /\\(?=["'$`;&|><()])|\\\r?\n/.test(command);
 }
 
 function tokenize(command) {
   if (typeof command !== 'string') return [];
-  return command.trim().match(/(?:"[^"]*"|'[^']*'|\S+)/g) || [];
+  const tokens = [];
+  let current = '';
+  let quote = null;
+
+  const flush = () => {
+    if (current) tokens.push(current);
+    current = '';
+  };
+
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i];
+
+    if (quote) {
+      current += ch;
+      if (ch === '\\' && quote === '"' && i + 1 < command.length) {
+        current += command[i + 1];
+        i += 1;
+      } else if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (ch === '\\' && i + 1 < command.length) {
+      current += ch + command[i + 1];
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if (ch === '\r' || ch === '\n') {
+      flush();
+      if (ch === '\r' && command[i + 1] === '\n') i += 1;
+      tokens.push(';');
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      flush();
+      continue;
+    }
+
+    const pair = command.slice(i, i + 2);
+    if (TWO_CHAR_OPERATORS.has(pair)) {
+      flush();
+      tokens.push(pair);
+      i += 1;
+      continue;
+    }
+    if (ONE_CHAR_OPERATORS.has(ch)) {
+      flush();
+      tokens.push(ch);
+      continue;
+    }
+    current += ch;
+  }
+
+  flush();
+  return tokens;
 }
 
 function splitSegments(tokens) {
@@ -45,7 +144,7 @@ function isDangerousBashSegment(tokens, config) {
 }
 
 function hasOutputRedirect(tokens) {
-  return tokens.some((t) => t === '>' || t === '>>' || /^\d?>>/.test(t) || /^&>/.test(t));
+  return tokens.some((t) => OUTPUT_REDIRECTS.has(t));
 }
 
 function isReadonlyGit(gitArgs, config) {
@@ -82,6 +181,7 @@ function classifySegment(tokens, config) {
 function isSafeBashCommand(command, config) {
   if (typeof command !== 'string' || !command.trim()) return false;
   if (hasCommandSubstitution(command)) return false;
+  if (hasAmbiguousCrossShellEscape(command)) return false;
 
   const tokens = tokenize(command);
   if (tokens.length === 0) return false;
@@ -97,6 +197,7 @@ module.exports = {
   isWhitelistedMcp,
   isMcpBlocked,
   hasCommandSubstitution,
+  hasAmbiguousCrossShellEscape,
   tokenize,
   splitSegments,
   isDangerousGit,

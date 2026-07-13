@@ -59,10 +59,12 @@
       ["tag", "-l"], ["tag", "--list"]
     ],
     "git_safe_write": [
-      "add", "commit", "fetch"
+      "add", "commit", "fetch", "push"
     ],
     "git_dangerous_patterns": [
-      "push.*--force", "push.*-f\\b",
+      "push.*--force", "push.*-f\\b", "push.*--delete", "push.*(?:^|\\s)-d\\b",
+      "push.*--mirror", "push.*--prune",
+      "push.*(?:^|\\s)\\+", "push.*(?:^|\\s):[^\\s]+",
       "reset.*--hard",
       "branch.*-D\\b",
       "clean.*(?:^|\\s)-f\\b",
@@ -82,6 +84,7 @@
     "tools_add": [],
     "tools_remove": [],
     "mcp_prefixes_add": [],
+    "mcp_prefixes_remove": [],
     "mcp_block_exact_add": [],
     "mcp_block_exact_remove": [],
     "bash_heads_add": [],

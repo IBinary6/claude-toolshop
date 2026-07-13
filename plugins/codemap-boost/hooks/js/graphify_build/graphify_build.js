@@ -19,12 +19,14 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { isGitRepo, commandExists } = require('../lib/utils');
+const { launchDetachedSelf } = require('../lib/background_hook');
 
 const TAG = '[graphify_build]';
 const LOCK_STALE_MS = 4 * 60 * 60 * 1000; // 4h, graphify 大项目 LLM 抽取可能耗时
 const MIN_VALID_GRAPH_BYTES = 10 * 1024;  // graph.json < 10KB 视为残缺/空
 
 const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+if (launchDetachedSelf(__filename, cwd)) process.exit(0);
 const outDir = path.join(cwd, 'graphify-out');
 const graphFile = path.join(outDir, 'graph.json');
 const logFile = path.join(os.tmpdir(), 'graphify-build.log');

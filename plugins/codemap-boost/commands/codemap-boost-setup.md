@@ -1,3 +1,7 @@
+---
+description: 检测并配置 CodeMap Boost 依赖、代码图 CLI 和 MCP 注册
+---
+
 # /codemap-boost-setup — 前置依赖检测 + 显式安装
 
 **建议首次使用前执行**。codemap-boost 的 hook 不会自动安装依赖；本命令用于显式检测、安装 `code-review-graph` / `graphifyy[all]`，并注册 MCP。依赖装进 PATH 后，SessionStart / PostToolUse 会自动维护图谱，不需要每次启动 Claude Code 都重新 setup。

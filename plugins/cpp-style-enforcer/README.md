@@ -42,7 +42,7 @@ Schema：
 | `checks.clangFormat` | 格式化（新文件整文件全格含 `#include` 排序；老文件仅格改动行、include 不动） |
 | `checks.copyright` | 版权头。`company` 为空 = 不写头，cpplint 同步屏蔽 `legal/copyright` |
 | `checks.cpplint` | cpplint 风格检查（违规拦截编辑 / 阻止提交） |
-| `checks.bom` | 补 UTF-8 BOM（CMake 项目自动跳过） |
+| `checks.bom` | 补 UTF-8 BOM（所有构建系统统一执行） |
 | `legacyChecks.*` | `incremental` 下老文件（已在 HEAD 中存在）使用的检查项，默认只开 `bom` |
 | `copyrightInfo.dateFormat` | 当前时间的**显示格式**（占位符 `YYYY/MM/DD/HH/mm`） |
 
@@ -62,7 +62,7 @@ Schema：
 
 - **clang-format 双模式**：走全套的文件**整文件格式化**（`-style=file -fallback-style=Google`，`#include` 正常排序）。老项目老文件默认不格式化；只有显式设置 `legacyChecks.clangFormat:true` 时，才仅格式化 git 改动行（`--lines` + 内联 `SortIncludes:Never`，include 永不被动排序）。
 - **自动生成 `.clang-format`**：走全套且项目根（git 根）缺 `.clang-format`（或 `_clang-format`）时，自动生成一份 `BasedOnStyle: Google`——让 **VS 2017+ / clangd / 本插件**三方读同一份配置，风格一致不打架。**已存在绝不覆盖，非 git 项目不生成**。老文件「不排 include」靠插件调用时内联 `SortIncludes:Never`，**不写进**项目 `.clang-format`，故不影响新文件 / VS 的正常排序。
-- **CMake 项目**（从文件向上找到 `CMakeLists.txt`）一律**不补 BOM**，其余检查照常。
+- **CMake、Visual Studio 与其他构建系统**统一执行 BOM 规则；不再存在 CMake 例外。
 - **dateFormat** 是当前时间显示格式模板：必须含 `YYYY`+`MM`+`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。
 - **cpplint** 使用真实路径运行，确保 header guard / include order 仍按真实文件名判断；无 BOM 文件零写入，有 BOM 文件仅在检查期间临时剥 BOM 并在 `finally` 中恢复原始字节。CRLF/LF 不作为 cpplint 规避项，检查后保持原行尾。
   - **软违规**：`build/header_guard` 与 `build/include_subdir` 为建议性提示（非强制 block）——可改用 `#pragma once` / 完整目录前缀，也可按项目习惯保留。其余为硬违规，强制修复。

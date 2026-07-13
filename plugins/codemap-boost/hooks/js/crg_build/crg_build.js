@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ABOUTME: SessionStart 钩子 - code-review-graph 智能初始化
-// ABOUTME: 图谱完整 -> 打印 status; 图谱空/缺失 -> 后台 build (原子锁)
+// ABOUTME: 图谱完整 -> 后台 update; 图谱空/缺失 -> 后台 build (原子锁)
 //
 // 与 crg_update 共用 build lock, 锁路径按 cwd SHA1 哈希命名.
 // 残缺判定: status 返回 Files == 0 (真空). status 失败时不删 db.
@@ -13,12 +13,14 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const { isGitRepo, commandExists } = require('../lib/utils');
+const { launchDetachedSelf } = require('../lib/background_hook');
 
 const TAG = '[crg_build]';
 const LOCK_STALE_MS = 4 * 60 * 60 * 1000; // 4h
 const MIN_VALID_FILES = 1;
 
 const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+if (launchDetachedSelf(__filename, cwd)) process.exit(0);
 const graphDir = path.join(cwd, '.code-review-graph');
 const dbFile = path.join(graphDir, 'graph.db');
 const logFile = path.join(os.tmpdir(), 'crg-build.log');
@@ -96,11 +98,7 @@ function isGraphValid() {
   return false;
 }
 
-// 图谱目录存在且有效 -> 不动
-if (fs.existsSync(graphDir) && isGraphValid()) {
-  process.stdout.write('🗺️ [CRG] 图谱就绪，自动增量更新已激活\n');
-  process.exit(0);
-}
+const refreshMode = fs.existsSync(graphDir) && isGraphValid() ? 'update' : 'build';
 
 // 缺失或空: 已有 build 在跑则跳过
 if (isBuildLockActive()) {
@@ -115,20 +113,13 @@ if (!tryAcquireBuildLock()) {
 }
 
 const wrapperCode = `
-  const { spawnSync } = require('child_process');
   const fs = require('fs');
+  const { runCrgRefresh } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'crg_refresh.js'))});
   try { fs.writeFileSync(${JSON.stringify(buildLockFile)}, String(process.pid)); } catch(e) {}
-  let out;
   try {
-    out = fs.openSync(${JSON.stringify(logFile)}, 'a');
-    spawnSync('code-review-graph', ['build', '--repo', ${JSON.stringify(cwd)}], {
-      stdio: ['ignore', out, out], windowsHide: true,
-    });
+    runCrgRefresh(${JSON.stringify(cwd)}, ${JSON.stringify(refreshMode)}, ${JSON.stringify(logFile)});
   } catch (e) {
   } finally {
-    if (typeof out === 'number') {
-      try { fs.closeSync(out); } catch (e) {}
-    }
     try { fs.unlinkSync(${JSON.stringify(buildLockFile)}); } catch (e) {}
   }
 `;
@@ -141,5 +132,5 @@ try {
   try { fs.unlinkSync(buildLockFile); } catch (_) {}
 }
 
-logLine(`首次 build 已在后台启动 (lock pid=${process.pid})`);
+logLine(`${refreshMode} 已在后台启动 (lock pid=${process.pid})`);
 process.exit(0);

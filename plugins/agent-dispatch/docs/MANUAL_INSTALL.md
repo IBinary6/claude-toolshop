@@ -25,16 +25,21 @@ REPO="/path/to/claude-toolshop/plugins/agent-dispatch"
 DEST="$HOME/.claude/plugins-manual/agent-dispatch"
 
 mkdir -p "$DEST/hooks/js/lib" \
+         "$DEST/hooks/js/agent_nudge" \
          "$DEST/defaults" \
          "$DEST/commands"
 
 # 核心文件
 cp "$REPO/hooks/hooks.json"                "$DEST/hooks/"
+cp "$REPO/hooks/js/session_start.js"       "$DEST/hooks/js/"
 cp "$REPO/hooks/js/enforcer.js"            "$DEST/hooks/js/"
 cp "$REPO/hooks/js/prompt_inject.js"       "$DEST/hooks/js/"
+cp "$REPO/hooks/js/agent_nudge/agent_nudge.js" \
+                                               "$DEST/hooks/js/agent_nudge/"
 cp "$REPO/hooks/js/lib/utils.js"           "$DEST/hooks/js/lib/"
 cp "$REPO/hooks/js/lib/config.js"          "$DEST/hooks/js/lib/"
 cp "$REPO/hooks/js/lib/rules.js"           "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/lib/marker.js"          "$DEST/hooks/js/lib/"
 
 # 默认规则
 cp "$REPO/defaults/dispatch-rules.json"    "$DEST/defaults/"
@@ -50,7 +55,28 @@ cp "$REPO/commands/agent-dispatch-setup.md" "$DEST/commands/"
 ```json
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/plugins-manual/agent-dispatch/hooks/js/session_start.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/plugins-manual/agent-dispatch/hooks/js/agent_nudge/agent_nudge.js\"",
+            "timeout": 5
+          }
+        ]
+      },
       {
         "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|WebFetch|WebSearch|mcp__.*",
         "hooks": [
@@ -81,7 +107,7 @@ cp "$REPO/commands/agent-dispatch-setup.md" "$DEST/commands/"
 
 ## 四、验证安装
 
-启动新 Claude Code 会话，尝试让主 agent 调用一个不在白名单内的工具（如重型 MCP）。预期行为：
+启动新 Claude Code 会话。首次启动后应自动生成全局和项目配置；再尝试让主 agent 调用一个不在白名单内的工具（如重型 MCP）。预期行为：
 
 ```
 ⚠ BLOCKED [mcp__context7__query-docs]. Delegate via Agent tool.

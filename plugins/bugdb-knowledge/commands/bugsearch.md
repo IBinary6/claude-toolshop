@@ -1,3 +1,7 @@
+---
+description: 按错误信息或关键词直接查询 BugDB 知识库
+---
+
 # /bugsearch — 直接查询知识库
 
 ## 用法

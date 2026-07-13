@@ -1,3 +1,7 @@
+---
+description: 检测并配置 CodeMap Pro 的 CodeGraph CLI、MCP 和 hook 文件
+---
+
 # /codemap-pro-setup — CodeGraph 前置依赖检测 + 可选修复
 
 **建议首次使用前执行**。codemap-pro 的 hook 不会自动安装 CodeGraph；本命令用于显式检查、安装 CodeGraph CLI、注册 MCP，并验证 hook 文件。依赖装进 PATH 后，SessionStart / PostToolUse 会自动维护项目图谱，不需要每次启动 Claude Code 都重新 setup。

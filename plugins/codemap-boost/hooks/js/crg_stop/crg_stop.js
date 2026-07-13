@@ -8,8 +8,10 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { launchDetachedSelf } = require('../lib/background_hook');
 
 const cwd = process.env.CLAUDE_WORKING_DIRECTORY || process.cwd();
+if (launchDetachedSelf(__filename, cwd)) process.exit(0);
 const cwdKey = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
 const BUILD_LOCK_STALE_MS = 4 * 60 * 60 * 1000;
 const UPDATE_LOCK_STALE_MS = 5 * 60 * 1000;

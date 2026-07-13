@@ -7,14 +7,12 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js\"",
-            "timeout": 10,
-            "async": true
+            "timeout": 5
           },
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/graphify_build/graphify_build.js\"",
-            "timeout": 10,
-            "async": true
+            "timeout": 5
           },
           {
             "type": "command",
@@ -78,7 +76,7 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_stop/crg_stop.js\"",
-            "timeout": 10
+            "timeout": 5
           }
         ]
       }

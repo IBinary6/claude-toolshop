@@ -98,20 +98,13 @@ function startBackgroundBuild() {
     return;
   }
   const wrapperCode = `
-    const { spawnSync } = require('child_process');
     const fs = require('fs');
+    const { runCrgRefresh } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'crg_refresh.js'))});
     try { fs.writeFileSync(${JSON.stringify(buildLockFile)}, String(process.pid)); } catch(e) {}
-    let out;
     try {
-      out = fs.openSync(${JSON.stringify(buildLogFile)}, 'a');
-      spawnSync('code-review-graph', ['build', '--repo', ${JSON.stringify(cwd)}], {
-        stdio: ['ignore', out, out], windowsHide: true,
-      });
+      runCrgRefresh(${JSON.stringify(cwd)}, 'build', ${JSON.stringify(buildLogFile)});
     } catch (e) {
     } finally {
-      if (typeof out === 'number') {
-        try { fs.closeSync(out); } catch (e) {}
-      }
       try { fs.unlinkSync(${JSON.stringify(buildLockFile)}); } catch (e) {}
     }
   `;
@@ -136,19 +129,25 @@ function runUpdate() {
     }
     fs.unlinkSync(updateLockFile);
   } catch (e) {}
-  let out;
   try {
-    fs.writeFileSync(updateLockFile, '1'); // mtime 即时间戳
-    out = fs.openSync(logFile, 'a');
-    const proc = spawn('code-review-graph', ['update', '--repo', cwd], {
-      cwd, detached: true, windowsHide: true, stdio: ['ignore', out, out],
+    fs.writeFileSync(updateLockFile, String(process.pid));
+    const wrapperCode = `
+      const fs = require('fs');
+      const { runCrgRefresh } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'crg_refresh.js'))});
+      try {
+        fs.writeFileSync(${JSON.stringify(updateLockFile)}, String(process.pid));
+        runCrgRefresh(${JSON.stringify(cwd)}, 'update', ${JSON.stringify(logFile)});
+      } catch (e) {
+      } finally {
+        try { fs.unlinkSync(${JSON.stringify(updateLockFile)}); } catch (e) {}
+      }
+    `;
+    const proc = spawn(process.execPath, ['-e', wrapperCode], {
+      cwd, detached: true, windowsHide: true, stdio: 'ignore', env: process.env,
     });
     proc.unref();
   } catch (e) {
     try { fs.unlinkSync(updateLockFile); } catch (_) {}
-    if (typeof out === 'number') {
-      try { fs.closeSync(out); } catch (_) {}
-    }
   }
 }
 
