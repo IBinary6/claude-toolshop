@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code 插件集合：为 Claude 增强本地工程能力的实用插件",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "plugins": [
     {
