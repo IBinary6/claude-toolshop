@@ -51,9 +51,11 @@ function isPathInRepo(targetPath, repoRoot) {
 
 // CRG 推荐（路径在 repo 内）
 const CRG_CONTEXT =
-  'For code structure search, use code-review-graph MCP tools instead of Grep:\n' +
+  'Adaptive retrieval: for code structure search, use code-review-graph MCP tools instead of Grep:\n' +
+  '  Clear task → call the specialized CRG tool directly; unclear task → get_minimal_context once for routing only\n' +
   '  mcp__code-review-graph__semantic_search_nodes_tool → symbol location (file + line)\n' +
   '  mcp__code-review-graph__query_graph_tool           → callers/callees/imports\n' +
+  '  If minimal lacks a useful result, immediately upgrade to a fuller tool or detail_level="standard"; do not repeat minimal\n' +
   'When CRG misses: mcp__serena__find_symbol / find_declaration → semantic\n' +
   'When serena misses: graphify query "<concept>" → architecture/cross-doc\n' +
   'Grep: plain text / strings / comments only.';
