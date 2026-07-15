@@ -1,10 +1,14 @@
 'use strict';
 
 const fs = require('fs');
+const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const LOCK_BOOT_MS = 5000;
+const LOCK_STALE_MS = 4 * 60 * 60 * 1000;
+const REFRESH_WAIT_MS = 10 * 60 * 1000;
 const SOURCE_EXTENSIONS = new Set([
   '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx',
   '.cs', '.go', '.java', '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx',
@@ -22,6 +26,12 @@ function git(cwd, args, options = {}) {
   });
 }
 
+function repoRoot(cwd) {
+  const result = git(cwd, ['rev-parse', '--show-toplevel']);
+  if (result.error || result.status !== 0 || !result.stdout.trim()) return null;
+  return path.resolve(result.stdout.trim());
+}
+
 function untrackedSourceFiles(cwd) {
   const result = git(cwd, ['ls-files', '--others', '--exclude-standard', '-z']);
   if (result.error || result.status !== 0) return [];
@@ -29,6 +39,67 @@ function untrackedSourceFiles(cwd) {
     .split('\0')
     .filter(Boolean)
     .filter((file) => SOURCE_EXTENSIONS.has(path.extname(file).toLowerCase()));
+}
+
+function lockName(prefix, cwd) {
+  const key = crypto.createHash('sha1').update(path.resolve(cwd)).digest('hex').slice(0, 16);
+  return `${prefix}-${key}.lock`;
+}
+
+function isPidAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function isLockActive(file, staleMs = LOCK_STALE_MS) {
+  try {
+    const pid = parseInt(fs.readFileSync(file, 'utf8').trim(), 10) || 0;
+    const stat = fs.statSync(file);
+    const age = Date.now() - stat.mtimeMs;
+    if (age <= LOCK_BOOT_MS) return true;
+    if (age <= staleMs && isPidAlive(pid)) return true;
+    fs.unlinkSync(file);
+  } catch (_) {}
+  return false;
+}
+
+function tryWriteLock(file) {
+  try {
+    fs.writeFileSync(file, String(process.pid), { flag: 'wx' });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function lockPaths(cwd) {
+  return {
+    buildLockFile: path.join(os.tmpdir(), lockName('crg-build', cwd)),
+    updateLockFile: path.join(os.tmpdir(), lockName('crg-update-run', cwd)),
+  };
+}
+
+function acquireRefreshLock(cwd, mode, waitMs = REFRESH_WAIT_MS) {
+  const { buildLockFile, updateLockFile } = lockPaths(cwd);
+  const lockFile = mode === 'build' ? buildLockFile : updateLockFile;
+  const otherLockFile = mode === 'build' ? updateLockFile : buildLockFile;
+  const deadline = Date.now() + waitMs;
+  while (Date.now() <= deadline) {
+    const thisActive = isLockActive(lockFile);
+    const otherActive = isLockActive(otherLockFile);
+    if (!thisActive && !otherActive && tryWriteLock(lockFile)) return lockFile;
+    sleepSync(100);
+  }
+  return null;
 }
 
 function withTemporaryGitIndex(cwd, callback) {
@@ -85,8 +156,27 @@ function runCrgRefresh(cwd, requestedMode, logFile, options = {}) {
   return { success, mode, usedTemporaryIndex: hasUntrackedSource };
 }
 
+function refreshCrgSync(cwd, options = {}) {
+  const root = repoRoot(cwd);
+  if (!root) return false;
+  const hasUntrackedSource = untrackedSourceFiles(root).length > 0;
+  const hasGraph = fs.existsSync(path.join(root, '.code-review-graph'));
+  const mode = hasUntrackedSource || !hasGraph ? 'build' : 'update';
+  const lockFile = acquireRefreshLock(root, mode, options.waitMs || REFRESH_WAIT_MS);
+  if (!lockFile) return false;
+  try {
+    return runCrgRefresh(root, mode, options.logFile || null, options).success;
+  } finally {
+    try { fs.unlinkSync(lockFile); } catch (_) {}
+  }
+}
+
 module.exports = {
+  acquireRefreshLock,
+  refreshCrgSync,
+  lockPaths,
   runCrgRefresh,
   untrackedSourceFiles,
   withTemporaryGitIndex,
+  repoRoot,
 };

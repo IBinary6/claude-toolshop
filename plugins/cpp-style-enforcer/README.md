@@ -2,6 +2,20 @@
 
 C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude Code hook 在编辑 / 提交时自动执行格式化、版权头、cpplint 检查与 UTF-8 BOM 统一，并区分新老文件采用不同策略。
 
+## 与 Codex 版的语义对应
+
+两边执行同一套 C++ 规范语义：**新文件/新项目走全套，老项目老文件默认只补 BOM；提交前 cpplint 只检查不改写；CRLF/LF 不通过过滤器规避**。
+
+| 语义能力 | Claude Code 版 | Codex 版 |
+|---|---|---|
+| 编辑后处理 | `PostToolUse` 串行处理本次编辑文件 | `PostToolUse` 记录触碰文件，`Stop` 批量处理 |
+| 提交前检查 | `PreToolUse:Bash` 识别 `git commit` 并检查暂存区 C++ 文件 | 同样识别真正的 `git commit`，只检查暂存区 |
+| 新老文件策略 | `.claude-cpp-style/cpp-style.json` + 全局模板 | `.codex-cpp-style/cpp-style.json`，兼容 `.claude-cpp-style` |
+| cpplint 行尾 | 保持原始 LF/CRLF；不屏蔽 `whitespace/newline` | 同样保持原始 LF/CRLF；不屏蔽 `whitespace/newline` |
+| 依赖安装 | 运行期只检测，不自动 `pip/npm install` | 运行期只检测，不自动 `pip/npm install` |
+
+因此两边在触发时机上不同，但对用户代码的最终约束一致。
+
 ## v0.3.0 行为
 
 单进程模块化流水线，全程 `exit 0`（不再有协议冲突崩溃），cpplint 使用真实路径运行以避免 header guard / include order 误报，并保证源文件字节恢复。clang-format 双模式（新文件整文件全格 / 老文件仅格改动行），运行期只检测依赖、不做网络安装，并按需自动生成项目 `.clang-format` 让 VS / clangd / 本插件三方一致。

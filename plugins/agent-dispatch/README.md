@@ -2,6 +2,20 @@
 
 白名单制强制主 agent 委派工作给子代理（subagent），保护主 agent 的 200K 上下文窗口。安装即生效，零配置。
 
+## 与 Codex 版的语义对应
+
+两边追求同一条调度语义：**主代理保留规划、整合和 Git 串行操作；可并行、边界清晰的探索/实现/审查交给子代理；子代理完成后报告改动和验证**。
+
+| 语义能力 | Claude Code 版 | Codex 版 |
+|---|---|---|
+| 主代理工具约束 | `PreToolUse` 白名单硬拦截，非轻量工具要求用 `Agent` | `PreToolUse` 软提示，避免误拦截主代理派出的子代理 |
+| 子代理识别 | Claude hook 输入包含 `agent_id`，子代理可豁免 | Codex hook 不能稳定区分调用来源，改用 `SubagentStart` 规则 |
+| 调度提示 | 被 block 后下一条 prompt 注入 dispatcher 指令 | `SessionStart` / `UserPromptSubmit` 注入紧凑调度策略 |
+| Git 边界 | 安全 Git 可直跑，危险 Git 拦截 | 纯 Git CLI 固定主代理串行执行，不进入委派分类 |
+| 配置 | `~/.agent-dispatch` + 项目 `.agent-dispatch` | `PLUGIN_DATA` + 项目 `.agent-dispatch-codex`，支持 Codex agent profile |
+
+所以 Claude 版偏“硬门禁”，Codex 版偏“原生编排”。机制不同，但目标都是保护主上下文并让子代理承担可拆分工作。
+
 ## 工作原理
 
 | Hook 时机 | 脚本 | 作用 |

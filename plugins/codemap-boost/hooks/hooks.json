@@ -67,6 +67,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "mcp__(?:code_review_graph|code-review-graph|codegraph|graphify)__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_graph_tool/pre_graph_tool.js\"",
+            "timeout": 600
+          }
+        ]
       }
     ],
     "SessionEnd": [

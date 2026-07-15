@@ -2,7 +2,21 @@
 
 让 Claude 的代码搜索能力从「纯文本 grep」升级为「符号 + 调用关系」级别的图谱检索。
 
-依赖准备好后，hook 会在后台自动构建和更新图谱；依赖安装与 MCP 注册需要先运行 `/codemap-boost-setup`。
+依赖准备好后，hook 会自动构建和更新图谱；真正调用图谱 MCP 前还会同步等待一次 build/update，避免 Claude 读取过期图谱。依赖安装与 MCP 注册需要先运行 `/codemap-boost-setup`。
+
+## 与 Codex 版的语义对应
+
+两边追求同一条用户语义：**安装后主动维护代码图，结构类问题优先用图谱，读取图谱前保证刷新完成**。
+
+| 语义能力 | Claude Code 版 | Codex 版 |
+|---|---|---|
+| 会话启动维护图谱 | `SessionStart` 后台 build/update，缺 CLI 时提示 setup | `SessionStart` 自动 bootstrap 并同步 build/update |
+| 修改后更新图谱 | `PostToolUse` / `CwdChanged` 后台刷新 | `PostToolUse` 同步刷新 |
+| 读取前屏障 | 图谱 MCP `PreToolUse` 同步刷新，失败则 deny | 图谱 MCP `PreToolUse` 同步刷新，失败则 deny |
+| grep/agent 引导 | `Grep` / `Agent` 强提示优先用图谱 | `Bash` / prompt / subagent 软提示优先用图谱 |
+| 依赖安装 | 通过 `/codemap-boost-setup` 显式确认安装 | Codex 插件可在 SessionStart 自动 bootstrap |
+
+Claude 版不在普通 hook 中静默执行 `pip install`，这是为了避免 SessionStart 在用户未确认时修改全局 Python 环境。图谱的 build/update 本身仍是自动的。
 
 ---
 
@@ -63,6 +77,7 @@ Node.js 是 hook 运行时，**必需**；`code-review-graph` / `graphify` 缺�
 |------|---------|-------------|
 | **自动构建** | 打开会话时 | 手动跑 `code-review-graph build` / `graphify .` |
 | **增量更新** | 改完文件后 | 手动跑 `code-review-graph update` |
+| **读取前刷新** | 调用图谱 MCP 前 | 担心 MCP 读到旧图谱 |
 
 此外还有轻量运行时提示 hook，会在 Claude 使用 Grep / Agent 时提醒它优先调用图谱 MCP 工具；该提示不落盘。
 
