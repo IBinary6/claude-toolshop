@@ -1,6 +1,6 @@
 # bugdb-knowledge — 本地知识库插件
 
-> 版本 v0.1.4
+> 版本 v0.1.8
 
 基于 SQLite + FTS5 全文检索的 Claude Code 插件，为开发过程提供**持久化经验积累**。
 
@@ -121,7 +121,7 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
             ┌─────────────────────────────┐
             │        SQLite 数据库         │
             │  knowledge 表 + FTS5 索引    │
-            │  ~/.claude/bugdb/bugs.db     │
+            │  ~/.bugdb/bugs.db            │
             └─────────────────────────────┘
 ```
 
@@ -393,6 +393,9 @@ bugdb export --output backup.json
 
 # 从 JSON 导入（兼容 v1 旧格式和 v2 新格式）
 bugdb import --input backup.json
+
+# 显式迁移旧版 Claude 专属数据库（源库不会删除）
+bugdb migrate --source ~/.claude/bugdb/bugs.db
 ```
 
 ### 配置管理
@@ -477,7 +480,7 @@ feedback --result failure → consecutive_failures+1
 
 ## 数据存储
 
-默认路径 `~/.claude/bugdb/`：
+默认路径 `~/.bugdb/`：
 
 | 文件 | 说明 |
 |------|------|
@@ -490,8 +493,10 @@ feedback --result failure → consecutive_failures+1
 路径解析优先级：
 
 1. `BUGDB_HOME` 环境变量 → 该目录下的 `bugs.db` / `bugdb.log`
-2. `~/.claude/bugdb/config.json` 中的 `db_path` / `log_path` 字段
-3. 默认 `~/.claude/bugdb/`
+2. `~/.bugdb/config.json` 中的 `db_path` / `log_path` 字段
+3. 默认 `~/.bugdb/`
+
+旧版本使用的 `~/.claude/bugdb/bugs.db` 仍可通过 `bugdb migrate` 显式迁移；迁移成功后源库保留不动。
 
 ```bash
 # 示例：将数据库放到自定义目录

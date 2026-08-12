@@ -2,14 +2,15 @@
 
 优先级链：
 1. 环境变量 BUGDB_HOME → 该目录下的 bugs.db / bugdb.log
-2. ~/.claude/bugdb/config.json 中的 db_path / log_path 字段
-3. 默认 ~/.claude/bugdb/bugs.db 和 ~/.claude/bugdb/bugdb.log
+2. ~/.bugdb/config.json 中的 db_path / log_path 字段
+3. 默认 ~/.bugdb/bugs.db 和 ~/.bugdb/bugdb.log
 """
 import json
 import os
 from pathlib import Path
 
-_DEFAULT_DIR = Path.home() / '.claude' / 'bugdb'
+_DEFAULT_DIR = Path.home() / '.bugdb'
+_LEGACY_DIR = Path.home() / '.claude' / 'bugdb'
 _CONFIG_FILE = _DEFAULT_DIR / 'config.json'
 
 _config_cache: dict | None = None
@@ -18,6 +19,14 @@ _config_cache: dict | None = None
 def get_config_file() -> Path:
     """返回 config.json 路径。"""
     return _CONFIG_FILE
+
+
+def get_legacy_db_path() -> Path:
+    """返回旧版 Claude 专属 SQLite 路径，供显式迁移使用。"""
+    claude_home = os.environ.get('CLAUDE_HOME', '').strip()
+    if claude_home:
+        return Path(claude_home).expanduser() / 'bugdb' / 'bugs.db'
+    return _LEGACY_DIR / 'bugs.db'
 
 
 def read_config() -> dict:
@@ -41,7 +50,7 @@ def _clear_config_cache() -> None:
 def get_bugdb_home() -> Path:
     """获取 BUGDB_HOME 目录。
 
-    优先级：BUGDB_HOME 环境变量 > 默认 ~/.claude/bugdb
+    优先级：BUGDB_HOME 环境变量 > 默认 ~/.bugdb
     """
     env = os.environ.get('BUGDB_HOME')
     if env and env.strip():
@@ -56,7 +65,7 @@ def get_db_path(explicit: Path | str | None = None) -> Path:
     1. explicit 参数（非空）
     2. BUGDB_HOME 环境变量 → $BUGDB_HOME/bugs.db
     3. config.json 中的 db_path
-    4. 默认 ~/.claude/bugdb/bugs.db
+    4. 默认 ~/.bugdb/bugs.db
     """
     if explicit is not None and explicit != "":
         return Path(explicit).expanduser()
@@ -79,7 +88,7 @@ def get_log_path() -> Path:
     优先级：
     1. BUGDB_HOME 环境变量 → $BUGDB_HOME/bugdb.log
     2. config.json 中的 log_path
-    3. 默认 ~/.claude/bugdb/bugdb.log
+    3. 默认 ~/.bugdb/bugdb.log
     """
     env = os.environ.get('BUGDB_HOME', '').strip()
     if env:

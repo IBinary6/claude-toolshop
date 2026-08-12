@@ -63,10 +63,10 @@ class TestGetBugdbHome:
     """get_bugdb_home 的默认值与环境变量覆盖。"""
 
     def test_default(self, monkeypatch):
-        """无 BUGDB_HOME 时返回默认 ~/.claude/bugdb。"""
+        """无 BUGDB_HOME 时返回默认 ~/.bugdb。"""
         monkeypatch.delenv("BUGDB_HOME", raising=False)
         result = get_bugdb_home()
-        assert result == Path.home() / ".claude" / "bugdb"
+        assert result == Path.home() / ".bugdb"
 
     def test_env_override(self, tmp_path, monkeypatch):
         """BUGDB_HOME 环境变量覆盖默认路径。"""
@@ -78,13 +78,13 @@ class TestGetBugdbHome:
         """BUGDB_HOME 为空字符串时回退到默认。"""
         monkeypatch.setenv("BUGDB_HOME", "")
         result = get_bugdb_home()
-        assert result == Path.home() / ".claude" / "bugdb"
+        assert result == Path.home() / ".bugdb"
 
     def test_whitespace_env_falls_back(self, monkeypatch):
         """BUGDB_HOME 仅含空白时回退到默认。"""
         monkeypatch.setenv("BUGDB_HOME", "   ")
         result = get_bugdb_home()
-        assert result == Path.home() / ".claude" / "bugdb"
+        assert result == Path.home() / ".bugdb"
 
 
 # ---------- get_db_path ----------
@@ -111,7 +111,7 @@ class TestGetDbPath:
         monkeypatch.delenv("BUGDB_HOME", raising=False)
         monkeypatch.setattr(paths, "_CONFIG_FILE", Path("/nonexistent/config.json"))
         result = get_db_path(explicit="")
-        assert result == Path.home() / ".claude" / "bugdb" / "bugs.db"
+        assert result == Path.home() / ".bugdb" / "bugs.db"
 
     def test_bugdb_home_second(self, tmp_path, monkeypatch):
         """BUGDB_HOME 是第二优先级。"""
@@ -134,7 +134,13 @@ class TestGetDbPath:
         monkeypatch.delenv("BUGDB_HOME", raising=False)
         monkeypatch.setattr(paths, "_CONFIG_FILE", Path("/nonexistent/config.json"))
         result = get_db_path()
-        assert result == Path.home() / ".claude" / "bugdb" / "bugs.db"
+        assert result == Path.home() / ".bugdb" / "bugs.db"
+
+    def test_default_config_path_is_tool_neutral(self, monkeypatch):
+        """默认 SQLite 配置路径应与具体工具目录解耦。"""
+        monkeypatch.delenv("BUGDB_HOME", raising=False)
+        monkeypatch.setattr(paths, "_CONFIG_FILE", Path("/nonexistent/config.json"))
+        assert get_db_path() == Path.home() / ".bugdb" / "bugs.db"
 
     def test_bugdb_home_takes_precedence_over_config(self, tmp_path, monkeypatch):
         """BUGDB_HOME 优先于 config.json。"""
@@ -179,7 +185,7 @@ class TestGetLogPath:
         monkeypatch.delenv("BUGDB_HOME", raising=False)
         monkeypatch.setattr(paths, "_CONFIG_FILE", Path("/nonexistent/config.json"))
         result = get_log_path()
-        assert result == Path.home() / ".claude" / "bugdb" / "bugdb.log"
+        assert result == Path.home() / ".bugdb" / "bugdb.log"
 
     def test_bugdb_home_takes_precedence_over_config(self, tmp_path, monkeypatch):
         """BUGDB_HOME 优先于 config.json。"""

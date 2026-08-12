@@ -337,3 +337,100 @@ def test_cli_import_rejects_invalid_combination_atomically(tmp_path):
     lst = _run(["list", "--status", "all"], tmp_path)
     assert lst.returncode == 0
     assert json.loads(lst.stdout)["results"] == []
+
+
+def test_cli_migrate_legacy_sqlite_preserves_records_and_source(tmp_path):
+    """从旧 SQLite 迁移时保留 ID、状态、计数，并保留源库。"""
+    old_home = tmp_path / ".claude" / "bugdb"
+    new_home = tmp_path / ".bugdb"
+    old_home.mkdir(parents=True)
+
+    active_id = _add_record(old_home)
+    archived_id = _add_record(old_home, context="error C2065: another identifier")
+    feedback = _run(["feedback", "--id", str(active_id), "--result", "success"], old_home)
+    assert feedback.returncode == 0, feedback.stderr
+    archived = _run(["obsolete", "--id", str(archived_id), "--reason", "legacy"], old_home)
+    assert archived.returncode == 0, archived.stderr
+
+    source_records = json.loads(
+        _run(["list", "--status", "all"], old_home).stdout
+    )["results"]
+    source_path = old_home / "bugs.db"
+    assert source_path.exists()
+
+    migrated = _run(["migrate", "--source", str(source_path)], new_home)
+    assert migrated.returncode == 0, migrated.stderr
+
+    destination = new_home / "bugs.db"
+    assert destination.exists()
+    destination_records = json.loads(
+        _run(["list", "--status", "all"], new_home).stdout
+    )["results"]
+
+    def state(record):
+        return (
+            record["id"],
+            record["status"],
+            record["usage_count"],
+            record["success_count"],
+        )
+
+    assert sorted(map(state, destination_records)) == sorted(map(state, source_records))
+    assert len(destination_records) == len(source_records)
+    assert source_path.exists()
+
+    search = _run(["search", "--query", "C2065"], new_home)
+    assert search.returncode == 0, search.stderr
+    assert any(record["id"] == active_id for record in json.loads(search.stdout)["results"])
+
+
+def test_cli_migrate_existing_destination_deduplicates_without_overwrite(tmp_path):
+    """目标已有相似记录时跳过源记录，不覆盖目标内容。"""
+    old_home = tmp_path / ".claude" / "bugdb"
+    new_home = tmp_path / ".bugdb"
+    old_home.mkdir(parents=True)
+    new_home.mkdir()
+
+    _add_record(old_home)
+    destination_id = _add_record(new_home)
+    updated = _run(
+        ["update", "--id", str(destination_id), "--content", "local content"],
+        new_home,
+    )
+    assert updated.returncode == 0, updated.stderr
+
+    migrated = _run(
+        ["migrate", "--source", str(old_home / "bugs.db")],
+        new_home,
+    )
+    assert migrated.returncode == 0, migrated.stderr
+    result = json.loads(migrated.stdout)
+    assert result["migrated"] == 0
+    assert result["skipped"] == 1
+
+    destination = json.loads(
+        _run(["get", "--id", str(destination_id)], new_home).stdout
+    )
+    assert destination["content"] == "local content"
+    assert len(json.loads(_run(["list", "--status", "all"], new_home).stdout)["results"]) == 1
+
+
+def test_cli_migrate_existing_destination_keeps_distinct_contexts(tmp_path):
+    """相同错误码但上下文不同的记录不能被模糊去重吞掉。"""
+    old_home = tmp_path / ".claude" / "bugdb"
+    new_home = tmp_path / ".bugdb"
+    old_home.mkdir(parents=True)
+    new_home.mkdir()
+
+    _add_record(old_home, context="error C2065: source context alpha")
+    _add_record(new_home, context="error C2065: destination context beta")
+
+    migrated = _run(
+        ["migrate", "--source", str(old_home / "bugs.db")],
+        new_home,
+    )
+    assert migrated.returncode == 0, migrated.stderr
+    result = json.loads(migrated.stdout)
+    assert result["migrated"] == 1
+    assert result["skipped"] == 0
+    assert len(json.loads(_run(["list", "--status", "all"], new_home).stdout)["results"]) == 2

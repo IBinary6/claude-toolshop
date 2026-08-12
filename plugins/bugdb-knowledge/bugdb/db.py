@@ -1,5 +1,7 @@
 """BugDB 数据访问层 (DAL)。Schema 初始化 + FTS5 同步 + 版本迁移。"""
+import os
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -19,6 +21,58 @@ _DECAY_FAILURE_THRESHOLD = 3
 _DECAY_STEP = 20
 _DECAY_FLOOR = 20
 _DECAY_SUCCESS_RATE = 0.3
+
+
+def backup_sqlite_database(source: Path | str, destination: Path | str) -> None:
+    """将 SQLite 数据库安全备份到新路径，并在成功后原子替换目标文件。
+
+    目标文件必须不存在；调用方应在目标已有数据时选择去重导入流程。
+    SQLite backup API 会一并保留现有 schema、行 ID 以及 FTS 内容。
+
+    Example:
+        ``backup_sqlite_database("~/.claude/bugdb/bugs.db", "~/.bugdb/bugs.db")``
+    """
+    source_path = Path(source).expanduser()
+    destination_path = Path(destination).expanduser()
+    if not source_path.is_file():
+        raise FileNotFoundError(f"source database not found: {source_path}")
+    if source_path.resolve() == destination_path.resolve():
+        raise ValueError("source and destination database must differ")
+    if destination_path.exists():
+        raise FileExistsError(f"destination database already exists: {destination_path}")
+
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix=f".{destination_path.name}.",
+            suffix=".tmp",
+            dir=str(destination_path.parent),
+        )
+        os.close(fd)
+        temp_path = Path(temp_name)
+        source_uri = f"{source_path.resolve().as_uri()}?mode=ro"
+        source_conn = sqlite3.connect(source_uri, uri=True)
+        destination_conn = sqlite3.connect(str(temp_path))
+        try:
+            source_conn.backup(destination_conn)
+            destination_conn.commit()
+        finally:
+            destination_conn.close()
+            source_conn.close()
+        os.replace(str(temp_path), str(destination_path))
+        temp_path = None
+    finally:
+        if temp_path is not None:
+            for sidecar in (
+                temp_path,
+                Path(f"{temp_path}-wal"),
+                Path(f"{temp_path}-shm"),
+            ):
+                try:
+                    sidecar.unlink()
+                except FileNotFoundError:
+                    pass
 
 
 def _migrate_v0_to_v1(conn: sqlite3.Connection) -> None:

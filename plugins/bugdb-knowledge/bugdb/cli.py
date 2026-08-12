@@ -5,7 +5,10 @@
 """
 import argparse
 import json
+import sqlite3
 import sys
+import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 # 自举：把脚本所在目录的父目录塞进 sys.path，使得 `python cli.py` 直接可用，
@@ -16,11 +19,11 @@ if _PKG_PARENT not in sys.path:
 
 from bugdb import formatters, search as search_mod
 from bugdb import utils as _utils
-from bugdb.db import BugDB
+from bugdb.db import BugDB, backup_sqlite_database
 from bugdb.exceptions import BugDBError, RecordNotFound
 from bugdb.models import Category, EntryKind, KnowledgeRecord, Status, validate_kind_category
 from bugdb.paths import get_db_path, get_log_path, get_bugdb_home
-from bugdb.paths import get_config_file, read_config
+from bugdb.paths import get_config_file, get_legacy_db_path, read_config
 
 
 def _parse_steps(raw: str) -> list | None:
@@ -354,6 +357,86 @@ def cmd_import(args, db: BugDB) -> int:
     return 0
 
 
+def _migrate_into_existing(source: Path, destination: Path) -> tuple[int, int]:
+    """将源库记录去重导入已有目标库，返回 (导入数, 跳过数)。"""
+    with tempfile.TemporaryDirectory(prefix="bugdb-migration-source-") as temp_dir:
+        readable_copy = Path(temp_dir) / "source.db"
+        backup_sqlite_database(source, readable_copy)
+        source_db = BugDB(db_path=readable_copy)
+        destination_db = BugDB(db_path=destination)
+        existing = {
+            (record.key_pattern, record.context): record
+            for record in destination_db.list_all(status='all')
+        }
+        id_map: dict[int, int] = {}
+        imported: list[tuple[KnowledgeRecord, KnowledgeRecord]] = []
+        skipped = 0
+
+        for record in source_db.list_all(status='all'):
+            duplicate = existing.get((record.key_pattern, record.context))
+            if duplicate is not None:
+                if record.id is not None and duplicate.id is not None:
+                    id_map[record.id] = duplicate.id
+                skipped += 1
+                continue
+            saved = destination_db.add(replace(record, id=None, replaced_by_id=None))
+            existing[(record.key_pattern, record.context)] = saved
+            if record.id is not None and saved.id is not None:
+                id_map[record.id] = saved.id
+            imported.append((record, saved))
+
+        for source_record, destination_record in imported:
+            if source_record.replaced_by_id not in id_map:
+                continue
+            destination_record.replaced_by_id = id_map[source_record.replaced_by_id]
+            destination_db.update(destination_record)
+        return len(imported), skipped
+
+
+def cmd_migrate(args) -> int:
+    """显式把旧 SQLite 迁移到当前默认库，源库始终保留。"""
+    source = Path(args.source).expanduser()
+    destination = (
+        Path(args.destination).expanduser()
+        if args.destination
+        else get_db_path()
+    )
+    if source.resolve() == destination.resolve():
+        sys.stderr.write("migrate error: source and destination database must differ\n")
+        return 2
+    try:
+        if not destination.exists():
+            backup_sqlite_database(source, destination)
+            total = BugDB(db_path=destination).stats()['total']
+            _output(
+                {
+                    'migrated': total,
+                    'skipped': 0,
+                    'source': str(source),
+                    'destination': str(destination),
+                },
+                'stats',
+                args.format,
+            )
+            return 0
+
+        imported, skipped = _migrate_into_existing(source, destination)
+        _output(
+            {
+                'migrated': imported,
+                'skipped': skipped,
+                'source': str(source),
+                'destination': str(destination),
+            },
+            'stats',
+            args.format,
+        )
+        return 0
+    except (OSError, ValueError, sqlite3.DatabaseError) as e:
+        sys.stderr.write(f"migrate error: {e}\n")
+        return 2
+
+
 def cmd_config(args) -> int:
     """config 子命令处理函数（不需要 BugDB 实例）。"""
     action = args.config_action
@@ -571,6 +654,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--input', required=True)
     _add_common(p)
 
+    # migrate
+    p = sub.add_parser('migrate', help='显式迁移旧版 ~/.claude/bugdb/bugs.db')
+    p.add_argument(
+        '--source',
+        default=str(get_legacy_db_path()),
+        help='旧 SQLite 路径（默认 ~/.claude/bugdb/bugs.db）',
+    )
+    p.add_argument(
+        '--destination',
+        default=None,
+        help='目标 SQLite 路径（默认当前 BUGDB_HOME 或 ~/.bugdb/bugs.db）',
+    )
+    _add_common(p)
+
     # config
     p = sub.add_parser('config', help='查看/修改 BugDB 配置')
     p.add_argument('config_action', choices=['path', 'get', 'set', 'init'],
@@ -589,6 +686,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
+        if args.command == 'migrate':
+            return cmd_migrate(args)
         if args.command == 'config':
             return cmd_config(args)
         db = BugDB()
@@ -622,6 +721,7 @@ HANDLERS = {
     'normalize': cmd_normalize,
     'export': cmd_export,
     'import': cmd_import,
+    'migrate': cmd_migrate,
     'config': cmd_config,
 }
 
