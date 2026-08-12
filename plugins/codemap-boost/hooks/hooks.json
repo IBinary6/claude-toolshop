@@ -2,7 +2,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "*",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
@@ -24,7 +24,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|Bash",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell|mcp__.*(?:write|edit|create|replace|insert|patch|apply|update)",
         "hooks": [
           {
             "type": "command",
@@ -59,22 +59,24 @@
         ]
       },
       {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
         "matcher": "mcp__(?:code_review_graph|code-review-graph|codegraph|graphify)__.*",
         "hooks": [
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_graph_tool/pre_graph_tool.js\"",
             "timeout": 600
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js\"",
+            "timeout": 5
           }
         ]
       }

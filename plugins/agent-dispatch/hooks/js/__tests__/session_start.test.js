@@ -45,7 +45,10 @@ try {
 
   const first = runSessionStart(repo, fakeHome);
   assert.equal(first.status, 0, `SessionStart should exit 0: ${first.stderr}`);
-  assert.equal((first.stdout || '').trim(), '', 'SessionStart stdout should stay empty');
+  const firstOutput = JSON.parse((first.stdout || '').trim());
+  assert.equal(firstOutput.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.ok(firstOutput.hookSpecificOutput.additionalContext.includes('agent-dispatch:*'));
+  assert.ok(firstOutput.hookSpecificOutput.additionalContext.includes('ToolSearch'));
 
   const globalConfigPath = path.join(fakeHome, '.agent-dispatch', 'config.json');
   const globalCfg = JSON.parse(fs.readFileSync(globalConfigPath, 'utf8'));
@@ -57,7 +60,9 @@ try {
     'mcp_block_exact_add',
     'mcp_block_exact_remove',
     'bash_heads_add',
-    'bash_heads_remove'
+    'bash_heads_remove',
+    'prompt_keywords_add',
+    'prompt_keywords_remove'
   ]) {
     assert.ok(Array.isArray(globalCfg.overrides[key]), `global overrides.${key} should be bootstrapped`);
   }
@@ -74,6 +79,7 @@ try {
 
   const second = runSessionStart(repo, fakeHome);
   assert.equal(second.status, 0, `second SessionStart should exit 0: ${second.stderr}`);
+  assert.equal(JSON.parse((second.stdout || '').trim()).hookSpecificOutput.hookEventName, 'SessionStart');
   const entries = fs.readFileSync(gitignorePath, 'utf8')
     .split(/\r?\n/)
     .filter((line) => line.trim() === '.agent-dispatch/');

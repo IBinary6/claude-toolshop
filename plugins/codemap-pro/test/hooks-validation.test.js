@@ -67,7 +67,8 @@ assert(hooksConfig.hooks, 'hooks 对象存在');
 assert(hooksConfig.hooks.SessionStart, 'SessionStart 事件存在');
 assert(hooksConfig.hooks.PreToolUse, 'PreToolUse 事件存在');
 assert(hooksConfig.hooks.PostToolUse, 'PostToolUse 事件存在');
-passCount += 3;
+assert(hooksConfig.hooks.SubagentStart, 'SubagentStart 事件存在');
+passCount += 4;
 
 // Test 3: 验证没有多余的 matcher（SessionStart 不应该有 matcher）
 log('\nTest 3: SessionStart matcher 验证', 'yellow');
@@ -112,7 +113,7 @@ validateTimeout(hooksConfig.hooks.CwdChanged, 'CwdChanged');
 log('\nTest 5: async 参数验证', 'yellow');
 const asyncHooks = [
   { event: 'SessionStart', entryIndex: 0, hookIndex: 0, name: 'cg_init.js' },
-  { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_update.js' },
+  { event: 'PostToolUse', entryIndex: 0, hookIndex: 0, name: 'cg_sync.js' },
   { event: 'CwdChanged', entryIndex: 0, hookIndex: 0, name: 'cg_worktree.js' }
 ];
 
@@ -137,7 +138,7 @@ const expectedFiles = [
   'hooks/js/lib/utils.js',
   'hooks/js/lib/ensure_deps.js',
   'hooks/js/cg_init/cg_init.js',
-  'hooks/js/cg_update/cg_update.js',
+  'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_gitignore/cg_gitignore.js',
   'hooks/js/cg_worktree/cg_worktree.js',
   'hooks/js/agent_nudge/agent_nudge.js',
@@ -188,6 +189,7 @@ function validateHookScripts(hooks, eventName) {
 validateHookScripts(hooksConfig.hooks.SessionStart, 'SessionStart');
 validateHookScripts(hooksConfig.hooks.PreToolUse, 'PreToolUse');
 validateHookScripts(hooksConfig.hooks.PostToolUse, 'PostToolUse');
+validateHookScripts(hooksConfig.hooks.SubagentStart, 'SubagentStart');
 validateHookScripts(hooksConfig.hooks.CwdChanged, 'CwdChanged');
 
 const allHookCommands = JSON.stringify(hooksConfig.hooks);
@@ -246,7 +248,8 @@ const scriptsToTest = [
   'hooks/js/cg_sync/cg_sync.js',
   'hooks/js/cg_worktree/cg_worktree.js',
   'hooks/js/cg_gitignore/cg_gitignore.js',
-  'hooks/js/grep_nudge/grep_nudge.js'
+  'hooks/js/grep_nudge/grep_nudge.js',
+  'hooks/js/agent_nudge/agent_nudge.js'
 ];
 
 for (const script of scriptsToTest) {
@@ -260,6 +263,18 @@ for (const script of scriptsToTest) {
     failCount++;
     log(`✗ ${script} 语法错误`, 'red');
   }
+}
+
+const retrievalSources = [
+  'hooks/js/cg_session_nudge/cg_session_nudge.js',
+  'hooks/js/grep_nudge/grep_nudge.js',
+  'hooks/js/agent_nudge/agent_nudge.js',
+].map((file) => fs.readFileSync(path.join(pluginRoot, file), 'utf-8'));
+for (const source of retrievalSources) {
+  assert(/adaptive|自适应/.test(source), '检索提示使用自适应语义');
+  assert(/ToolSearch/.test(source), '检索提示覆盖延迟 MCP 工具发现');
+  assert(/do not start duplicate|不要重复/.test(source), '检索提示声明图谱同步所有权');
+  passCount += 3;
 }
 
 // Test 11: 验证 plugin.json 版本与 marketplace.json 一致

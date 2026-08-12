@@ -2,15 +2,16 @@
 'use strict';
 
 /**
- * ABOUTME: UserPromptSubmit Hook — 延迟激活 dispatcher 角色指令
- * ABOUTME: 仅在上次 block 后的下一条 prompt 注入一次，注入后立即删标记
+ * ABOUTME: UserPromptSubmit Hook — 按当前任务注入 Claude 原生 agent 路由
+ * ABOUTME: 上次 block marker 只补充恢复提示，不再是路由生效前提
  * ABOUTME: 由 config.modules.prompt_inject 控制总开关
  */
 
 const fs = require('fs');
 const { loadConfig } = require('./lib/config');
+const { promptGuidance } = require('./lib/guidance');
 const { blockedMarkerPath, hookCwd } = require('./lib/marker');
-const { readStdinJson } = require('./lib/utils');
+const { output, readStdinJson } = require('./lib/utils');
 
 const MARKER_TTL_MS = 2 * 60 * 60 * 1000; // 2 小时过期
 
@@ -32,19 +33,20 @@ async function main() {
   const config = loadConfig(cwd);
   const markerFile = blockedMarkerPath(input);
   if (!config.modules.prompt_inject) return;
-  if (!isRecentlyBlocked(markerFile)) return;
-
-  // 一次性触发：注入后立即删标记，避免后续每条 prompt 都注入
-  try { fs.unlinkSync(markerFile); } catch {}
-
-  const message = [
-    '✨ 上次工具调用被拦截，继续当前任务请注意：',
-    '✨ 不论任务大小，非白名单或高风险操作一律委派子代理，"自己做更快"不是例外。',
-    '✨ 使用 Agent({ description, prompt }) 委派子代理',
-    '✨ 子代理修改文件后需在报告中列出路径，主 Agent 据此重读保持缓存一致',
-  ].join('\n');
-
-  console.log(message);
+  const lines = [];
+  if (isRecentlyBlocked(markerFile)) {
+    try { fs.unlinkSync(markerFile); } catch {}
+    lines.push('上次工具调用被拦截：先划定可独立委派的边界；主 Agent 保留决策、Git 和最终整合。');
+  }
+  const guidance = promptGuidance(input && input.prompt, config);
+  if (guidance) lines.push(guidance);
+  if (lines.length === 0) return;
+  output({
+    hookSpecificOutput: {
+      hookEventName: 'UserPromptSubmit',
+      additionalContext: lines.join('\n'),
+    },
+  });
 }
 
 main().catch(() => {});

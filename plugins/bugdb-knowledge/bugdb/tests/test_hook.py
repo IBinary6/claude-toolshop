@@ -141,6 +141,40 @@ def test_hook_reads_stderr_field(tmp_path):
 
 
 @skip_no_node
+def test_failure_hook_reads_top_level_error(tmp_path):
+    """新版 PostToolUseFailure 的顶层 error 应直接参与知识库召回。"""
+    seeded_id = _seed_record(
+        tmp_path,
+        context="error LNK2019: unresolved external symbol foo",
+        cause="missing definition",
+        content="define foo or link the lib",
+    )
+    res = _run_hook({
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "PowerShell",
+        "error": "Exit code 1\nmain.cpp(1): error LNK2019: unresolved external symbol foo",
+        "is_interrupt": False,
+    }, tmp_path)
+    assert res.returncode == 0
+    payload = json.loads(res.stdout)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+    assert f"id={seeded_id}" in payload["hookSpecificOutput"]["additionalContext"]
+
+
+@skip_no_node
+def test_failure_hook_interrupt_is_silent(tmp_path):
+    """用户中断不属于可复用故障，不能触发 BugDB 查询。"""
+    res = _run_hook({
+        "hook_event_name": "PostToolUseFailure",
+        "tool_name": "Bash",
+        "error": "Exit code 1\nfatal error: interrupted",
+        "is_interrupt": True,
+    }, tmp_path)
+    assert res.returncode == 0
+    assert res.stdout == ""
+
+
+@skip_no_node
 def test_hook_empty_stdin_no_crash(tmp_path):
     """stdin 为空（Claude Code 偶尔会有的边界情况）→ exit 0，无 stdout，无 traceback。"""
     res = subprocess.run(
@@ -193,3 +227,19 @@ def test_hook_config_timeouts_are_seconds():
     ]
     assert timeouts
     assert all(1 <= timeout <= 60 for timeout in timeouts)
+
+
+def test_hooks_register_current_shell_success_and_failure_events():
+    """Hook 注册本身属于公开合同，不能只验证脚本可被直接调用。"""
+    hooks_path = PLUGIN_DIR / "hooks" / "hooks.json"
+    hooks = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
+
+    for event_name in ("PostToolUse", "PostToolUseFailure"):
+        assert event_name in hooks
+        entry = hooks[event_name][0]
+        assert "Bash" in entry["matcher"]
+        assert "PowerShell" in entry["matcher"]
+        assert any(
+            "bugdb_check.js" in hook["command"]
+            for hook in entry["hooks"]
+        )

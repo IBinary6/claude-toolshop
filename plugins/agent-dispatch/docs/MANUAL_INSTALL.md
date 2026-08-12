@@ -1,24 +1,18 @@
 # agent-dispatch 手动安装指南
 
-本指南适用于不使用 `/plugin` 命令的用户。手动将 hook 文件部署到 `~/.claude/` 并在 `settings.json` 注册。
+优先使用 `/plugin install agent-dispatch@claude-toolshop`。只有不能使用插件系统时，才按本指南分别部署 Hook、Agent 和命令。
 
-> **注意**：手动安装时 `CLAUDE_PLUGIN_ROOT` 环境变量不可用，脚本内部使用 `__dirname` 相对定位，因此**只要保持目录层级一致**即可正常工作。
+## 前置条件
 
-## 一、前置条件
-
-| 依赖 | 最低版本 | 必需 | 用途 |
-|------|---------|------|------|
-| Node.js | 18+ | **是** | hook 运行时 |
-
-验证：
+- Claude Code 支持 `Agent`、`SubagentStart`、`SubagentStop` 与 `ToolSearch`
+- Node.js 18+
 
 ```bash
-node --version   # >= v18
+node --version
+claude --version
 ```
 
-## 二、文件部署
-
-将本仓库 `plugins/agent-dispatch/` 下的文件拷贝到 `~/.claude/` 对应位置，**保持目录层级**。
+## 部署文件
 
 ```bash
 REPO="/path/to/claude-toolshop/plugins/agent-dispatch"
@@ -27,41 +21,65 @@ DEST="$HOME/.claude/plugins-manual/agent-dispatch"
 mkdir -p "$DEST/hooks/js/lib" \
          "$DEST/hooks/js/agent_nudge" \
          "$DEST/defaults" \
-         "$DEST/commands"
+         "$HOME/.claude/agents" \
+         "$HOME/.claude/commands"
 
-# 核心文件
-cp "$REPO/hooks/hooks.json"                "$DEST/hooks/"
-cp "$REPO/hooks/js/session_start.js"       "$DEST/hooks/js/"
-cp "$REPO/hooks/js/enforcer.js"            "$DEST/hooks/js/"
-cp "$REPO/hooks/js/prompt_inject.js"       "$DEST/hooks/js/"
-cp "$REPO/hooks/js/agent_nudge/agent_nudge.js" \
-                                               "$DEST/hooks/js/agent_nudge/"
-cp "$REPO/hooks/js/lib/utils.js"           "$DEST/hooks/js/lib/"
-cp "$REPO/hooks/js/lib/config.js"          "$DEST/hooks/js/lib/"
-cp "$REPO/hooks/js/lib/rules.js"           "$DEST/hooks/js/lib/"
-cp "$REPO/hooks/js/lib/marker.js"          "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/session_start.js"             "$DEST/hooks/js/"
+cp "$REPO/hooks/js/enforcer.js"                  "$DEST/hooks/js/"
+cp "$REPO/hooks/js/prompt_inject.js"             "$DEST/hooks/js/"
+cp "$REPO/hooks/js/subagent_start.js"            "$DEST/hooks/js/"
+cp "$REPO/hooks/js/subagent_stop.js"             "$DEST/hooks/js/"
+cp "$REPO/hooks/js/agent_nudge/agent_nudge.js"   "$DEST/hooks/js/agent_nudge/"
+cp "$REPO/hooks/js/lib/utils.js"                 "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/lib/config.js"                "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/lib/rules.js"                 "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/lib/marker.js"                "$DEST/hooks/js/lib/"
+cp "$REPO/hooks/js/lib/guidance.js"              "$DEST/hooks/js/lib/"
+cp "$REPO/defaults/dispatch-rules.json"          "$DEST/defaults/"
 
-# 默认规则
-cp "$REPO/defaults/dispatch-rules.json"    "$DEST/defaults/"
-
-# Skill（可选）
-cp "$REPO/commands/agent-dispatch-setup.md" "$DEST/commands/"
+cp "$REPO"/agents/*.md                           "$HOME/.claude/agents/"
+cp "$REPO/commands/agent-dispatch-setup.md"      "$HOME/.claude/commands/"
 ```
 
-## 三、在 settings.json 中注册钩子
+插件安装时 Agent 名称带 `agent-dispatch:` 前缀；手动复制到 `~/.claude/agents` 后名称是 `dispatch-worker` 等不带前缀的名字。Hook 提示中的两种名称指向同一角色语义。
 
-编辑 `~/.claude/settings.json`，在 `hooks` 对象中添加：
+## 注册 Hook
+
+把下列条目合并到 `~/.claude/settings.json` 的 `hooks` 对象，不要覆盖其他 Hook：
 
 ```json
 {
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
             "command": "node \"$HOME/.claude/plugins-manual/agent-dispatch/hooks/js/session_start.js\"",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/plugins-manual/agent-dispatch/hooks/js/subagent_start.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/plugins-manual/agent-dispatch/hooks/js/subagent_stop.js\"",
+            "timeout": 5
           }
         ]
       }
@@ -103,20 +121,17 @@ cp "$REPO/commands/agent-dispatch-setup.md" "$DEST/commands/"
 }
 ```
 
-> Windows 用户将 `$HOME` 替换为实际路径（如 `C:/Users/username`），使用正斜杠。
+Windows 中建议把 `$HOME` 替换为 `C:/Users/<name>` 形式的绝对路径。
 
-## 四、验证安装
+## 验证
 
-启动新 Claude Code 会话。首次启动后应自动生成全局和项目配置；再尝试让主 agent 调用一个不在白名单内的工具（如重型 MCP）。预期行为：
+1. 启动新 Claude Code 会话，确认出现主 Agent 调度上下文。
+2. 请求“实现一个边界清晰的功能”，确认路由提示推荐 `dispatch-worker`。
+3. 启动该 Agent，确认其最终报告包含 `Changed files:`、`Validation:`、`Blockers:`。
+4. 让子代理尝试执行 `git status`，应被 Hook 拦截；主 Agent 的同一命令应放行。
 
-```
-⚠ BLOCKED [mcp__context7__query-docs]. Delegate via Agent tool.
-Agent({ description: "...", prompt: "..." })
-```
+## 卸载
 
-如果看到上述 block 消息，说明安装成功。
-
-## 五、卸载
-
-1. 删除 `~/.claude/plugins-manual/agent-dispatch/` 目录
-2. 从 `~/.claude/settings.json` 中移除对应的 hook 条目
+1. 从 `~/.claude/settings.json` 删除上述 Hook 条目。
+2. 删除 `~/.claude/plugins-manual/agent-dispatch/`。
+3. 删除本插件复制到 `~/.claude/agents/` 的七个 `dispatch-*.md` 和 `~/.claude/commands/agent-dispatch-setup.md`。

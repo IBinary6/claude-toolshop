@@ -35,10 +35,13 @@ function assertBlock(result, toolName) {
   assert.equal(result.status, 0, `expected exit 0, got ${result.status}`);
   assert.notEqual(result.stdout, '', 'expected block JSON output');
   const parsed = JSON.parse(result.stdout);
-  assert.equal(parsed.decision, 'block');
-  assert.ok(parsed.reason.includes('拦截'), `reason should mention 拦截: ${parsed.reason}`);
+  const hookOutput = parsed.hookSpecificOutput;
+  assert.equal(hookOutput.hookEventName, 'PreToolUse');
+  assert.equal(hookOutput.permissionDecision, 'deny');
+  const reason = hookOutput.permissionDecisionReason;
+  assert.ok(reason.includes('拦截'), `reason should mention 拦截: ${reason}`);
   if (toolName) {
-    assert.ok(parsed.reason.includes(toolName), `reason should mention ${toolName}: ${parsed.reason}`);
+    assert.ok(reason.includes(toolName), `reason should mention ${toolName}: ${reason}`);
   }
 }
 
@@ -46,6 +49,28 @@ function assertBlock(result, toolName) {
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' }, agent_id: 'sub-123' });
   assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__context7__query-docs', tool_input: {}, agent_id: 'sub-123' });
+  assertPass(r);
+}
+
+// --- 子代理 Git 边界：普通工具豁免，但 Git 必须回到主 Agent ---
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git status' }, agent_id: 'sub-123' });
+  assertBlock(r);
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test && git diff' }, agent_id: 'sub-123' });
+  assertBlock(r);
+}
+{
+  const r = runHook({
+    tool_name: 'Bash',
+    tool_input: { command: '"C:/Program Files/Git/cmd/git.exe" status' },
+    agent_id: 'sub-123',
+  });
+  assertBlock(r);
 }
 
 // --- whitelisted tool (Write is in whitelist but wouldn't match the hook matcher in prod,
@@ -131,18 +156,18 @@ function assertBlock(result, toolName) {
   assertPass(r);
 }
 
-// --- dangerous git → block ---
+// --- 主 Agent Git 始终放行；危险确认由 Claude 权限层和用户确认负责 ---
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git push --force' } });
-  assertBlock(r, 'Bash');
+  assertPass(r);
 }
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git reset --hard' } });
-  assertBlock(r, 'Bash');
+  assertPass(r);
 }
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git clean -f' } });
-  assertBlock(r, 'Bash');
+  assertPass(r);
 }
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/x' } });
@@ -266,12 +291,13 @@ function assertBlock(result, toolName) {
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'unknown-tool --version' } });
   const parsed = JSON.parse(r.stdout);
-  assert.ok(parsed.reason.includes('拦截'), 'block 消息应包含拦截标识');
-  assert.ok(parsed.reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
-  assert.ok(parsed.reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
-  assert.ok(parsed.reason.split('\n').length <= 4, 'block 消息应不超过 4 行（精简版）');
+  const reason = parsed.hookSpecificOutput.permissionDecisionReason;
+  assert.ok(reason.includes('拦截'), 'block 消息应包含拦截标识');
+  assert.ok(reason.includes('Bash'), 'block 消息应包含被拦截的工具名');
+  assert.ok(reason.includes('Agent'), 'block 消息应包含 Agent 委派示例');
+  assert.ok(reason.split('\n').length <= 4, 'block 消息应不超过 4 行（精简版）');
   // 防缓存失效：必须提示子代理改文件后回传被改文件路径，主 agent 才能重读保持一致
-  assert.ok(/列出路径|修改.*文件.*路径|文件.*路径/.test(parsed.reason),
+  assert.ok(/列出路径|修改.*文件.*路径|文件.*路径/.test(reason),
     'block 消息应提示子代理回传被修改的文件路径（防主 agent 缓存失效）');
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// ABOUTME: PreToolUse:Agent 钩子 - 派遣子代理时注入 codegraph 优先规则
-// ABOUTME: 不阻断 Agent 工具, 仅追加 additionalContext 软提示
+// ABOUTME: SubagentStart 钩子 - 将 CodeGraph 检索边界直接注入新子代理
+// ABOUTME: 使用 Claude 原生子代理上下文，不依赖主代理转述
 
 'use strict';
 
@@ -12,16 +12,20 @@ if (!commandExists('codegraph')) {
 
 const payload = {
   hookSpecificOutput: {
-    hookEventName: 'PreToolUse',
+    hookEventName: 'SubagentStart',
     additionalContext:
-      'Search priority: codegraph → serena → ctx → Grep\n\n' +
-      'codegraph (AST structure, cheapest):\n' +
-      '  mcp__codegraph__* symbol search → file_path + line; Read(offset=line, limit=N)\n' +
-      '  mcp__codegraph__* call chain    → callers/callees/imports\n\n' +
+      'Use adaptive retrieval and choose the smallest useful CodeGraph query for the assigned task.\n' +
+      'Claude Code may defer MCP schemas; use ToolSearch before claiming CodeGraph tools are unavailable.\n' +
+      'The plugin watcher/PostToolUse hooks own graph synchronization; do not start duplicate init/sync work.\n\n' +
+      'codegraph (AST structure):\n' +
+      '  Clear task → call the matching symbol/call/reference tool directly\n' +
+      '  Unclear task → use the smallest overview once, then move to a specific query\n' +
+      '  Symbol search → file_path + line; Read(offset=line, limit=N)\n' +
+      '  Call/reference query → callers/callees/imports\n\n' +
       'serena (LSP semantic, when codegraph misses): find_symbol / find_declaration / find_implementations\n' +
       'ctx_execute_file → large file analysis (raw data stays out of context)\n' +
       'ctx_search → session memory / indexed content\n' +
-      'Grep → plain text / strings / comments only'
+      'Grep → plain text / strings / comments only.'
   }
 };
 

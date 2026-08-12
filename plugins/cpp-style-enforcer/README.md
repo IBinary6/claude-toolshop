@@ -8,8 +8,8 @@ C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude
 
 | 语义能力 | Claude Code 版 | Codex 版 |
 |---|---|---|
-| 编辑后处理 | `PostToolUse` 串行处理本次编辑文件 | `PostToolUse` 记录触碰文件，`Stop` 批量处理 |
-| 提交前检查 | `PreToolUse:Bash` 识别 `git commit` 并检查暂存区 C++ 文件 | 同样识别真正的 `git commit`，只检查暂存区 |
+| 编辑后处理 | `PostToolUse` 串行处理本次内置编辑或 Agentic Patch/MCP 批量补丁涉及的全部 C++ 文件 | `PostToolUse` 记录触碰文件，`Stop` 批量处理 |
+| 提交前检查 | `PreToolUse:Bash/PowerShell` 识别 `git commit` 并检查暂存区 C++ 文件 | 同样识别真正的 `git commit`，只检查暂存区 |
 | 新老文件策略 | `.claude-cpp-style/cpp-style.json` + 全局模板 | `.codex-cpp-style/cpp-style.json`，兼容 `.claude-cpp-style` |
 | cpplint 行尾 | 保持原始 LF/CRLF；不屏蔽 `whitespace/newline` | 同样保持原始 LF/CRLF；不屏蔽 `whitespace/newline` |
 | 依赖安装 | 运行期只检测，不自动 `pip/npm install` | 运行期只检测，不自动 `pip/npm install` |
@@ -25,8 +25,8 @@ C++ 代码风格强制插件，基于 **Google C++ Style Guide**。通过 Claude
 | Hook 时机 | 脚本 | 作用 |
 |---|---|---|
 | SessionStart | `hooks/js/session_start.js` | 完全静默，仅确保全局模板存在（首次复制出厂默认，已存在绝不覆盖） |
-| PostToolUse（Write/Edit/MultiEdit/NotebookEdit/MCP） | `hooks/js/post_edit.js` | 单进程串行：clang-format → BOM → copyright → cpplint |
-| PreToolUse（Bash） | `hooks/js/pre_commit.js` | 仅拦截真正的 `git commit`，对暂存区 C++ 文件跑 cpplint |
+| PostToolUse（内置编辑 / Agentic Patch / MCP 批量补丁） | `hooks/js/post_edit.js` | 逐文件串行：clang-format → BOM → copyright → cpplint |
+| PreToolUse（Bash / PowerShell） | `hooks/js/pre_commit.js` | 识别 `git`、`git.exe` 与绝对路径调用，只对真正的 `git commit` 检查暂存区 C++ 文件 |
 
 > 去交互：装上即默认启用，不再弹问选模式。某项目可用 `enabled:false` 关闭。
 

@@ -89,7 +89,7 @@ cp "$REPO/commands/cpp-style-setup.md" "$DEST/commands/"
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|mcp__.*(?:write|edit|create|replace|insert)",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*(?:write|edit|create|replace|insert|patch|apply|update)",
         "hooks": [
           {
             "type": "command",
@@ -101,7 +101,7 @@ cp "$REPO/commands/cpp-style-setup.md" "$DEST/commands/"
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",

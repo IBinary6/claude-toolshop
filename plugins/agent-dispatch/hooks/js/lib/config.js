@@ -78,6 +78,9 @@ function mergeConfig(defaults, overrides) {
   if (overrides.modules) {
     Object.assign(result.modules, overrides.modules);
   }
+  if (overrides.policy && typeof overrides.policy === 'object' && !Array.isArray(overrides.policy)) {
+    Object.assign(result.policy, overrides.policy);
+  }
 
   const ov = overrides.overrides || {};
   result.whitelist.tools = addRemove(result.whitelist.tools, ov.tools_add, ov.tools_remove);
@@ -91,6 +94,11 @@ function mergeConfig(defaults, overrides) {
     ov.mcp_block_exact_remove
   );
   result.whitelist.bash_safe_heads = addRemove(result.whitelist.bash_safe_heads, ov.bash_heads_add, ov.bash_heads_remove);
+  result.whitelist.prompt_keywords = addRemove(
+    result.whitelist.prompt_keywords,
+    ov.prompt_keywords_add,
+    ov.prompt_keywords_remove
+  );
 
   return result;
 }

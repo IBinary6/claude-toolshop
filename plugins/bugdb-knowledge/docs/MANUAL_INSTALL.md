@@ -11,7 +11,7 @@
 | 依赖 | 最低版本 | 用途 |
 |------|---------|------|
 | Python | 3.11+ | BugDB CLI 核心（数据库、搜索） |
-| Node.js | 18+ | PostToolUse Hook 运行时 |
+| Node.js | 18+ | Shell 成功/失败 Hook 运行时 |
 
 验证：
 
@@ -75,11 +75,11 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
 
 ## 三、settings.json Hook 注册
 
-在 `~/.claude/settings.json` 的 `hooks.PostToolUse` 数组中**追加**以下条目（保留既有条目，仅追加）：
+在 `~/.claude/settings.json` 的 `hooks` 中为 `PostToolUse` 和 `PostToolUseFailure` **分别追加**以下处理器（保留既有条目）：
 
 ```json
 {
-  "matcher": "Bash",
+  "matcher": "Bash|PowerShell",
   "hooks": [
     {
       "type": "command",
@@ -89,6 +89,8 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
   ]
 }
 ```
+
+两个事件使用相同的 command；脚本会按 `hook_event_name` 分别读取 `tool_response` 或顶层 `error`。
 
 > **说明**：`bugdb_check.js` 是自执行脚本（`main()` 自调用），Claude Code 通过 **stdin 传入 JSON**（含 `tool_response.stdout/stderr`），脚本读 stdin、命中错误模式后向 stdout 写 `hookSpecificOutput.additionalContext`。不要把它当函数 `require(...)({...})` 调用，也不依赖 `CLAUDE_TOOL_*` 环境变量——那种写法不工作。
 >

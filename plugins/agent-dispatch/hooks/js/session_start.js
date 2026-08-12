@@ -11,17 +11,19 @@
  * 4. 旧配置 .agent-dispatch.json 自动迁移到新位置
  * 5. Schema 版本检查 + 原地升级
  *
- * 契约：纯 side-effect，exit 0，无 stdout 输出
+ * 契约：配置引导失败不阻塞；启用 session_guidance 时通过标准协议注入上下文
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
-const { readStdinJson, log } = require('./lib/utils');
+const { loadConfig, loadDefaults } = require('./lib/config');
+const { mainAgentGuidance } = require('./lib/guidance');
+const { readStdinJson, output, log } = require('./lib/utils');
 
 // ─── 常量 ───
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 const GLOBAL_DIR = path.join(os.homedir(), '.agent-dispatch');
 const GLOBAL_CONFIG_PATH = path.join(GLOBAL_DIR, 'config.json');
 const DEFAULT_OVERRIDES = {
@@ -32,13 +34,16 @@ const DEFAULT_OVERRIDES = {
   mcp_block_exact_add: [],
   mcp_block_exact_remove: [],
   bash_heads_add: [],
-  bash_heads_remove: []
+  bash_heads_remove: [],
+  prompt_keywords_add: [],
+  prompt_keywords_remove: []
 };
 
 const GLOBAL_SKELETON = {
   schema_version: CURRENT_SCHEMA_VERSION,
   _doc: '全局 agent-dispatch 配置 — 对所有项目生效的默认覆盖',
   modules: {},
+  policy: {},
   overrides: DEFAULT_OVERRIDES
 };
 
@@ -46,6 +51,7 @@ const PROJECT_SKELETON = {
   schema_version: CURRENT_SCHEMA_VERSION,
   _doc: '项目级配置。修改此文件覆盖全局设置，空 overrides = 继承全局。',
   modules: {},
+  policy: {},
   overrides: DEFAULT_OVERRIDES
 };
 
@@ -182,6 +188,10 @@ function ensureConfigShape(obj) {
     obj.overrides = {};
     changed = true;
   }
+  if (!obj.policy || typeof obj.policy !== 'object' || Array.isArray(obj.policy)) {
+    obj.policy = {};
+    changed = true;
+  }
   for (const key of Object.keys(DEFAULT_OVERRIDES)) {
     if (!Array.isArray(obj.overrides[key])) {
       obj.overrides[key] = [];
@@ -257,6 +267,29 @@ async function main() {
   } catch (e) {
     // hook 失败不阻塞会话启动
     log(`[agent-dispatch] session_start error: ${e.message}`);
+  }
+
+  try {
+    const config = loadConfig(cwd);
+    if (config.modules.session_guidance) {
+      output({
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: mainAgentGuidance(config),
+        },
+      });
+    }
+  } catch (e) {
+    const config = loadDefaults();
+    if (config.modules.session_guidance) {
+      output({
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: mainAgentGuidance(config),
+        },
+      });
+    }
+    log(`[agent-dispatch] session guidance fallback: ${e.message}`);
   }
 
   process.exit(0);

@@ -75,26 +75,24 @@ cp "$REPO/commands/codemap-boost-setup.md" "$DEST/commands/"
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "*",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/js/crg_build/crg_build.js\"",
-            "timeout": 10,
-            "async": true
+            "timeout": 10
           },
           {
             "type": "command",
             "command": "node \"$HOME/.claude/hooks/js/graphify_build/graphify_build.js\"",
-            "timeout": 10,
-            "async": true
+            "timeout": 10
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|Bash",
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell|mcp__.*(?:write|edit|create|replace|insert|patch|apply|update)",
         "hooks": [
           {
             "type": "command",
@@ -116,6 +114,18 @@ cp "$REPO/commands/codemap-boost-setup.md" "$DEST/commands/"
           }
         ]
       }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/js/agent_nudge/agent_nudge.js\"",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }
@@ -133,7 +143,7 @@ python -c "import json; json.load(open('$HOME/.claude/settings.json', encoding='
 
 ## 四、持久提示词
 
-本插件不再向 `CLAUDE.md` / `AGENTS.md` 追加持久提示词。图谱使用建议只通过 Grep / Agent 的运行时短提示提供，避免长期占用上下文。
+本插件不再向 `CLAUDE.md` / `AGENTS.md` 追加持久提示词。图谱使用建议只通过 Grep / SubagentStart 的运行时短提示提供，避免长期占用上下文。
 
 ---
 

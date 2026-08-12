@@ -1,190 +1,119 @@
 # agent-dispatch
 
-白名单制强制主 agent 委派工作给子代理（subagent），保护主 agent 的 200K 上下文窗口。安装即生效，零配置。
+面向 Claude Code 原生 `Agent` 与 Hook 生命周期的任务调度插件。它保护主 Agent 的上下文，但不会机械复制 Codex 的工具名、模型名或来源识别方式。
 
-## 与 Codex 版的语义对应
+## 语义边界
 
-两边追求同一条调度语义：**主代理保留规划、整合和 Git 串行操作；可并行、边界清晰的探索/实现/审查交给子代理；子代理完成后报告改动和验证**。
+两端共享的是职责，而不是实现：
 
-| 语义能力 | Claude Code 版 | Codex 版 |
+- 主 Agent 负责需求澄清、架构/接口决策、拆分、结果审查、最终整合和全部 Git 操作。
+- 子代理负责边界明确的搜索、实现或独立审查；不得继续派遣，不得运行 Git。
+- CodeMap 插件负责图刷新和读前屏障；Agent Dispatch 只负责选择角色。
+- 委派不会扩大文件、权限、网络或外部状态范围。
+
+Claude Code 可以在 `SubagentStart` 注入约束，并在 `SubagentStop` 检查最终报告；这两项能力直接用于本插件，而不是仿照 Codex 的 hook payload。
+
+## 原生 Agent 角色
+
+插件安装后，角色使用 `agent-dispatch:<name>` 调用：
+
+| 角色 | 模型 / effort | 用途 |
 |---|---|---|
-| 主代理工具约束 | `PreToolUse` 白名单硬拦截，非轻量工具要求用 `Agent` | `PreToolUse` 软提示，避免误拦截主代理派出的子代理 |
-| 子代理识别 | Claude hook 输入包含 `agent_id`，子代理可豁免 | Codex hook 不能稳定区分调用来源，改用 `SubagentStart` 规则 |
-| 调度提示 | 被 block 后下一条 prompt 注入 dispatcher 指令 | `SessionStart` / `UserPromptSubmit` 注入紧凑调度策略 |
-| Git 边界 | 安全 Git 可直跑，危险 Git 拦截 | 纯 Git CLI 固定主代理串行执行，不进入委派分类 |
-| 配置 | `~/.agent-dispatch` + 项目 `.agent-dispatch` | `PLUGIN_DATA` + 项目 `.agent-dispatch-codex`，支持 Codex agent profile |
+| `dispatch-explorer` | sonnet / low | 有界跨文件搜索和证据收集 |
+| `dispatch-mapper` | sonnet / medium | 广泛、跨模块、只读扫描 |
+| `dispatch-planner` | opus / xhigh | 非琐碎计划、架构和接口契约 |
+| `dispatch-worker` | sonnet / high | 边界清晰的常规实现 |
+| `dispatch-hard-worker` | opus / max | 已有审定计划的困难实现 |
+| `dispatch-reviewer` | sonnet / high | 常规独立审查 |
+| `dispatch-deep-reviewer` | opus / xhigh | 安全、权限、并发等高风险审查 |
 
-所以 Claude 版偏“硬门禁”，Codex 版偏“原生编排”。机制不同，但目标都是保护主上下文并让子代理承担可拆分工作。
+只读角色通过 `disallowedTools` 禁止编辑、Shell 和继续派遣；写入角色禁止继续派遣，并由 Hook 额外阻止子代理 Git。CodeMap MCP schema 延迟加载时，角色会先使用 `ToolSearch`，因此没有使用不支持 tool search 的 Haiku。
 
-## 工作原理
+## Hook 生命周期
 
-| Hook 时机 | 脚本 | 作用 |
+| Hook | 脚本 | 作用 |
 |---|---|---|
-| SessionStart | `hooks/js/session_start.js` | 自动创建全局/项目配置骨架，并把项目 `.agent-dispatch/` 加入 `.gitignore` |
-| PreToolUse | `hooks/js/enforcer.js` | 白名单检查：非白名单工具 block，提示用 Agent tool 委派 |
-| UserPromptSubmit | `hooks/js/prompt_inject.js` | 可选：被 block 后的下一条 prompt 注入一次 dispatcher 角色指令（默认**开启**） |
+| `SessionStart` | `session_start.js` | 创建/升级配置，并向主 Agent 注入稳定职责边界 |
+| `UserPromptSubmit` | `prompt_inject.js` | 按任务语义推荐最低可靠角色；block marker 只补充失败恢复 |
+| `PreToolUse:Agent` | `agent_nudge.js` | 使用泛化 agent 时提示更合适的插件 scoped agent |
+| `PreToolUse` | `enforcer.js` | 主 Agent 重型工具门禁；子代理普通工具豁免、Git 强制拦截 |
+| `SubagentStart` | `subagent_start.js` | 注入范围、CodeMap、Git 和报告约束 |
+| `SubagentStop` | `subagent_stop.js` | 缺少报告小节时阻止一次结束；`stop_hook_active` 时放行，避免循环 |
 
-### 决策流程
+任务路由按风险优先：高风险审查、困难任务两阶段、非琐碎计划、广泛扫描、有界搜索、常规实现、常规审查；琐碎改动留给主 Agent。
 
-```
-stdin → 解析 tool_name / tool_input / agent_id
+## Git 与工具门禁
 
-1. agent_id 存在？        → 放行（子代理豁免）
-2. tool 在白名单？        → 放行
-3. tool 匹配 MCP 前缀？   → 放行
-4. Bash/PowerShell？      → 分析命令内容：
-   - 命令替换 $(...) → 拦截
-   - 按 && || ; | 拆段，逐段判定：
-     · git 只读        → 放行
-     · git 安全写      → 放行（危险模式除外）
-     · 安全 shell 头   → 放行
-     · 其他            → 拦截
-5. 其他                   → 拦截
-```
+主 Agent 的 Git 命令全部放行，因为 Git 串行操作本来就是主 Agent 职责；破坏性 Git 的授权和确认由 Claude Code 权限层及用户要求负责。任何带 `agent_id` 的子代理 Bash/PowerShell 事件只要实际执行 Git（包括复合命令、包装器和绝对路径）都会被拦截。
 
-拦截消息：
-```
-⚠ BLOCKED [toolName]. Delegate via Agent tool.
-Agent({ description: "...", prompt: "..." })
-```
+主 Agent 默认可以直接使用：
+
+- `Agent`、`ToolSearch`、Team/Task/Todo、询问和模式切换工具；
+- Read/Grep/Glob/LSP、Edit/Write/MultiEdit/NotebookEdit；
+- WebFetch/WebSearch；
+- context-mode、claude-mem、sequential-thinking、CodeMap 和 Serena 等配置的 MCP 前缀；
+- 规则中列出的安全 Shell 命令头。
+
+未知或重型工具仍会触发硬门禁，提示主 Agent 派遣有界子任务。该门禁是上下文保护，不是安全沙箱。
 
 ## 安装
 
-```
+```text
 /plugin install agent-dispatch@claude-toolshop
 ```
 
-或手动部署，详见 [docs/MANUAL_INSTALL.md](./docs/MANUAL_INSTALL.md)。
-
-## 依赖
-
-| 依赖 | 必需 | 用途 |
-|------|------|------|
-| Node.js 18+ | **是** | hook 运行时 |
-
-无外部 npm 包，纯 Node.js 标准库。
-
-## 默认行为
-
-### 放行（主 agent 可直接使用）
-
-| 分类 | 工具 |
-|------|------|
-| 调度协调 | Agent, SendMessage, TaskCreate/Update/List/Get/Output/Stop, AskUserQuestion, Skill, Workflow |
-| 模式切换 | EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree |
-| 定时调度 | CronCreate, CronDelete, CronList, ScheduleWakeup |
-| 轻量读取 | Read, Grep, Glob, LSP |
-| 小幅编辑 | Edit, Write, MultiEdit, NotebookEdit |
-| 网页查询 | WebFetch, WebSearch |
-
-### MCP 前缀放行
-
-| 前缀 | 理由 |
-|------|------|
-| `mcp__plugin_context-mode_` | 沙盒执行器，本身节省上下文 |
-| `mcp__plugin_claude-mem_` | 记忆检索，已分层 |
-| `mcp__sequential-thinking` | 思考链，输出短 |
-| `mcp__code_review_graph__` / `mcp__code-review-graph__` | 代码图谱审查工具，主 agent 可直接查询上下文 |
-| `mcp__codegraph__` / `mcp__graphify__` | 绘图/图谱类工具，主 agent 可直接查询和更新 |
-
-### 安全 Bash 命令（放行）
-
-```
-ls, pwd, cd, cat, echo, which, where,
-fd, rg, grep, jq, delta, gh, tsc, pyright, pdftotext,
-head, tail, wc, sort, uniq,
-node, npm, yarn, pnpm, bun,
-python, python3, pip, pipenv, poetry,
-codegraph, code-review-graph, graphify,
-rustc, cargo, go, java, javac, mvn, gradle, dotnet,
-ruby, gem, bundle, gcc, g++, clang, clang++,
-cmake, make, ninja, meson, msbuild, cl,
-uname, whoami, hostname, printenv
-```
-
-Git 只读命令（status, diff, log, show, blame 等）和安全写命令（add, commit, fetch, push）也放行。
-
-### 拦截
-
-- 重型 MCP 工具（context7, microsoft-learn, deepwiki, tavily, serena, exa 等）
-- 未知 Bash 命令头
-- 危险 git 操作（push --force / --delete / 强制或删除 refspec、reset --hard、branch -D、clean -fdx、checkout -- .、restore -- .）
-- 含命令替换 `$(...)` 或反引号的 Bash
+手动部署见 [docs/MANUAL_INSTALL.md](./docs/MANUAL_INSTALL.md)。依赖 Node.js 18+，无第三方运行时包。
 
 ## 配置
 
-### 零配置即可工作
+SessionStart 自动维护：
 
-安装后使用内置默认规则，无需任何配置文件。
+- 全局：`~/.agent-dispatch/config.json`
+- 项目：`<git_root>/.agent-dispatch/config.json`
 
-SessionStart 会自动创建两层可编辑配置：
-
-| 层级 | 路径 | 作用 |
-|---|---|---|
-| 全局配置 | `~/.agent-dispatch/config.json` | 对所有项目生效，适合放个人常用白名单/黑名单 |
-| 项目配置 | `<git_root>/.agent-dispatch/config.json` | 覆盖全局配置，只对当前仓库生效 |
-
-项目配置目录 `.agent-dispatch/` 会在运行时自动加入当前仓库 `.gitignore`。默认不提交；如需团队共享，把 `.gitignore` 中的 `.agent-dispatch/` 删除即可。
-
-### 黑白名单过滤
+配置按“插件默认值 → 全局 → 项目”合并。Schema v3 支持模块、策略和增删量覆盖：
 
 ```json
 {
+  "schema_version": 3,
   "modules": {
     "enforcer": true,
-    "prompt_inject": false
+    "prompt_inject": true,
+    "session_guidance": true,
+    "subagent_guidance": true,
+    "subagent_report_guard": true
+  },
+  "policy": {
+    "max_parallel_subagents": 3,
+    "require_changed_file_report": true,
+    "require_validation_report": true,
+    "require_blocker_report": true
   },
   "overrides": {
-    "tools_add": ["SomeCustomTool"],
-    "tools_remove": ["WebSearch"],
-    "mcp_prefixes_add": ["mcp__my_custom_"],
-    "mcp_prefixes_remove": ["mcp__sequential-thinking"],
-    "mcp_block_exact_add": ["mcp__my_custom__dangerous_write"],
-    "mcp_block_exact_remove": ["mcp__plugin_context-mode_context-mode__ctx_execute"],
-    "bash_heads_add": ["cargo", "npm", "pnpm"],
-    "bash_heads_remove": ["rm"]
+    "tools_add": [],
+    "tools_remove": [],
+    "mcp_prefixes_add": [],
+    "mcp_prefixes_remove": [],
+    "mcp_block_exact_add": [],
+    "mcp_block_exact_remove": [],
+    "bash_heads_add": [],
+    "bash_heads_remove": [],
+    "prompt_keywords_add": [],
+    "prompt_keywords_remove": []
   }
 }
 ```
 
-合并逻辑：
+旧版项目根 `.agent-dispatch.json` 继续兼容。配置文件存在时只升级缺失结构，不覆盖用户已有值。也可使用 `/agent-dispatch-setup` 查看或修改增量配置。
+
+## 验证
+
+```bash
+npm test
+claude plugin validate --strict .
 ```
-final_tools      = (默认 + tools_add) - tools_remove
-final_mcp        = (默认 + mcp_prefixes_add) - mcp_prefixes_remove
-final_mcp_block  = (默认 + mcp_block_exact_add) - mcp_block_exact_remove
-final_bash_heads = (默认 + bash_heads_add) - bash_heads_remove
-```
 
-所有列表会去重。修改 `~/.agent-dispatch/config.json` 后，下次 hook 运行会重新读取并合并，不需要改插件内置 `defaults/dispatch-rules.json`。这样自动同步 JSON 配置时只需要写增删量过滤规则，而不是复制整份默认配置。
-
-旧版项目根 `.agent-dispatch.json` 仍兼容；SessionStart 会在新项目优先创建 `<git_root>/.agent-dispatch/config.json`。
-
-也可使用 `/agent-dispatch-setup` skill 交互式配置。
-
-## 模块说明
-
-| 模块 | 默认 | 作用 |
-|------|------|------|
-| enforcer | **开启** | PreToolUse 白名单拦截 |
-| prompt_inject | **开启** | UserPromptSubmit 注入 dispatcher 指令（被 block 后下一条 prompt 注入一次） |
-
-在全局或项目 `config.json` 中设置 `modules.enforcer: false` 可临时关闭拦截。
-
-## 从全局 subagent_enforce 迁移
-
-如果你之前在 `~/.claude/settings.json` 中注册了全局 `subagent_enforce` 钩子：
-
-1. 安装本插件
-2. 从 `~/.claude/settings.json` 的 `hooks.PreToolUse` 数组中移除 `subagent_enforce` 条目
-3. 如有 `subagent_prompt` 的 UserPromptSubmit 条目，也一并移除
-4. 本插件完全替代上述两个钩子的功能
-
-## 协议安全
-
-- 全程 `exit 0`——永不 exit 1/2，不阻塞会话
-- stdout 要么空（放行）、要么单条 JSON（block）
-- 诊断信息写 stderr
-- 畸形 stdin（空、非 JSON、缺字段）静默 exit 0
+Hook 放行时 stdout 为空；需要注入或 block 时只输出一条协议 JSON；诊断写 stderr，畸形 stdin 静默退出。
 
 ## 协议
 

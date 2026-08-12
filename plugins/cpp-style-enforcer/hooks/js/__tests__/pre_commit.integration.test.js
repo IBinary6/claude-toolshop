@@ -38,6 +38,9 @@ assert.strictEqual(isGitCommit('git -c user.name=x commit -m "x"'), true, 'git -
 assert.strictEqual(isGitCommit('cd repo; git commit -m "x"'), true, '组合命令中的 git commit 应命中');
 assert.strictEqual(isGitCommit('cmd /c git commit -m "x"'), true, 'cmd /c git commit 应命中');
 assert.strictEqual(isGitCommit('command git commit -m "x"'), true, 'command 包装的 git commit 应命中');
+assert.strictEqual(isGitCommit('git.exe commit -m "x"'), true, 'git.exe commit 应命中');
+assert.strictEqual(isGitCommit('& "C:\\Program Files\\Git\\cmd\\git.exe" commit -m "x"'), true,
+  'PowerShell 调用绝对路径 git.exe commit 应命中');
 assert.strictEqual(isGitCommit('echo "git commit"'), false, 'echo 内 git commit 不应命中');
 assert.strictEqual(isGitCommit('git commit-graph write'), false, 'commit-graph 不应命中');
 assert.strictEqual(isGitCommit('git commit-tree HEAD^{tree}'), false, 'commit-tree 不应命中');
@@ -48,6 +51,7 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
   assert.strictEqual(commitCwd('git commit', base), base);
   assert.strictEqual(commitCwd('git -C repo commit -m "x"', base), path.join(base, 'repo'));
   assert.strictEqual(commitCwd('cd repo; git commit -m "x"', base), path.join(base, 'repo'));
+  assert.strictEqual(commitCwd('git.exe -C repo commit -m "x"', base), path.join(base, 'repo'));
 }
 
 // 非 commit 命令 → passSilent（exit 0，stdout 空）

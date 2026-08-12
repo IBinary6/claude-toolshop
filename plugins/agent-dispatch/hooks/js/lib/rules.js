@@ -132,11 +132,6 @@ function splitSegments(tokens) {
   return segments.filter((s) => s.length > 0);
 }
 
-function isDangerousGit(gitArgs, config) {
-  const joined = gitArgs.join(' ');
-  return config.whitelist.git_dangerous_patterns.some((pat) => new RegExp(pat).test(joined));
-}
-
 function isDangerousBashSegment(tokens, config) {
   const joined = tokens.join(' ');
   const patterns = config.whitelist.bash_dangerous_patterns || [];
@@ -147,35 +142,67 @@ function hasOutputRedirect(tokens) {
   return tokens.some((t) => OUTPUT_REDIRECTS.has(t));
 }
 
-function isReadonlyGit(gitArgs, config) {
-  return config.whitelist.git_readonly.some((cmd) =>
-    cmd.every((tok, i) => gitArgs[i] === tok)
-  );
+function executableName(token) {
+  const value = String(token || '').replace(/^['"]|['"]$/g, '').replace(/\\/g, '/');
+  return value.slice(value.lastIndexOf('/') + 1).toLowerCase();
 }
 
-function isSafeGitWrite(gitArgs, config) {
-  if (gitArgs.length === 0) return false;
-  return config.whitelist.git_safe_write.includes(gitArgs[0]);
+function commandHead(tokens) {
+  const cleaned = tokens.filter((token) => !['<', '<<', '>', '>>'].includes(token));
+  let index = 0;
+  while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(cleaned[index] || '')) index += 1;
+
+  while (index < cleaned.length) {
+    const wrapper = executableName(cleaned[index]);
+    if (wrapper === 'command') {
+      index += 1;
+      continue;
+    }
+    if (wrapper === 'sudo') {
+      index += 1;
+      while (String(cleaned[index] || '').startsWith('-')) index += 1;
+      continue;
+    }
+    if (wrapper === 'env') {
+      index += 1;
+      while (/^(?:-[^=]+|[A-Za-z_][A-Za-z0-9_]*=)/.test(cleaned[index] || '')) index += 1;
+      continue;
+    }
+    break;
+  }
+
+  return executableName(cleaned[index]);
 }
 
 function classifySegment(tokens, config) {
+  if (tokens.length === 0) return 'empty';
+  const head = commandHead(tokens);
+
+  if (head === 'git' || head === 'git.exe') {
+    // Git 是主代理职责边界，不属于委派分类；授权与破坏性检查交给 Claude 权限层。
+    return 'safe';
+  }
+
   if (hasOutputRedirect(tokens)) return 'unsafe';
   if (isDangerousBashSegment(tokens, config)) return 'unsafe';
 
-  const cleaned = tokens.filter((t) => !['<', '<<'].includes(t));
-  if (cleaned.length === 0) return 'empty';
-  const head = cleaned[0];
-
-  if (head === 'git') {
-    const gitArgs = cleaned.slice(1);
-    if (gitArgs.length === 0) return 'unsafe';
-    if (isDangerousGit(gitArgs, config)) return 'unsafe';
-    if (isReadonlyGit(gitArgs, config)) return 'safe';
-    if (isSafeGitWrite(gitArgs, config)) return 'safe';
-    return 'unsafe';
-  }
-
   return new Set(config.whitelist.bash_safe_heads).has(head) ? 'safe' : 'unsafe';
+}
+
+/**
+ * 判断复合 Shell 命令是否实际执行 Git，用于禁止子代理接管 Git 操作。
+ */
+function containsGitCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  return splitSegments(tokenize(command)).some((segment) => {
+    const head = commandHead(segment);
+    if (head === 'git' || head === 'git.exe') return true;
+    if (['bash', 'sh', 'zsh', 'cmd', 'cmd.exe', 'powershell', 'pwsh'].includes(head)) {
+      const shellCommand = segment.join(' ').replace(/['"]/g, '');
+      return /(^|[\s;&|/\\])git(?:\.exe)?(?=$|[\s;&|])/i.test(shellCommand);
+    }
+    return false;
+  });
 }
 
 function isSafeBashCommand(command, config) {
@@ -200,10 +227,8 @@ module.exports = {
   hasAmbiguousCrossShellEscape,
   tokenize,
   splitSegments,
-  isDangerousGit,
   isDangerousBashSegment,
-  isReadonlyGit,
-  isSafeGitWrite,
   classifySegment,
+  containsGitCommand,
   isSafeBashCommand,
 };

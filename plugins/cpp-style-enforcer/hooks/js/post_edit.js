@@ -2,7 +2,7 @@
 
 const { readStdinJson } = require('./lib/stdin');
 const { passSilent, blockClaude, diag } = require('./lib/protocol');
-const { resolveFilePath, shouldHandle } = require('./lib/target');
+const { resolveFilePaths, shouldHandle } = require('./lib/target');
 const { loadConfig } = require('./lib/config');
 const { repoRoot, isNew } = require('./lib/git');
 const { ensureClangFormatConfig } = require('./lib/ensure_clang_format_config');
@@ -21,15 +21,9 @@ function step(name, fn) {
   }
 }
 
-async function main() {
-  const input = await readStdinJson({ timeoutMs: 5000 });
-  if (!input) return passSilent();
-
-  const filePath = resolveFilePath(input);
-  if (!filePath || !shouldHandle(filePath)) return passSilent();
-
+function handleFile(filePath) {
   const config = loadConfig(filePath);
-  if (config.enabled === false) return passSilent();
+  if (config.enabled === false) return '';
 
   const { mode, checks, legacyChecks, copyrightInfo } = config;
   const root = step('repoRoot', () => repoRoot(filePath)) || null;
@@ -64,8 +58,23 @@ async function main() {
     const suppressCopyright = !(copyrightInfo && copyrightInfo.company) || checks.copyright === false;
     const violations = step('cpplint', () => runCpplint(filePath, { root, suppressCopyright })) || [];
     if (violations.length > 0) {
-      return blockClaude(formatViolations(violations));
+      return formatViolations(violations);
     }
+  }
+
+  return '';
+}
+
+async function main() {
+  const input = await readStdinJson({ timeoutMs: 5000 });
+  if (!input) return passSilent();
+
+  const filePaths = resolveFilePaths(input).filter(shouldHandle);
+  if (filePaths.length === 0) return passSilent();
+
+  const violationMessages = filePaths.map(handleFile).filter(Boolean);
+  if (violationMessages.length > 0) {
+    return blockClaude(violationMessages.join('\n\n'));
   }
 
   return passSilent();

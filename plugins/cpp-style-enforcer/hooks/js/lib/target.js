@@ -15,6 +15,79 @@ const EXCLUDED_DIRS = new Set([
 /** 跳过的特定文件名（VS 自动生成 / 不该被风格化） */
 const SKIPPED_FILES = new Set(['resource.h', 'targetver.h', 'stdafx.h', 'pch.h']);
 
+const PATH_KEYS = new Set([
+  'file_path', 'filePath', 'path', 'relative_path', 'relativePath',
+  'target_path', 'targetPath',
+]);
+const PATCH_KEYS = new Set(['patch', 'diff']);
+
+/**
+ * 从 Agentic Patch / apply-patch 风格文本中提取目标文件。
+ * 同时兼容 `*** Update File:` 与 unified diff 的 `+++ b/...` 头。
+ * @param {string} patchText
+ * @returns {string[]}
+ */
+function patchPaths(patchText) {
+  if (typeof patchText !== 'string') return [];
+  const result = [];
+  const patterns = [
+    /^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm,
+    /^\+\+\+\s+(?:b\/)?(.+?)\s*$/gm,
+  ];
+  for (const pattern of patterns) {
+    for (const match of patchText.matchAll(pattern)) {
+      const value = match[1].trim();
+      if (value && value !== '/dev/null') result.push(value);
+    }
+  }
+  return result;
+}
+
+/**
+ * 从内置编辑工具或 MCP 批量补丁参数中提取全部文件路径。
+ * 只识别明确的路径字段和补丁头，不把普通 source content 当作路径。
+ * @param {object} input
+ * @returns {string[]}
+ */
+function resolveFilePaths(input) {
+  if (!input || typeof input !== 'object') return [];
+  const cwd = input.cwd || process.cwd();
+  const paths = [];
+  const add = (value) => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    const file = value.trim();
+    paths.push(path.isAbsolute(file) ? file : path.resolve(cwd, file));
+  };
+  const visit = (value, key = '') => {
+    if (typeof value === 'string') {
+      if (PATH_KEYS.has(key)) add(value);
+      if (PATCH_KEYS.has(key)) patchPaths(value).forEach(add);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, key));
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [childKey, childValue] of Object.entries(value)) {
+      visit(childValue, childKey);
+    }
+  };
+
+  if (typeof input.tool_input === 'string') add(input.tool_input);
+  else visit(input.tool_input || null);
+  for (const key of PATH_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(input, key)) add(input[key]);
+  }
+  const seen = new Set();
+  return paths.filter((file) => {
+    const key = file.replace(/\\/g, '/').toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * 从 hook stdin JSON 提取被编辑的文件路径（Write/Edit/MultiEdit/NotebookEdit/MCP）。
  * 不处理 Bash command（PostToolUse 已去掉 Bash matcher）。
@@ -24,18 +97,13 @@ const SKIPPED_FILES = new Set(['resource.h', 'targetver.h', 'stdafx.h', 'pch.h']
  * @returns {string|null}
  */
 function resolveFilePath(input) {
-  if (!input || typeof input !== 'object') return null;
-  const cwd = input.cwd || process.cwd();
-  const toAbs = (p) => (path.isAbsolute(p) ? p : path.resolve(cwd, p));
-  const t = input.tool_input;
-  if (t && typeof t === 'object') {
-    const direct = t.file_path || t.path || null;
-    if (direct) return toAbs(direct);
-    if (t.relative_path) return path.resolve(cwd, t.relative_path);
+  if (input && typeof input.tool_input === 'string') {
+    const cwd = input.cwd || process.cwd();
+    return path.isAbsolute(input.tool_input)
+      ? input.tool_input
+      : path.resolve(cwd, input.tool_input);
   }
-  if (typeof t === 'string') return toAbs(t);
-  const fallback = input.file_path || input.path || null;
-  return fallback ? toAbs(fallback) : null;
+  return resolveFilePaths(input)[0] || null;
 }
 
 /**
@@ -54,4 +122,11 @@ function shouldHandle(filePath) {
   return true;
 }
 
-module.exports = { resolveFilePath, shouldHandle, CPP_EXTENSIONS, EXCLUDED_DIRS, SKIPPED_FILES };
+module.exports = {
+  resolveFilePath,
+  resolveFilePaths,
+  shouldHandle,
+  CPP_EXTENSIONS,
+  EXCLUDED_DIRS,
+  SKIPPED_FILES,
+};

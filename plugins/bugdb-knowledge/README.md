@@ -12,7 +12,7 @@
 
 | 场景 | 行为 |
 |------|------|
-| Bash 执行报错（编译/链接/运行时错误） | Hook **自动**查询知识库，命中时注入方案提示 |
+| Bash/PowerShell 报错（编译/链接/运行时错误） | `PostToolUse` / `PostToolUseFailure` Hook **自动**查询知识库，命中时注入方案提示 |
 | Claude 遇到错误需要排查 | 调用 `bugdb-lookup` skill 按规范流程查库 |
 | 成功解决了一个 Bug | 调用 `bugdb-record` skill 录入知识库 |
 | 想记住一个最佳实践/工具技巧 | `/bugfix` 命令交互式录入 |
@@ -100,8 +100,8 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
         │
         ▼
 ┌──────────────────────────────────────────────────┐
-│               PostToolUse:Bash Hook              │
-│  bugdb_check.js 监听每次 Bash 执行结果           │
+│       Shell 成功输出 / 执行失败 Hook              │
+│  bugdb_check.js 监听 Bash/PowerShell 错误结果     │
 │  检测到错误关键词 → 自动查询知识库                │
 │  命中 → 注入 [BUGDB_MATCH] 提示给 Claude         │
 │  未命中 / 出错 → 静默，不阻塞主流程              │
@@ -145,7 +145,7 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
 
 ### 1. Hook 自动触发（零操作）
 
-**触发条件**：每次 Bash 工具执行完毕后，Hook 检查输出是否包含错误关键词。
+**触发条件**：Bash/PowerShell 成功返回后检查 stdout/stderr；工具执行失败时直接检查 `PostToolUseFailure.error`。用户主动中断不会触发查询。
 
 **识别的错误模式**：
 ```
@@ -164,7 +164,7 @@ No module named      # Python 导入失败
 
 **流程**：
 ```
-Bash 执行 → stdout/stderr 包含上述关键词
+Shell 执行 → stdout/stderr 或顶层 error 包含上述关键词
   → bugdb_check.js 提取错误行
   → base64 编码后调用 CLI search
   → 命中则输出 [BUGDB_MATCH] 信息
@@ -295,7 +295,7 @@ bugdb explore --entry-kind practice --language python
    JSON 里走独立的 `fallback: true` + `fallback_results` 字段，text 输出加
    `[BUGDB_FALLBACK]` 标记。`--no-fallback` 可关闭。
 
-PostToolUse hook 只读 `results`，不消费 fallback —— 即邻区兜底是
+Shell hook 只读 `results`，不消费 fallback —— 即邻区兜底是
 给手动调用者/Claude 的提示，hook 行为不变。
 
 `bugdb explore` 不做断言、不报"找不到"：FTS5 OR + LIKE 子串双路合并，
@@ -559,9 +559,9 @@ plugins/bugdb-knowledge/
 ├── docs/
 │   └── MANUAL_INSTALL.md    # 手动安装指南
 ├── hooks/
-│   ├── hooks.json           # Hook 注册（PostToolUse:Bash）
+│   ├── hooks.json           # Hook 注册（Shell 成功/失败事件）
 │   └── js/bugdb_check/
-│       ├── bugdb_check.js   # 错误检测 + 自动查库（PostToolUse:Bash）
+│       ├── bugdb_check.js   # 错误检测 + 自动查库（PostToolUse / Failure）
 │       └── bugdb_python_check.js  # Python 3.11+ 检测引导（SessionStart）
 ├── skills/
 │   ├── bugdb-lookup/

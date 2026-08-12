@@ -1,7 +1,7 @@
 {
   "name": "agent-dispatch",
-  "version": "0.2.7",
-  "description": "智能调度：白名单制强制主 agent 委派工作给子代理，保护上下文窗口；与 Codex 版保持调度语义接近。",
+  "version": "0.3.0",
+  "description": "基于 Claude Code 原生 Agent 与 Hook 语义进行任务路由、子代理约束和报告校验。",
   "author": {
     "name": "IBinary6"
   },

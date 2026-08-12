@@ -9,11 +9,9 @@ const {
   hasCommandSubstitution,
   tokenize,
   splitSegments,
-  isDangerousGit,
   isDangerousBashSegment,
-  isReadonlyGit,
-  isSafeGitWrite,
   classifySegment,
+  containsGitCommand,
   isSafeBashCommand,
 } = require('../lib/rules');
 
@@ -86,25 +84,6 @@ assert.deepEqual(splitSegments(['ls', '|', 'grep', 'foo']), [['ls'], ['grep', 'f
 assert.deepEqual(splitSegments(['echo', 'hi']), [['echo', 'hi']]);
 assert.deepEqual(splitSegments(['cmd1', '||', 'cmd2', ';', 'cmd3']), [['cmd1'], ['cmd2'], ['cmd3']]);
 
-// --- isDangerousGit ---
-assert.equal(isDangerousGit(['push', '--force'], config), true);
-assert.equal(isDangerousGit(['push', '-f'], config), true);
-assert.equal(isDangerousGit(['push', '--mirror'], config), true);
-assert.equal(isDangerousGit(['push', '--prune'], config), true);
-assert.equal(isDangerousGit(['push', '--delete', 'origin', 'old'], config), true);
-assert.equal(isDangerousGit(['push', '-d', 'origin', 'old'], config), true);
-assert.equal(isDangerousGit(['push', 'origin', '+main'], config), true);
-assert.equal(isDangerousGit(['push', 'origin', ':old'], config), true);
-assert.equal(isDangerousGit(['reset', '--hard'], config), true);
-assert.equal(isDangerousGit(['branch', '-D', 'feature'], config), true);
-assert.equal(isDangerousGit(['clean', '-fdx'], config), true);
-assert.equal(isDangerousGit(['checkout', '--', '.'], config), true);
-assert.equal(isDangerousGit(['restore', '--', '.'], config), true);
-assert.equal(isDangerousGit(['push', 'origin', 'main'], config), false);
-assert.equal(isDangerousGit(['commit', '-m', 'msg'], config), false);
-assert.equal(isDangerousGit(['reset', '--soft', 'HEAD~1'], config), false);
-assert.equal(isDangerousGit(['clean', '-f'], config), true);
-
 // --- isDangerousBashSegment ---
 assert.equal(isDangerousBashSegment(['rm', '-rf', '/tmp/x'], config), true);
 assert.equal(isDangerousBashSegment(['docker', 'rm', '-f', 'prod'], config), true);
@@ -112,33 +91,15 @@ assert.equal(isDangerousBashSegment(['kubectl', 'delete', 'pod', 'x'], config), 
 assert.equal(isDangerousBashSegment(['helm', 'uninstall', 'prod'], config), true);
 assert.equal(isDangerousBashSegment(['docker', 'ps'], config), false);
 
-// --- isReadonlyGit ---
-assert.equal(isReadonlyGit(['status'], config), true);
-assert.equal(isReadonlyGit(['diff'], config), true);
-assert.equal(isReadonlyGit(['log'], config), true);
-assert.equal(isReadonlyGit(['remote', '-v'], config), true);
-assert.equal(isReadonlyGit(['config', '--get'], config), true);
-assert.equal(isReadonlyGit(['stash', 'list'], config), true);
-assert.equal(isReadonlyGit(['commit'], config), false);
-assert.equal(isReadonlyGit(['push'], config), false);
-
-// --- isSafeGitWrite ---
-assert.equal(isSafeGitWrite(['add', '.'], config), true);
-assert.equal(isSafeGitWrite(['commit', '-m', 'test'], config), true);
-assert.equal(isSafeGitWrite(['push', 'origin', 'main'], config), true);
-assert.equal(isSafeGitWrite(['merge', 'feature'], config), false);
-assert.equal(isSafeGitWrite([], config), false);
-assert.equal(isSafeGitWrite(['unknown-subcmd'], config), false);
-
 // --- classifySegment ---
 assert.equal(classifySegment(['ls', '-la'], config), 'safe');
 assert.equal(classifySegment(['fd', '--type', 'f'], config), 'safe');
 assert.equal(classifySegment(['git', 'status'], config), 'safe');
 assert.equal(classifySegment(['git', 'commit', '-m', 'msg'], config), 'safe');
-assert.equal(classifySegment(['git', 'push', '--force'], config), 'unsafe');
+assert.equal(classifySegment(['git', 'push', '--force'], config), 'safe');
 assert.equal(classifySegment(['rm', '-rf', '/tmp/x'], config), 'unsafe');
 assert.equal(classifySegment(['echo', 'hi', '>', 'file.txt'], config), 'unsafe');
-assert.equal(classifySegment(['git'], config), 'unsafe');
+assert.equal(classifySegment(['git'], config), 'safe');
 assert.equal(classifySegment(['npm', 'test'], config), 'safe');
 assert.equal(classifySegment(['python', 'script.py'], config), 'safe');
 assert.equal(classifySegment(['codegraph', 'sync'], config), 'safe');
@@ -146,6 +107,20 @@ assert.equal(classifySegment(['codegraph', 'status'], config), 'safe');
 assert.equal(classifySegment(['code-review-graph', 'status'], config), 'safe');
 assert.equal(classifySegment(['graphify', '--version'], config), 'safe');
 assert.equal(classifySegment(['env', 'rm', '-rf', '/tmp/x'], config), 'unsafe');
+
+// --- containsGitCommand：子代理不能通过复合命令、包装器或绝对路径绕过 Git 边界 ---
+assert.equal(containsGitCommand('git status'), true);
+assert.equal(containsGitCommand('npm test && git status'), true);
+assert.equal(containsGitCommand('command git diff'), true);
+assert.equal(containsGitCommand('sudo -n git status'), true);
+assert.equal(containsGitCommand('env LANG=C git status'), true);
+assert.equal(containsGitCommand('command sudo -n env LANG=C git status'), true);
+assert.equal(containsGitCommand('/usr/bin/git status'), true);
+assert.equal(containsGitCommand('"C:/Program Files/Git/cmd/git.exe" status'), true);
+assert.equal(containsGitCommand('cmd /c "git status"'), true);
+assert.equal(containsGitCommand('powershell -Command "C:/Tools/Git/bin/git.exe status"'), true);
+assert.equal(containsGitCommand('echo git status'), false);
+assert.equal(containsGitCommand('npm test'), false);
 assert.equal(classifySegment([], config), 'empty');
 
 // --- isSafeBashCommand ---
@@ -155,12 +130,12 @@ assert.equal(isSafeBashCommand('git log --oneline', config), true);
 assert.equal(isSafeBashCommand('fd -t f . && rg pattern', config), true);
 assert.equal(isSafeBashCommand('git add . && git commit -m "test"', config), true);
 assert.equal(isSafeBashCommand('ls | grep foo | wc -l', config), true);
-assert.equal(isSafeBashCommand('git push --force', config), false);
+assert.equal(isSafeBashCommand('git push --force', config), true);
 assert.equal(isSafeBashCommand('git push origin main', config), true);
-assert.equal(isSafeBashCommand('git push --mirror origin', config), false);
-assert.equal(isSafeBashCommand('git push --prune origin', config), false);
-assert.equal(isSafeBashCommand('git push -d origin old', config), false);
-assert.equal(isSafeBashCommand('git clean -f', config), false);
+assert.equal(isSafeBashCommand('git push --mirror origin', config), true);
+assert.equal(isSafeBashCommand('git push --prune origin', config), true);
+assert.equal(isSafeBashCommand('git push -d origin old', config), true);
+assert.equal(isSafeBashCommand('git clean -f', config), true);
 assert.equal(isSafeBashCommand('rm -rf /tmp/x', config), false);
 assert.equal(isSafeBashCommand('docker rm -f prod', config), false);
 assert.equal(isSafeBashCommand('kubectl delete pod x', config), false);
@@ -201,7 +176,9 @@ assert.equal(isSafeBashCommand(undefined, config), false);
       mcp_block_exact_add: ['mcp__custom__danger'],
       mcp_block_exact_remove: ['mcp__plugin_context-mode_context-mode__ctx_execute'],
       bash_heads_add: ['custom-cli', 'npm'],
-      bash_heads_remove: ['rm']
+      bash_heads_remove: ['rm'],
+      prompt_keywords_add: ['custom-route'],
+      prompt_keywords_remove: ['audit']
     }
   });
   assert.equal(merged.modules.prompt_inject, false);
@@ -216,6 +193,8 @@ assert.equal(isSafeBashCommand(undefined, config), false);
   assert.equal(merged.whitelist.bash_safe_heads.includes('custom-cli'), true);
   assert.equal(merged.whitelist.bash_safe_heads.includes('rm'), false);
   assert.equal(merged.whitelist.bash_safe_heads.filter((h) => h === 'npm').length, 1);
+  assert.equal(merged.whitelist.prompt_keywords.includes('custom-route'), true);
+  assert.equal(merged.whitelist.prompt_keywords.includes('audit'), false);
 }
 
 console.log('✓ rules.test.js — all assertions passed');

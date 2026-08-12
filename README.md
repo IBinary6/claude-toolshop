@@ -25,10 +25,10 @@
 
 | 插件 | 当前用途 | 日常用法 |
 | --- | --- | --- |
-| `agent-dispatch` | 主 agent 工具白名单和子代理调度，避免复杂任务挤爆上下文。 | 安装后自动创建配置骨架；遇到被拦截的高风险/大任务操作时，按提示改用 Agent。 |
-| `bugdb-knowledge` | 本地 Bug 知识库，编辑或报错时召回历史解决方案。 | 安装后正常工作；需要手动查询时使用插件命令，知识库存储在本机。 |
-| `codemap-boost` | 基于 `code-review-graph` 和可选 `graphify` 的代码结构图增强。 | 首次运行 `/codemap-boost-setup` 准备依赖；之后 SessionStart/PostToolUse 自动 build/update。 |
-| `cpp-style-enforcer` | 团队 C++ 风格流程：clang-format、cpplint、版权头、BOM 和提交前检查。 | 正常编辑 C/C++ 文件即可；提交前 hook 会检查暂存区 C++ 文件。 |
+| `agent-dispatch` | Claude 原生插件 subagents 与任务级路由，保护主上下文并按风险选择角色。 | 安装后自动创建配置骨架；SessionStart、UserPromptSubmit 和 subagent 生命周期 hook 协同工作。 |
+| `bugdb-knowledge` | 本地 Bug 知识库，Shell 成功输出或执行失败时召回历史解决方案。 | 安装后正常工作；需要手动查询时使用插件命令，知识库存储在本机。 |
+| `codemap-boost` | 基于 `code-review-graph` 和可选 `graphify` 的代码结构图增强。 | 首次运行 `/codemap-boost-setup`；之后覆盖内置编辑、Shell 与 MCP 补丁并自动维护图谱。 |
+| `cpp-style-enforcer` | 团队 C++ 风格流程：clang-format、cpplint、版权头、BOM 和提交前检查。 | 内置编辑或 Agentic Patch/MCP 批量补丁都会触发对应 C++ 文件检查。 |
 
 ## 推荐使用顺序
 

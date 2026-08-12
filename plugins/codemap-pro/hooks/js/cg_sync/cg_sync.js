@@ -2,7 +2,7 @@
 /**
  * codemap-pro PostToolUse 兜底同步钩子。
  *
- * CodeGraph MCP Server 原生 watcher 是主路径；本钩子只在编辑、写入或 Bash
+ * CodeGraph MCP Server 原生 watcher 是主路径；本钩子只在编辑、Shell 或 MCP 补丁
  * 后做低频兜底：已有数据库时后台 `codegraph sync`，缺数据库时后台
  * `codegraph init -i`。所有异常静默降级，避免阻塞用户操作。
  */

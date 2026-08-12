@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// ABOUTME: PreToolUse:Agent 钩子 - 派遣子代理时注入 CRG 优先规则
-// ABOUTME: 不阻断 Agent 工具, 仅追加 additionalContext 软提示
+// ABOUTME: SubagentStart 钩子 - 将 CRG 检索与刷新边界直接注入子代理
+// ABOUTME: Claude Code 会把 additionalContext 放进新子代理，而不是只提示主代理
 
 'use strict';
 
@@ -12,15 +12,17 @@ if (!commandExists('code-review-graph')) {
 
 const payload = {
   hookSpecificOutput: {
-    hookEventName: 'PreToolUse',
+    hookEventName: 'SubagentStart',
     additionalContext:
       'Use adaptive retrieval: choose the tool that can answer the current task in one useful pass.\n\n' +
+      'CodeMap Boost owns graph refresh and read barriers. Do not run build/update yourself unless a hook reports failure or the user explicitly requests it.\n' +
+      'Claude Code may defer MCP schemas. Use ToolSearch to discover CodeMap tools before claiming they are unavailable.\n\n' +
       'CRG (AST structure):\n' +
-      '  Clear task → call semantic_search_nodes, query_graph, get_impact_radius, or get_review_context directly\n' +
+      '  Clear task → call semantic_search_nodes, query_graph, get_impact_radius, or detect_changes directly\n' +
       '  Unclear task → get_minimal_context once for routing; do not repeat minimal\n' +
       '  semantic_search_nodes → file_path + line_start/end; Read(offset=line_start, limit=N)\n' +
       '  query_graph           → callers/callees/imports/tests\n' +
-      '  get_review_context    → change impact (~90% token savings)\n' +
+      '  detect_changes        → risk-ranked review and affected flows\n' +
       'If minimal lacks a useful entity, file, relationship, or next tool, immediately upgrade to a fuller tool or detail_level="standard"; never probe with minimal repeatedly.\n\n' +
       'serena (LSP semantic, when CRG misses): find_symbol / find_declaration / find_implementations\n' +
       'graphify (concept graph, when serena misses): query "<concept>" for architecture/cross-doc\n' +

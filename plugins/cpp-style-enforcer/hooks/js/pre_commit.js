@@ -29,6 +29,16 @@ function unquote(token) {
   return String(token).replace(/^(['"])(.*)\1$/, '$2');
 }
 
+function executableName(token) {
+  const value = unquote(token).replace(/\\/g, '/');
+  return value.slice(value.lastIndexOf('/') + 1).toLowerCase();
+}
+
+function isGitExecutable(token) {
+  const name = executableName(token);
+  return name === 'git' || name === 'git.exe';
+}
+
 function normalizedCommandTokens(segment) {
   let tokens = tokenizeCommand(segment);
   while (tokens.length > 0) {
@@ -46,7 +56,7 @@ function normalizedCommandTokens(segment) {
 }
 
 function gitSubcommand(tokens) {
-  if (tokens.length === 0 || unquote(tokens[0]) !== 'git') return null;
+  if (tokens.length === 0 || !isGitExecutable(tokens[0])) return null;
   let i = 1;
   while (i < tokens.length) {
     const tok = unquote(tokens[i]);
@@ -74,7 +84,7 @@ function segmentIsGitCommit(segment) {
 }
 
 function gitCommitCwdFromTokens(tokens, cwd) {
-  if (tokens.length === 0 || unquote(tokens[0]) !== 'git') return null;
+  if (tokens.length === 0 || !isGitExecutable(tokens[0])) return null;
   let current = path.resolve(cwd);
   let i = 1;
   while (i < tokens.length) {

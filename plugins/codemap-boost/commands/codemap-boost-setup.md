@@ -91,6 +91,7 @@ node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_update/crg_update.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_worktree/crg_worktree.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/graphify_build/graphify_build.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
+node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js"
 node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_graph_tool/pre_graph_tool.js"
 ```
 
@@ -124,7 +125,8 @@ codemap-boost-setup 完成：
   ✓ code-review-graph MCP server <已注册/本次注册>
   ✓ hook 文件 node --check 通过（含 CwdChanged 与图谱 MCP 屏障）
 
-不会写入 CLAUDE.md / AGENTS.md；图谱使用建议仅通过 Grep/Agent 运行时短提示提供。
+不会写入 CLAUDE.md / AGENTS.md；图谱使用建议通过 Grep/SubagentStart 运行时短提示提供。
+若 MCP schema 被延迟加载，先用 ToolSearch 发现 CodeMap 工具，不能仅因当前列表未显示就断言不可用。
 调用 code-review-graph MCP 前会先同步 build/update，刷新失败时会阻止本次图谱读取。
 后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
 ```

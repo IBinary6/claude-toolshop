@@ -1,13 +1,23 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "modules": {
     "enforcer": true,
-    "prompt_inject": true
+    "prompt_inject": true,
+    "session_guidance": true,
+    "subagent_guidance": true,
+    "subagent_report_guard": true
+  },
+  "policy": {
+    "max_parallel_subagents": 3,
+    "require_changed_file_report": true,
+    "require_validation_report": true,
+    "require_blocker_report": true
   },
   "whitelist": {
     "tools": [
       "Agent", "SendMessage",
-      "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput", "TaskStop",
+      "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "TaskOutput", "TaskStop", "TodoWrite",
+      "TeamCreate", "TeamDelete", "ToolSearch",
       "AskUserQuestion",
       "EnterPlanMode", "ExitPlanMode",
       "EnterWorktree", "ExitWorktree",
@@ -19,12 +29,15 @@
     ],
     "mcp_prefixes": [
       "mcp__plugin_context-mode_",
+      "mcp__context-mode__",
       "mcp__plugin_claude-mem_",
       "mcp__sequential-thinking",
       "mcp__code_review_graph__",
       "mcp__code-review-graph__",
       "mcp__codegraph__",
-      "mcp__graphify__"
+      "mcp__graphify__",
+      "mcp__serena__",
+      "mcp__serena-cross-platform__"
     ],
     "mcp_block_exact": [
       "mcp__plugin_context-mode_context-mode__ctx_execute",
@@ -49,28 +62,10 @@
       "msbuild", "cl",
       "uname", "whoami", "hostname", "printenv"
     ],
-    "git_readonly": [
-      ["status"], ["diff"], ["log"], ["show"], ["blame"], ["branch"],
-      ["rev-parse"], ["rev-list"], ["ls-files"], ["ls-tree"],
-      ["describe"], ["reflog"],
-      ["remote", "-v"], ["remote", "show"],
-      ["config", "--get"], ["config", "--list"],
-      ["stash", "list"], ["stash", "show"],
-      ["tag", "-l"], ["tag", "--list"]
-    ],
-    "git_safe_write": [
-      "add", "commit", "fetch", "push"
-    ],
-    "git_dangerous_patterns": [
-      "push.*--force", "push.*-f\\b", "push.*--delete", "push.*(?:^|\\s)-d\\b",
-      "push.*--mirror", "push.*--prune",
-      "push.*(?:^|\\s)\\+", "push.*(?:^|\\s):[^\\s]+",
-      "reset.*--hard",
-      "branch.*-D\\b",
-      "clean.*(?:^|\\s)-f\\b",
-      "clean.*-f[dx]",
-      "checkout.*--\\s+\\.",
-      "restore.*--\\s+\\."
+    "prompt_keywords": [
+      "审查", "review", "audit", "排查", "debug", "调试", "分析", "analy",
+      "实现", "implement", "迁移", "migrate", "重构", "refactor", "构建", "build",
+      "跨模块", "多文件", "并行", "parallel", "调查", "investigat", "research"
     ],
     "bash_dangerous_patterns": [
       "^rm\\b",
@@ -88,6 +83,8 @@
     "mcp_block_exact_add": [],
     "mcp_block_exact_remove": [],
     "bash_heads_add": [],
-    "bash_heads_remove": []
+    "bash_heads_remove": [],
+    "prompt_keywords_add": [],
+    "prompt_keywords_remove": []
   }
 }

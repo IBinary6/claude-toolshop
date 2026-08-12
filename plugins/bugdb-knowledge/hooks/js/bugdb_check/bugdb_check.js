@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // bugdb_check.js
-// PostToolUse:Bash 钩子。Claude Code 通过 stdin 传入 JSON，hook 命中后向 stdout
+// PostToolUse / PostToolUseFailure Shell 钩子。Claude Code 通过 stdin 传入 JSON，命中后向 stdout
 // 写 hookSpecificOutput.additionalContext 将 [BUGDB_MATCH] 提示注入到模型上下文。
 // 失败一律静默退出 0，不阻塞主流程。
 
@@ -12,8 +12,23 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
     || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
 const CLI_PATH = path.join(PLUGIN_ROOT, 'bugdb', 'cli.py');
 
-// 智能预过滤：99% Bash 调用零开销
-const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named)\b/i;
+// 智能预过滤：绝大多数 Shell 调用零开销
+const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named|AssertionError|SyntaxError|TypeError|ReferenceError|command not found|not recognized)\b|Traceback \(most recent call last\)/i;
+
+/**
+ * 按 Claude Code 当前事件协议提取失败文本。
+ * PostToolUseFailure 使用顶层 error；旧版或成功事件仍兼容 tool_response。
+ */
+function failureText(input) {
+    if (!input || input.is_interrupt === true) {
+        return '';
+    }
+    if (input.hook_event_name === 'PostToolUseFailure') {
+        return String(input.error || '');
+    }
+    const resp = input.tool_response || {};
+    return String(resp.stdout || '') + String(resp.stderr || '');
+}
 
 function splitArgs(value) {
     return String(value || '').trim().split(/\s+/).filter(Boolean);
@@ -79,9 +94,7 @@ function main() {
             return;
         }
         const input = JSON.parse(raw);
-        // Claude Code PostToolUse 标准字段：tool_response 内含 stdout/stderr。
-        const resp = (input && input.tool_response) || {};
-        const output = String(resp.stdout || '') + String(resp.stderr || '');
+        const output = failureText(input);
 
         if (!ERROR_PATTERN.test(output)) {
             return;
@@ -101,7 +114,9 @@ function main() {
         const additionalContext = buildContext(data.results[0]);
         process.stdout.write(JSON.stringify({
             hookSpecificOutput: {
-                hookEventName: 'PostToolUse',
+                hookEventName: input.hook_event_name === 'PostToolUseFailure'
+                    ? 'PostToolUseFailure'
+                    : 'PostToolUse',
                 additionalContext,
             },
         }));

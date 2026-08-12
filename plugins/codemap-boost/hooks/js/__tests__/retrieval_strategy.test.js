@@ -19,6 +19,9 @@ for (const source of sources) {
   assert.match(source, /do not repeat minimal|不要反复 minimal|不要再次调用 minimal/i, '提示必须禁止重复 minimal');
   assert.match(source, /standard/, '信息不足时必须升级到 standard');
   assert.match(source, /semantic_search_nodes|query_graph/, '提示必须保留结构化图谱工具');
+  assert.match(source, /ToolSearch/, '提示必须覆盖 Claude Code 的延迟 MCP 工具发现');
+  assert.match(source, /detect_changes/, '审查提示必须使用当前 change-aware 工具');
+  assert.match(source, /build\/update|build.*update|build 或 update/, '提示必须声明图刷新所有权');
 }
 
 console.log('retrieval_strategy.test.js PASS');

@@ -51,9 +51,13 @@ function isPathInRepo(targetPath, repoRoot) {
 
 // CodeGraph 推荐（路径在 repo 内）
 const CG_CONTEXT =
-  'For code structure search, use codegraph MCP tools instead of Grep:\n' +
-  '  mcp__codegraph__* symbol search → file_path + line\n' +
-  '  mcp__codegraph__* call chain    → callers/callees/imports\n' +
+  'Use adaptive retrieval for code structure and prefer a specific CodeGraph MCP query over Grep:\n' +
+  '  MCP schemas may be deferred; use ToolSearch before claiming CodeGraph tools are unavailable\n' +
+  '  The plugin owns graph init/sync; do not start duplicate refresh work\n' +
+  '  Clear task → call the matching symbol/call/reference tool directly\n' +
+  '  Unclear task → request one minimal overview, then move to a specific query\n' +
+  '  Symbol search → file_path + line\n' +
+  '  Call/reference query → callers/callees/imports\n' +
   'When codegraph misses: mcp__serena__find_symbol / find_declaration → semantic\n' +
   'Grep: plain text / strings / comments only.';
 

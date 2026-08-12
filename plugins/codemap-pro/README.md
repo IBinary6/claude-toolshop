@@ -8,7 +8,7 @@
 - ✅ **显式 setup** - 首次使用前安装 `codegraph` CLI + MCP Server 配置
 - ✅ **增量更新** - CodeGraph 内置文件监听（2s 去抖）为主，PostToolUse 兜底 `sync`
 - ✅ **Worktree 支持** - 自动处理 worktree 环境
-- ✅ **Grep 软引导** - 运行时提示优先使用 CodeGraph MCP 工具，不写持久 MD 提示词
+- ✅ **原生上下文引导** - Grep 提示主代理，SubagentStart 直接把规则注入新子代理
 - ✅ **互斥建议** - 建议与 codemap-boost 二选一，避免重复图谱 hook 和重复引导
 
 ## 技术栈对比
@@ -51,7 +51,7 @@ codegraph install --target=claude --yes
 
 SessionStart 不会自动修改项目 `.gitignore`。如需避免误提交图谱产物，请在项目中显式加入 `.codegraph/`。
 
-编辑文件或运行 Bash 后，`cg_sync` 会做兜底同步：已有 `.codegraph/codegraph.db` 时后台 `codegraph sync`，缺失时后台 `codegraph init -i`。
+内置编辑、Shell 或 Agentic Patch/MCP 补丁成功后，`cg_sync` 会做兜底同步：已有 `.codegraph/codegraph.db` 时后台 `codegraph sync`，缺失时后台 `codegraph init -i`。
 
 ### 可用的 MCP 工具
 
@@ -65,11 +65,11 @@ SessionStart 不会自动修改项目 `.gitignore`。如需避免误提交图谱
 
 ### Grep 软引导
 
-每次使用 `Grep` 工具时，插件会提示优先使用 CodeGraph MCP 工具（不阻塞 Grep）。
+每次使用 `Grep` 工具时，插件会提示优先使用 CodeGraph MCP 工具（不阻塞 Grep）；`SubagentStart` 会把同一语义直接注入新子代理。若 MCP schema 被延迟加载，先使用 `ToolSearch` 发现工具。
 
 ## 与 codemap-boost 的区别
 
-**建议不要同时安装** - 两个插件都会维护图谱并在 Grep/Agent 时提供运行时引导，同时安装会重复触发 hook。
+**建议不要同时安装** - 两个插件都会维护图谱并在 Grep/SubagentStart 时提供运行时引导，同时安装会重复触发 hook。
 
 ### 选择建议
 
@@ -101,7 +101,11 @@ PreToolUse:Grep
 └── grep_nudge.js
     └── 注入 additionalContext（软引导，不阻塞）
 
-PostToolUse:Edit|Write|Bash
+SubagentStart
+└── agent_nudge.js
+    └── 将自适应图谱检索规则直接注入子代理
+
+PostToolUse:内置编辑|Shell|MCP 补丁
 └── cg_sync.js (async)
     ├── .codegraph/codegraph.db 存在 → 后台 sync
     └── 不存在 → 后台 init -i
@@ -181,7 +185,7 @@ rm /tmp/codegraph-build-*.lock
 
 ### 与 codemap-boost 重复运行
 
-**症状**：Grep/Agent 运行时提示重复，或两个图谱目录都在后台更新
+**症状**：Grep/SubagentStart 运行时提示重复，或两个图谱目录都在后台更新
 
 **解决**：
 1. 只保留一个插件

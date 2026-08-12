@@ -1,6 +1,13 @@
 const assert = require('node:assert');
 const path = require('path');
-const { resolveFilePath, shouldHandle, CPP_EXTENSIONS, EXCLUDED_DIRS, SKIPPED_FILES } = require('../lib/target.js');
+const {
+  resolveFilePath,
+  resolveFilePaths,
+  shouldHandle,
+  CPP_EXTENSIONS,
+  EXCLUDED_DIRS,
+  SKIPPED_FILES,
+} = require('../lib/target.js');
 
 // resolveFilePath: tool_input.file_path 直取
 assert.strictEqual(
@@ -72,5 +79,42 @@ assert.strictEqual(
   resolveFilePath({ cwd: '/proj', tool_input: { relative_path: 'src/c.cc' } }),
   path.resolve('/proj', 'src/c.cc'),
   'relative_path 分支不变');
+
+// Agentic Patch / MCP 批量编辑：一次 hook 调用必须覆盖所有 C++ 文件。
+assert.deepStrictEqual(
+  resolveFilePaths({
+    cwd: '/proj',
+    tool_input: {
+      edits: [
+        { file_path: 'src/a.cpp' },
+        { targetPath: 'include/a.h' },
+      ],
+    },
+  }),
+  [path.resolve('/proj', 'src/a.cpp'), path.resolve('/proj', 'include/a.h')],
+  '嵌套批量编辑提取全部路径');
+
+assert.deepStrictEqual(
+  resolveFilePaths({
+    cwd: '/proj',
+    tool_input: {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/a.cpp',
+        '*** Add File: include/a.hpp',
+        '*** End Patch',
+      ].join('\n'),
+    },
+  }),
+  [path.resolve('/proj', 'src/a.cpp'), path.resolve('/proj', 'include/a.hpp')],
+  'Agentic Patch 文本提取全部目标文件');
+
+assert.deepStrictEqual(
+  resolveFilePaths({
+    cwd: '/proj',
+    tool_input: { diff: '--- a/src/a.cpp\n+++ b/src/a.cpp\n@@ -1 +1 @@' },
+  }),
+  [path.resolve('/proj', 'src/a.cpp')],
+  'unified diff 仅采用新文件头并去重');
 
 console.log('target.test.js PASS');
