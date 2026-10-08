@@ -357,6 +357,10 @@ function appendFile(filePath, content) {
  * Uses execFileSync to prevent command injection
  */
 function commandExists(cmd) {
+  // 插件私有 CRG（CLAUDE_PLUGIN_DATA 下的独立 venv）视同已安装，不要求全局 PATH。
+  if (cmd === 'code-review-graph' && require('./managed_runtime').crgCommand() !== 'code-review-graph') {
+    return true;
+  }
   // Validate command name - only allow alphanumeric, dash, underscore, dot
   if (!/^[a-zA-Z0-9_.-]+$/.test(cmd)) {
     return false;
@@ -565,6 +569,7 @@ function isCrgMcpRegistered() {
 }
 
 module.exports = {
+  crgCommand: () => require('./managed_runtime').crgCommand(),
   // Platform info
   isWindows,
   isMacOS,

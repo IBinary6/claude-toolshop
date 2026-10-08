@@ -122,8 +122,11 @@ function quoteCmd(value) {
 }
 
 function runCrgDefault(args, options) {
-  if (process.platform !== 'win32') return spawnSync('code-review-graph', args, options);
-  const command = ['code-review-graph', ...args].map(quoteCmd).join(' ');
+  const crg = require('./managed_runtime').crgCommand();
+  // 插件私有 CRG 是确定的可执行文件绝对路径，直接 spawn：经 cmd /c 再包一层引号会被 Node 转义成
+  // \"C:\...\" 而无法识别（路径含空格或反斜杠时必现）。只有 PATH 上的裸命令名可能是 .cmd shim，才走 cmd。
+  if (process.platform !== 'win32' || path.isAbsolute(crg)) return spawnSync(crg, args, options);
+  const command = [crg, ...args].map(quoteCmd).join(' ');
   return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', command], options);
 }
 

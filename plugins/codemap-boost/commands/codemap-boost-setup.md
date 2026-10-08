@@ -1,144 +1,38 @@
 ---
-description: 检测并配置 CodeMap Boost 依赖、代码图 CLI 和 MCP 注册
+description: 检查并修复 CodeMap Boost 内置的 code-review-graph / Serena 私有运行环境
 ---
 
-# /codemap-boost-setup — 前置依赖检测 + 显式安装
+# /codemap-boost-setup — 内置运行环境检查
 
-**建议首次使用前执行**。codemap-boost 的 hook 不会自动安装依赖；本命令用于显式检测、安装 `code-review-graph` / `graphifyy[all]`，并注册 MCP。依赖装进 PATH 后，SessionStart / PostToolUse 会自动维护图谱，不需要每次启动 Claude Code 都重新 setup。
-
-它做两件事：**检测前置依赖是否齐全**；缺失时**询问你是否让我直接帮你装**（pip 包可自动装，需管理员的只打印命令）。
+code-review-graph 与 Serena 随插件内置：会话启动时后台装进插件数据目录（`${CLAUDE_PLUGIN_DATA}` 下的独立 venv），MCP 由插件自带的 `.mcp.json` 启动，**不需要全局 `pip install`，也不需要 `code-review-graph install` 或用户级 MCP 注册**。本命令只用于检查和排障，不做交互式安装。
 
 ## 执行流程
 
-按以下步骤依次执行。**遇到决策点必须使用 AskUserQuestion 工具询问用户，不要假设**。
+1. 检查 Node.js：`node --version`，需要 18+；缺失只打印安装命令（`winget install -e --id OpenJS.NodeJS.LTS` / `brew install node@20` / `sudo apt install nodejs npm`），不替用户执行，然后停下。
+2. 只读诊断：
 
-> 前置依赖（Node.js / code-review-graph / graphify）**全部必需**，缺任一项对应 hook 不会工作。
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-runtime.cjs" --doctor
+   ```
 
-### Step 1: 检测 Node.js
+   输出 JSON，包含 `dataDir`、`crg.ok`、`serena.ok` 及各自的 `failure` 诊断。
+3. 任一项 `ok` 为 `false`：说明首次后台安装未完成或失败。先让用户确认网络可用，并且有 `uv` 或 Python 3.11+；然后经用户同意运行安装（首次需数分钟，CRG 约 300MB）：
 
-执行：
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-runtime.cjs"
+   ```
 
-```bash
-node --version
-```
+   找不到合适的 Python 时，可设置环境变量 `CODEMAP_BOOST_PYTHON`（以及 `CODEMAP_BOOST_PYTHON_ARGS`）指向解释器后重试。装完重跑第 2 步确认。
+4. 可选的 `graphify`（概念图谱，仍是外部 CLI）：`graphify --version`；缺失时经用户同意执行 `python -m pip install "graphifyy[all]"`（包名双 y）。
+5. 校验 hook 脚本可被 Node 解析：对 `hooks/js` 下 `runtime_bootstrap`、`crg_build`、`crg_update`、`crg_worktree`、`grep_nudge`、`agent_nudge`、`pre_graph_tool` 各脚本执行 `node --check`。
+6. 提醒用户：MCP 在会话启动时连接。首次安装完成后在 Claude Code 里运行 `/mcp` 重连 `plugin:codemap-boost:*` 即可，不必重开会话。若同名 MCP 之前由 cc-switch 或 `~/.claude.json` 注册过，请取消注册，避免与内置版本重复。
 
-- **退出码非 0 / 命令找不到** → Node 不可用，跳到 Step 2
-- **输出版本但 < 18** → Node 版本不够，跳到 Step 2
-- **输出 v18+** → 直接跳到 Step 3
+## 汇报
 
-### Step 2: 引导安装 Node.js（仅 Step 1 失败时进入）
-
-Node.js 安装通常需要管理员权限（winget / brew / apt），**不替用户执行**，只打印命令。
-
-**必须用 AskUserQuestion 工具询问用户**，给出两个选项：
-
-- 选项 A：「打印安装命令给我，我自己复制运行」
-- 选项 B：「我自己装，装完再重跑 /codemap-boost-setup」
-
-无论选哪个，都按当前平台打印对应命令（**不主动执行**）：
-
-- **Windows**：`winget install -e --id OpenJS.NodeJS.LTS` 或 `scoop install nodejs-lts`
-- **macOS**：`brew install node@20`
-- **Linux**：`sudo apt install nodejs npm` / `sudo dnf install nodejs` / `sudo pacman -S nodejs npm`
-
-明确告诉用户：装完后需要**重开终端 / Claude Code** 让 PATH 刷新，然后重跑 `/codemap-boost-setup`。停下，**不要继续往后跑**（Node 缺失后续步骤无意义）。
-
-### Step 3: 选择安装级别
-
-**必须用 AskUserQuestion 工具询问用户**：
-
-code-review-graph 提供三种安装级别：
-
-- 选项 A：**完整安装（推荐）** `pip install "code-review-graph[all]"` — 含语义嵌入、社区检测、所有分析功能（约 500MB）
-- 选项 B：**嵌入增强** `pip install "code-review-graph[embeddings]"` — 仅含语义搜索能力（约 300MB）
-- 选项 C：**核心功能** `pip install code-review-graph` — 最小安装，FTS5 关键词搜索、无语义搜索（约 50MB）
-
-记住用户的选择，在后续 Step 4 中使用对应的 pip 包名进行安装。
-
-### Step 4: 检测 code-review-graph CLI（pip 包，可自动装）
-
-执行：
-
-```bash
-code-review-graph --version
-```
-
-- **存在** → 继续 Step 5
-- **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 先确认 Python/pip 可用（`python -m pip --version`，失败则 `python3 -m pip --version`），然后根据 Step 3 用户选择执行对应的安装命令（如 `python -m pip install "code-review-graph[all]"`）。装完复跑 `code-review-graph --version` 验证；成功继续 Step 5，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己装」→ 打印 Step 3 选择对应的安装命令，告知装完重开 Claude Code，停下。
-
-### Step 5: 检测 graphify CLI（pip 包，可自动装）
-
-执行：
-
-```bash
-graphify --version
-```
-
-- **存在** → 继续 Step 6
-- **找不到命令** → **必须用 AskUserQuestion** 询问用户：
-  - 选项 A：「帮我装」→ 执行 `python -m pip install "graphifyy[all]"`（pip 包名是 `graphifyy`，它提供 `graphify` 命令；用 Step 4 验证过的解释器）。装完复跑 `graphify --version` 验证；成功继续 Step 6，失败报告 stderr 并停下。
-  - 选项 B：「打印命令，我自己装」→ 打印 `python -m pip install "graphifyy[all]"`，告知装完重开 Claude Code，停下。
-
-### Step 6: 验证 hook 文件可被 Node 解析
-
-执行（依次校验所有 hook 文件能被 node 解析；不实际运行业务逻辑）：
-
-```bash
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_update/crg_update.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_worktree/crg_worktree.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/graphify_build/graphify_build.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/grep_nudge/grep_nudge.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/agent_nudge/agent_nudge.js"
-node --check "${CLAUDE_PLUGIN_ROOT}/hooks/js/pre_graph_tool/pre_graph_tool.js"
-```
-
-任一失败 → 报告 stderr 并停止（说明插件文件损坏，需要重装）。
-全部通过 → 继续 Step 6.5。
-
-### Step 6.5: 验证 MCP 服务器注册
-
-检查 code-review-graph MCP 服务器是否已注册到 settings.json。
-
-**检测方法**（按优先级选择一种）：
-
-1. **方法 A（推荐）**：读取 `~/.claude/settings.json`，解析 JSON，检查 `mcpServers` 字段中是否有 `code-review-graph` 键。
-
-2. **方法 B（备选）**：执行 `code-review-graph install --dry-run`（如果该命令支持 dry-run 参数）。
-
-**结果判断**：
-
-- **已注册** → 继续 Step 7
-- **未注册** → 直接执行 `code-review-graph install`。成功继续 Step 7，失败报告 stderr，并打印同一命令让用户手动处理。
-
-### Step 7: 汇报结果
-
-简短输出（不超过 10 行）。根据前面步骤检测/安装结果，**显式列出**前置依赖状态：
-
-```
-codemap-boost-setup 完成：
-  ✓ Node.js <版本>
-  ✓ code-review-graph CLI <版本><（本次自动安装，级别：[all]/[embeddings]/core）>
-  ✓ graphify CLI<（本次自动安装）>
-  ✓ code-review-graph MCP server <已注册/本次注册>
-  ✓ hook 文件 node --check 通过（含 CwdChanged 与图谱 MCP 屏障）
-
-不会写入 CLAUDE.md / AGENTS.md；图谱使用建议通过 Grep/SubagentStart 运行时短提示提供。
-若 MCP schema 被延迟加载，先用 ToolSearch 发现 CodeMap 工具，不能仅因当前列表未显示就断言不可用。
-调用 code-review-graph MCP 前会先同步 build/update，刷新失败时会阻止本次图谱读取。
-后续升级：/plugin marketplace update claude-toolshop 后重启 Claude Code 即可。
-```
-
-若有依赖缺失或安装失败，汇报中应明确标 ✗ 并复述对应安装命令。
+简短输出（不超过 8 行），显式列出 Node.js、CRG、Serena、graphify（可选）和 hook 检查的状态；失败项标 ✗ 并给出对应命令。
 
 ## 约束
 
-- 决策点必须用 AskUserQuestion 工具，不得自作主张
-- **pip 包（code-review-graph / graphify）经用户同意后可自动执行** `python -m pip install`；安装前先确认 Python/pip 可用，安装后必须复跑 `--version` 验证
-- **不得替用户执行** 需要管理员 / 污染全局环境的命令（`npm install -g` / `winget` / `sudo apt` / `brew`）；Node.js 一律只打印命令
-- 全程用 `python -m pip` 而非裸 `pip`，规避 PATH 上失效 shim 残留
-- 前置依赖**全部必需**，缺任一项必须明确告知用户或代装，不提供"跳过"选项
-- 任一步骤失败必须明确报告，不得静默跳过
-- 不修改用户 CLAUDE.md / AGENTS.md；不得新增持久提示词注入
+- 不修改用户 CLAUDE.md / AGENTS.md，不写用户级 MCP 配置，不执行需要管理员权限的命令。
+- 安装需要联网，执行前必须征得用户同意；任一步骤失败必须明确报告，不得静默跳过。
+- 工具名为 `mcp__plugin_codemap-boost_code-review-graph__*` 与 `mcp__plugin_codemap-boost_serena__*`；MCP schema 可能被延迟加载，先用 ToolSearch 发现，不能仅因列表未显示就断言不可用。

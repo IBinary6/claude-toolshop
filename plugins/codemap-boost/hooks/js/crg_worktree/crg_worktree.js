@@ -20,7 +20,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { isGitRepo, commandExists } = require('../lib/utils');
+const { isGitRepo, commandExists, crgCommand } = require('../lib/utils');
 
 const TAG = '[crg_worktree]';
 const LOCK_STALE_MS = 4 * 60 * 60 * 1000; // 4h
@@ -84,7 +84,7 @@ function tryAcquireBuildLock() {
  * 失败返回 -1（不删 db，避免 CLI 异常误删）。
  */
 function getGraphFileCount() {
-  const result = spawnSync('code-review-graph', ['status', '--repo', cwd], {
+  const result = spawnSync(crgCommand(), ['status', '--repo', cwd], {
     cwd, encoding: 'utf-8', windowsHide: true,
   });
   const m = (result.stdout || '').match(/Files:\s*(\d+)/);
@@ -106,7 +106,7 @@ function startBackgroundBuild() {
     let out;
     try {
       out = fs.openSync(${JSON.stringify(buildLogFile)}, 'a');
-      spawnSync('code-review-graph', ['build', '--repo', ${JSON.stringify(cwd)}], {
+      spawnSync(${JSON.stringify(crgCommand())}, ['build', '--repo', ${JSON.stringify(cwd)}], {
         stdio: ['ignore', out, out], windowsHide: true,
       });
     } catch (e) {
@@ -135,7 +135,7 @@ function startBackgroundUpdate() {
   let out;
   try {
     out = fs.openSync(logFile, 'a');
-    const proc = spawn('code-review-graph', ['update', '--repo', cwd], {
+    const proc = spawn(crgCommand(), ['update', '--repo', cwd], {
       cwd, detached: true, windowsHide: true, stdio: ['ignore', out, out],
     });
     proc.unref();

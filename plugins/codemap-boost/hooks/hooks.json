@@ -6,6 +6,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/runtime_bootstrap/runtime_bootstrap.js\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/crg_build/crg_build.js\"",
             "timeout": 5
           },
@@ -59,7 +64,7 @@
         ]
       },
       {
-        "matcher": "mcp__(?:code_review_graph|code-review-graph|codegraph|graphify)__.*",
+        "matcher": "mcp__(?:plugin_codemap-boost_code-review-graph|code_review_graph|code-review-graph|codegraph|graphify)__.*",
         "hooks": [
           {
             "type": "command",

@@ -12,7 +12,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { isGitRepo, commandExists } = require('../lib/utils');
+const { isGitRepo, commandExists, crgCommand } = require('../lib/utils');
 const { launchDetachedSelf } = require('../lib/background_hook');
 
 const TAG = '[crg_build]';
@@ -81,7 +81,7 @@ function tryAcquireBuildLock() {
 }
 
 function isGraphValid() {
-  const result = spawnSync('code-review-graph', ['status', '--repo', cwd], { cwd, encoding: 'utf-8' });
+  const result = spawnSync(crgCommand(), ['status', '--repo', cwd], { cwd, encoding: 'utf-8' });
   const m = (result.stdout || '').match(/Files:\s*(\d+)/);
   const fileCount = m ? parseInt(m[1], 10) : -1;
   if (fileCount >= MIN_VALID_FILES) {

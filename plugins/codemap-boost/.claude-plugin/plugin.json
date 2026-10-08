@@ -1,7 +1,7 @@
 {
   "name": "codemap-boost",
-  "version": "0.2.23",
-  "description": "自动维护 code-review-graph / graphify 代码结构图：兼容内置编辑、PowerShell 与 Agentic Patch/MCP 补丁；图谱读取前同步刷新，SessionStart/Grep/SubagentStart 注入自适应检索和延迟 MCP 工具发现规则。",
+  "version": "0.3.0",
+  "description": "内置 code-review-graph 与 Serena（私有 venv，.mcp.json 自带 MCP，无需 pip 或 cc-switch 注册），自动维护代码结构图：覆盖内置编辑、Shell 与 Agentic Patch/MCP 补丁，读图前同步刷新，并通过 SessionStart/Grep/SubagentStart 注入自适应检索与 ToolSearch 发现规则。",
   "author": {
     "name": "IBinary6"
   },

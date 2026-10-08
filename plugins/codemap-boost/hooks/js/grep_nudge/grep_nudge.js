@@ -55,18 +55,18 @@ const CRG_CONTEXT =
   '  MCP schemas may be deferred; use ToolSearch before claiming CodeMap tools are unavailable\n' +
   '  CodeMap Boost owns refresh/read barriers; do not start a duplicate build/update\n' +
   '  Clear task → call the specialized CRG tool directly; unclear task → get_minimal_context once for routing only\n' +
-  '  mcp__code-review-graph__semantic_search_nodes_tool → symbol location (file + line)\n' +
-  '  mcp__code-review-graph__query_graph_tool           → callers/callees/imports\n' +
-  '  mcp__code-review-graph__detect_changes_tool        → risk-ranked change review\n' +
+  '  mcp__plugin_codemap-boost_code-review-graph__semantic_search_nodes_tool → symbol location (file + line)\n' +
+  '  mcp__plugin_codemap-boost_code-review-graph__query_graph_tool           → callers/callees/imports\n' +
+  '  mcp__plugin_codemap-boost_code-review-graph__detect_changes_tool        → risk-ranked change review\n' +
   '  If minimal lacks a useful result, immediately upgrade to a fuller tool or detail_level="standard"; do not repeat minimal\n' +
-  'When CRG misses: mcp__serena__find_symbol / find_declaration → semantic\n' +
+  'When CRG misses: mcp__plugin_codemap-boost_serena__find_symbol / find_declaration → semantic\n' +
   'When serena misses: graphify query "<concept>" → architecture/cross-doc\n' +
   'Grep: plain text / strings / comments only.';
 
 // 降级推荐（路径在 repo 外）
 const EXTERNAL_CONTEXT =
   'Target path is OUTSIDE the repository — code-review-graph cannot help here. ' +
-  'Use mcp__serena tools (find_symbol, find_declaration) for cross-repo symbol lookup. ' +
+  'Use mcp__plugin_codemap-boost_serena tools (find_symbol, find_declaration) for cross-repo symbol lookup. ' +
   'Grep is acceptable for plain-text search in external paths.';
 
 async function main() {

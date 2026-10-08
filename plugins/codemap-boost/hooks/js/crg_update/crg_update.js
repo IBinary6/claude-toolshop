@@ -20,7 +20,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { isGitRepo, commandExists } = require('../lib/utils');
+const { isGitRepo, commandExists, crgCommand } = require('../lib/utils');
 
 const TAG = '[crg_update]';
 const DEBOUNCE_MS = 300;
@@ -80,7 +80,7 @@ function tryAcquireBuildLock() {
 }
 
 function isResidualGraph() {
-  const result = spawnSync('code-review-graph', ['status', '--repo', cwd], { cwd, encoding: 'utf-8' });
+  const result = spawnSync(crgCommand(), ['status', '--repo', cwd], { cwd, encoding: 'utf-8' });
   const m = (result.stdout || '').match(/Files:\s*(\d+)/);
   const fileCount = m ? parseInt(m[1], 10) : -1;
   // status 失败 (fileCount=-1) 不删 db, 避免命令异常误删
