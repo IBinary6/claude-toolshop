@@ -1,6 +1,6 @@
 # bugdb-knowledge — 本地知识库插件
 
-> 版本 v0.1.8
+> 版本 v0.2.0
 
 基于 SQLite + FTS5 全文检索的 Claude Code 插件，为开发过程提供**持久化经验积累**。
 
@@ -12,7 +12,8 @@
 
 | 场景 | 行为 |
 |------|------|
-| Bash/PowerShell 报错（编译/链接/运行时错误） | `PostToolUse` / `PostToolUseFailure` Hook **自动**查询知识库，命中时注入方案提示 |
+| Bash/PowerShell 命令失败（编译/链接/运行时错误） | `PostToolUse` / `PostToolUseFailure` Hook **自动**只读查询知识库，命中时注入方案参考 |
+| 用户在提示里直接粘贴错误行 | `UserPromptSubmit` Hook 用首个错误行只读查询一次；无命中与召回失败会给出不同提示 |
 | Claude 遇到错误需要排查 | 调用 `bugdb-lookup` skill 按规范流程查库 |
 | 成功解决了一个 Bug | 调用 `bugdb-record` skill 录入知识库 |
 | 想记住一个最佳实践/工具技巧 | `/bugfix` 命令交互式录入 |
@@ -100,9 +101,9 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
         │
         ▼
 ┌──────────────────────────────────────────────────┐
-│       Shell 成功输出 / 执行失败 Hook              │
-│  bugdb_check.js 监听 Bash/PowerShell 错误结果     │
-│  检测到错误关键词 → 自动查询知识库                │
+│   Shell 执行失败 Hook / 用户提示 Hook             │
+│  bugdb_check.js / bugdb_prompt.js 提取错误行      │
+│  检测到错误关键词 → 只读查询知识库                │
 │  命中 → 注入 [BUGDB_MATCH] 提示给 Claude         │
 │  未命中 / 出错 → 静默，不阻塞主流程              │
 └──────────────────────────────────────────────────┘
@@ -145,7 +146,7 @@ python "${CLAUDE_PLUGIN_ROOT}/bugdb/cli.py" stats
 
 ### 1. Hook 自动触发（零操作）
 
-**触发条件**：Bash/PowerShell 成功返回后检查 stdout/stderr；工具执行失败时直接检查 `PostToolUseFailure.error`。用户主动中断不会触发查询。
+**触发条件**：Bash/PowerShell 命令真实失败时检查 `PostToolUseFailure.error`；用户提交的提示里直接包含错误行时由 `UserPromptSubmit` 查询一次。成功输出（构建工具常以退出码 0 打印错误）同样检查 stdout/stderr；用户主动中断不会触发。
 
 **识别的错误模式**：
 ```
@@ -164,11 +165,11 @@ No module named      # Python 导入失败
 
 **流程**：
 ```
-Shell 执行 → stdout/stderr 或顶层 error 包含上述关键词
-  → bugdb_check.js 提取错误行
-  → base64 编码后调用 CLI search
-  → 命中则输出 [BUGDB_MATCH] 信息
-  → Claude 看到提示，按方案尝试修复
+Shell 输出（成功 stdout/stderr 或失败 error）或用户提示 包含上述关键词
+  → bugdb_check.js / bugdb_prompt.js 提取首个错误行
+  → base64 编码后调用 CLI search --read-only（不创建数据库、不迁移 schema）
+  → 命中则输出 [BUGDB_MATCH]（标明 updated_at，历史方案可能过时）
+  → Claude 把它当作低优先级参考，结合当前代码验证后再采用
 ```
 
 **输出示例**：
@@ -176,12 +177,14 @@ Shell 执行 → stdout/stderr 或顶层 error 包含上述关键词
 [BUGDB_MATCH] id=3 confidence=90 status=active
 entry_kind=bug
 category=link
+updated_at=2026-09-01T10:00:00
+以下是本机知识库中的历史方案，只作低优先级参考，可能已过时：……
 content=add ws2_32.lib to linker dependencies
 steps=["target_link_libraries(myapp PRIVATE ws2_32)"]
 hint=如方案无效，忽略此提示继续正常排查
 ```
 
-> Hook 有 5 秒超时限制，任何异常（Python 缺失、DB 不存在等）都静默处理，**绝不阻塞主流程**。
+> Hook 有 5 秒超时限制，**绝不阻塞主流程**。失败路径（工具失败 Hook）异常一律静默；提示路径会区分“已查询但无命中”和“召回未完成”（Python/CLI 不可用、数据库需迁移），后者不能表述为没有历史记录。数据库尚不存在时只读召回返回真实空结果，不会创建文件。Python 探测依次尝试 `python`、`python3`、`py -3`，低于 3.11 的不会阻断后续候选。
 
 ### 2. Skill 触发（Claude 主动调用）
 
@@ -295,7 +298,7 @@ bugdb explore --entry-kind practice --language python
    JSON 里走独立的 `fallback: true` + `fallback_results` 字段，text 输出加
    `[BUGDB_FALLBACK]` 标记。`--no-fallback` 可关闭。
 
-Shell hook 只读 `results`，不消费 fallback —— 即邻区兜底是
+Hook 使用 `--read-only --no-fallback`，只读 `results`，不消费 fallback —— 邻区兜底是
 给手动调用者/Claude 的提示，hook 行为不变。
 
 `bugdb explore` 不做断言、不报"找不到"：FTS5 OR + LIKE 子串双路合并，
@@ -564,9 +567,11 @@ plugins/bugdb-knowledge/
 ├── docs/
 │   └── MANUAL_INSTALL.md    # 手动安装指南
 ├── hooks/
-│   ├── hooks.json           # Hook 注册（Shell 成功/失败事件）
+│   ├── hooks.json           # Hook 注册（Shell 失败事件 / 用户提示 / 会话启动）
 │   └── js/bugdb_check/
-│       ├── bugdb_check.js   # 错误检测 + 自动查库（PostToolUse / Failure）
+│       ├── bugdb_cli.js     # 共用：Python 探测、只读召回、参考资料渲染
+│       ├── bugdb_check.js   # 命令失败时自动查库（PostToolUseFailure）
+│       ├── bugdb_prompt.js  # 用户粘贴错误行时查库（UserPromptSubmit）
 │       └── bugdb_python_check.js  # Python 3.11+ 检测引导（SessionStart）
 ├── skills/
 │   ├── bugdb-lookup/

@@ -11,7 +11,7 @@
 | 依赖 | 最低版本 | 用途 |
 |------|---------|------|
 | Python | 3.11+ | BugDB CLI 核心（数据库、搜索） |
-| Node.js | 18+ | Shell 成功/失败 Hook 运行时 |
+| Node.js | 18+ | Shell 失败 / 用户提示 Hook 运行时 |
 
 验证：
 
@@ -61,7 +61,9 @@ cp "$REPO"/commands/bugdb-setup.md ~/.claude/commands/
 
 # Hook
 mkdir -p ~/.claude/hooks/js/bugdb_check
+cp "$REPO"/hooks/js/bugdb_check/bugdb_cli.js ~/.claude/hooks/js/bugdb_check/
 cp "$REPO"/hooks/js/bugdb_check/bugdb_check.js ~/.claude/hooks/js/bugdb_check/
+cp "$REPO"/hooks/js/bugdb_check/bugdb_prompt.js ~/.claude/hooks/js/bugdb_check/
 cp "$REPO"/hooks/js/bugdb_check/bugdb_python_check.js ~/.claude/hooks/js/bugdb_check/
 
 # Skills
@@ -75,7 +77,7 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
 
 ## 三、settings.json Hook 注册
 
-在 `~/.claude/settings.json` 的 `hooks` 中为 `PostToolUse` 和 `PostToolUseFailure` **分别追加**以下处理器（保留既有条目）：
+在 `~/.claude/settings.json` 的 `hooks.PostToolUse` 和 `hooks.PostToolUseFailure` 中**分别追加**以下处理器（保留既有条目，两个事件使用相同 command）：
 
 ```json
 {
@@ -90,9 +92,21 @@ cp "$REPO"/skills/bugdb-record/SKILL.md ~/.claude/skills/bugdb-record/
 }
 ```
 
-两个事件使用相同的 command；脚本会按 `hook_event_name` 分别读取 `tool_response` 或顶层 `error`。
+再在 `hooks.UserPromptSubmit` 中追加（用户直接粘贴错误行时查库一次，无需 matcher）：
 
-> **说明**：`bugdb_check.js` 是自执行脚本（`main()` 自调用），Claude Code 通过 **stdin 传入 JSON**（含 `tool_response.stdout/stderr`），脚本读 stdin、命中错误模式后向 stdout 写 `hookSpecificOutput.additionalContext`。不要把它当函数 `require(...)({...})` 调用，也不依赖 `CLAUDE_TOOL_*` 环境变量——那种写法不工作。
+```json
+{
+  "hooks": [
+    {
+      "type": "command",
+      "command": "node \"$HOME/.claude/hooks/js/bugdb_check/bugdb_prompt.js\"",
+      "timeout": 5
+    }
+  ]
+}
+```
+
+> **说明**：`bugdb_check.js` 是自执行脚本（`main()` 自调用），Claude Code 通过 **stdin 传入 JSON**（含顶层 `error`，首行为 `Exit code N`），脚本读 stdin、命中错误模式后向 stdout 写 `hookSpecificOutput.additionalContext`。不要把它当函数 `require(...)({...})` 调用，也不依赖 `CLAUDE_TOOL_*` 环境变量——那种写法不工作。
 >
 > Windows 用户：若 `$HOME` 在你的 shell 中不展开，请改用展开后的绝对路径，例如 `node "C:\\Users\\<你>\\.claude\\hooks\\js\\bugdb_check\\bugdb_check.js"`。
 
@@ -168,7 +182,7 @@ bugdb add \
 bugdb search --query "LNK2001 __imp_WSAStartup" --language c++
 
 # 4. Hook 冒烟测试（stdin 传 JSON，验证脚本能跑通并命中）
-echo '{"tool_response":{"stdout":"","stderr":"error LNK2001: unresolved external symbol __imp_WSAStartup"}}' \
+echo '{"hook_event_name":"PostToolUseFailure","tool_name":"Bash","error":"Exit code 1\nerror LNK2001: unresolved external symbol __imp_WSAStartup"}' \
   | node ~/.claude/hooks/js/bugdb_check/bugdb_check.js
 ```
 

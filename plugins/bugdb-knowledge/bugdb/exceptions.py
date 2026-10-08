@@ -19,3 +19,11 @@ class InvalidState(BugDBError):
 
 class SchemaMigrationError(BugDBError):
     """Schema 迁移失败。"""
+
+
+class DatabaseMissing(BugDBError):
+    """只读打开时数据库文件不存在（尚无任何记录）。"""
+
+
+class SchemaOutdated(BugDBError):
+    """只读打开时 schema 低于当前版本；只读模式不执行迁移。"""

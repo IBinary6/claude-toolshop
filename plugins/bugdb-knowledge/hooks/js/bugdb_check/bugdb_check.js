@@ -1,127 +1,51 @@
 #!/usr/bin/env node
 // bugdb_check.js
-// PostToolUse / PostToolUseFailure Shell 钩子。Claude Code 通过 stdin 传入 JSON，命中后向 stdout
-// 写 hookSpecificOutput.additionalContext 将 [BUGDB_MATCH] 提示注入到模型上下文。
-// 失败一律静默退出 0，不阻塞主流程。
+// PostToolUse / PostToolUseFailure Shell 钩子：用首个错误行只读查库，命中后写
+// hookSpecificOutput.additionalContext 注入 [BUGDB_MATCH] 参考。
+// 成功输出（PostToolUse）保留原有行为：构建工具常以退出码 0 打印错误；失败一律静默退出 0。
 
-const path = require('path');
-const os = require('os');
-const { execSync, spawnSync } = require('child_process');
-
-const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
-    || path.join(os.homedir(), '.claude', 'plugins', 'bugdb-knowledge');
-const CLI_PATH = path.join(PLUGIN_ROOT, 'bugdb', 'cli.py');
-
-// 智能预过滤：绝大多数 Shell 调用零开销
-const ERROR_PATTERN = /\b(error\s*[CE]\d{4}|LNK\d{4}|fatal error|FAILED|error\[E\d+\]|unresolved external|undefined reference|segmentation fault|access violation|ModuleNotFoundError|No module named|AssertionError|SyntaxError|TypeError|ReferenceError|command not found|not recognized)\b|Traceback \(most recent call last\)/i;
+const fs = require('fs');
+const { buildContext, firstErrorLine, recallBugs } = require('./bugdb_cli');
 
 /**
- * 按 Claude Code 当前事件协议提取失败文本。
- * PostToolUseFailure 使用顶层 error；旧版或成功事件仍兼容 tool_response。
+ * 提取待检查文本。PostToolUseFailure 用顶层 error（首行 `Exit code N`）；
+ * PostToolUse 用 tool_response 的 stdout/stderr。中断（is_interrupt）不是可复用的错误证据。
+ * @param {object} input
+ * @returns {string}
+ * @example
+ * failureText({ hook_event_name: 'PostToolUseFailure', error: 'Exit code 1\nLNK2019' }) // 'Exit code 1\nLNK2019'
  */
 function failureText(input) {
     if (!input || input.is_interrupt === true) {
         return '';
     }
     if (input.hook_event_name === 'PostToolUseFailure') {
-        return String(input.error || '');
+        return String(input.error || '').slice(0, 200000);
     }
     const resp = input.tool_response || {};
-    return String(resp.stdout || '') + String(resp.stderr || '');
-}
-
-function splitArgs(value) {
-    return String(value || '').trim().split(/\s+/).filter(Boolean);
-}
-
-function pythonCandidates() {
-    if (process.env.BUGDB_PYTHON) {
-        return [{ cmd: process.env.BUGDB_PYTHON, args: splitArgs(process.env.BUGDB_PYTHON_ARGS) }];
-    }
-    const candidates = [
-        { cmd: 'python', args: [] },
-        { cmd: 'python3', args: [] },
-    ];
-    if (process.platform === 'win32') {
-        candidates.push({ cmd: 'py', args: ['-3.11'] });
-    }
-    return candidates;
-}
-
-function readStdinSync() {
-    // 同步读 stdin，避免 async 与 Claude Code hook 的早退竞争。
-    try {
-        return require('fs').readFileSync(0, 'utf-8');
-    } catch (e) {
-        return '';
-    }
-}
-
-function runSearch(errorLine) {
-    // base64 包装传参，避免引号/换行/反斜杠注入到 shell。
-    const payload = Buffer.from(errorLine, 'utf-8').toString('base64');
-    for (const py of pythonCandidates()) {
-        const res = spawnSync(py.cmd, [...py.args, CLI_PATH, 'search', '--query-b64', payload, '--format', 'json'], {
-            timeout: 4000,
-            encoding: 'utf-8',
-            stdio: ['ignore', 'pipe', 'ignore'],
-        });
-        if (res.status === 0 && res.stdout) {
-            return res.stdout;
-        }
-    }
-    return null;
-}
-
-function buildContext(top) {
-    const stepsJson = JSON.stringify(top.action_steps || []);
-    let ctx = `[BUGDB_MATCH] id=${top.id} confidence=${top.confidence} status=${top.status}\n`;
-    ctx += `entry_kind=${top.entry_kind}\n`;
-    ctx += `category=${top.category}\n`;
-    ctx += `content=${String(top.content || '').replace(/\r?\n/g, ' ')}\n`;
-    ctx += `steps=${stepsJson}\n`;
-    if (top.replacement_id) {
-        ctx += `replacement_id=${top.replacement_id}\n`;
-    }
-    ctx += `hint=如方案无效，忽略此提示继续正常排查`;
-    return ctx;
+    return (String(resp.stdout || '') + '\n' + String(resp.stderr || '')).slice(0, 200000);
 }
 
 function main() {
     try {
-        const raw = readStdinSync();
-        if (!raw || !raw.trim()) {
-            return;
-        }
+        // 同步读 stdin，避免 async 与 Claude Code hook 的早退竞争。
+        const raw = fs.readFileSync(0, 'utf-8');
+        if (!raw || !raw.trim()) return;
         const input = JSON.parse(raw);
-        const output = failureText(input);
-
-        if (!ERROR_PATTERN.test(output)) {
-            return;
-        }
-        const errorLine = output.split('\n').find(line => ERROR_PATTERN.test(line)) || '';
-        if (!errorLine.trim()) {
-            return;
-        }
-        const cliOut = runSearch(errorLine);
-        if (!cliOut) {
-            return;
-        }
-        const data = JSON.parse(cliOut);
-        if (!data.results || data.results.length === 0) {
-            return;
-        }
-        const additionalContext = buildContext(data.results[0]);
+        const errorLine = firstErrorLine(failureText(input));
+        if (!errorLine) return;
+        const recall = recallBugs(errorLine);
+        if (!recall.ok || recall.results.length === 0) return;
         process.stdout.write(JSON.stringify({
             hookSpecificOutput: {
                 hookEventName: input.hook_event_name === 'PostToolUseFailure'
                     ? 'PostToolUseFailure'
                     : 'PostToolUse',
-                additionalContext,
+                additionalContext: buildContext(recall.results[0]),
             },
         }));
     } catch (e) {
-        // 静默：stdin 无数据 / Python 缺失 / 超时 / DB 不存在 / CLI 报错 / JSON 解析失败
+        // 静默：stdin 损坏 / Python 缺失 / 超时 / CLI 报错 / JSON 解析失败
     }
 }
 

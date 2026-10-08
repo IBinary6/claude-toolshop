@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import paths, utils
-from .exceptions import RecordNotFound, SchemaMigrationError
+from .exceptions import DatabaseMissing, RecordNotFound, SchemaMigrationError, SchemaOutdated
 from .models import Category, EntryKind, KnowledgeRecord, Status
 
 _COLUMNS = (
@@ -236,16 +236,47 @@ MIGRATIONS = {
 class BugDB:
     """BugDB DAL。通过 ``with self._connection() as conn`` 模式访问 SQLite。"""
 
-    def __init__(self, db_path: Path | str | None = None):
+    def __init__(self, db_path: Path | str | None = None, read_only: bool = False):
+        """打开数据库。
+
+        ``read_only=True`` 供 Hook / 召回使用：不创建目录或文件、不迁移 schema、
+        不切换 WAL，以 SQLite ``mode=ro`` 打开；文件缺失抛 ``DatabaseMissing``，
+        schema 过旧抛 ``SchemaOutdated``，调用方据此区分“无记录”和“召回失败”。
+
+        Example:
+            ``BugDB(read_only=True)`` 在 ``~/.bugdb/bugs.db`` 不存在时抛 ``DatabaseMissing``。
+        """
         self._path = paths.get_db_path(db_path)
+        self._read_only = read_only
+        if read_only:
+            if not self._path.is_file():
+                raise DatabaseMissing(f"database not found: {self._path}")
+            self._check_schema_current()
+            return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
 
+    def _check_schema_current(self) -> None:
+        """只读模式下确认 schema 已是最新版本，过旧时不迁移而是报错。"""
+        with self._connection() as conn:
+            try:
+                row = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()
+            except sqlite3.OperationalError as e:
+                raise SchemaOutdated(f"schema_version missing: {e}") from e
+        current = row[0] if row and row[0] is not None else 0
+        if current < max(MIGRATIONS.keys()):
+            raise SchemaOutdated(
+                f"schema v{current} < v{max(MIGRATIONS.keys())}; run a write command once to migrate"
+            )
+
     @contextmanager
     def _connection(self):
-        """打开连接，启用 WAL + 外键，事务自动提交/回滚。"""
-        conn = sqlite3.connect(str(self._path))
-        conn.execute("PRAGMA journal_mode=WAL")
+        """打开连接，启用 WAL + 外键，事务自动提交/回滚；只读模式不改 journal。"""
+        if self._read_only:
+            conn = sqlite3.connect(f"{self._path.resolve().as_uri()}?mode=ro", uri=True)
+        else:
+            conn = sqlite3.connect(str(self._path))
+            conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
         try:

@@ -20,7 +20,7 @@ if _PKG_PARENT not in sys.path:
 from bugdb import formatters, search as search_mod
 from bugdb import utils as _utils
 from bugdb.db import BugDB, backup_sqlite_database
-from bugdb.exceptions import BugDBError, RecordNotFound
+from bugdb.exceptions import BugDBError, DatabaseMissing, RecordNotFound
 from bugdb.models import Category, EntryKind, KnowledgeRecord, Status, validate_kind_category
 from bugdb.paths import get_db_path, get_log_path, get_bugdb_home
 from bugdb.paths import get_config_file, get_legacy_db_path, read_config
@@ -542,6 +542,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument('--limit', type=int, default=3)
     p.add_argument('--no-fallback', dest='no_fallback', action='store_true',
                    help='禁用 0 结果时的邻区兜底，回到旧的空 results 语义')
+    p.add_argument('--read-only', dest='read_only', action='store_true',
+                   help='只读召回：不创建数据库、不迁移 schema（Hook 用）')
     _add_common(p)
 
     # explore：自由文本联想检索
@@ -690,7 +692,15 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_migrate(args)
         if args.command == 'config':
             return cmd_config(args)
-        db = BugDB()
+        try:
+            db = BugDB(read_only=getattr(args, 'read_only', False))
+        except DatabaseMissing:
+            # 只读召回且数据库尚未创建 = 确实没有任何历史记录，返回真实的空结果而非错误。
+            if args.format == 'text':
+                _print(formatters.search_results_to_text([]))
+            else:
+                _print(formatters.search_results_to_json([]))
+            return 0
         handler = HANDLERS[args.command]
         return handler(args, db)
     except RecordNotFound as e:

@@ -79,21 +79,20 @@ def test_hook_no_error_pattern_silent(tmp_path):
 
 @skip_no_node
 def test_hook_pattern_hit_no_db_record_silent(tmp_path):
-    """命中错误模式但 DB 没有记录 → 仍空输出，不干扰主流程。"""
+    """真实失败但 DB 尚不存在 → 空输出，且只读召回不得创建数据库文件。"""
     res = _run_hook({
+        "hook_event_name": "PostToolUseFailure",
         "tool_name": "Bash",
-        "tool_response": {
-            "stdout": "main.cpp(10): error LNK2001: unresolved external symbol __imp_FooBar",
-            "stderr": "",
-        },
+        "error": "Exit code 2\nmain.cpp(10): error LNK2001: unresolved external symbol __imp_FooBar",
     }, tmp_path)
     assert res.returncode == 0
     assert res.stdout == ""
+    assert not (tmp_path / "bugs.db").exists(), "hook 只读召回不能创建数据库"
 
 
 @skip_no_node
 def test_hook_hit_returns_additional_context(tmp_path):
-    """命中知识库 → 必须按标准协议返回 hookSpecificOutput.additionalContext。"""
+    """命令真实失败且命中知识库 → 按标准协议返回带参考边界的 additionalContext。"""
     seeded_id = _seed_record(
         tmp_path,
         context="error LNK2001: unresolved external symbol __imp_WSAStartup",
@@ -101,43 +100,46 @@ def test_hook_hit_returns_additional_context(tmp_path):
         content="link ws2_32.lib",
     )
     res = _run_hook({
+        "hook_event_name": "PostToolUseFailure",
         "tool_name": "Bash",
-        "tool_response": {
-            "stdout": "main.cpp(42): error LNK2001: unresolved external symbol __imp_WSAStartup",
-            "stderr": "",
-        },
+        "error": "Exit code 1\nmain.cpp(42): error LNK2001: unresolved external symbol __imp_WSAStartup",
     }, tmp_path)
     assert res.returncode == 0, f"stderr={res.stderr}"
     assert res.stdout, "hook should emit JSON when DB hits"
 
     payload = json.loads(res.stdout)
-    assert "hookSpecificOutput" in payload, payload
     hso = payload["hookSpecificOutput"]
-    assert hso.get("hookEventName") == "PostToolUse"
+    assert hso.get("hookEventName") == "PostToolUseFailure"
     ctx = hso.get("additionalContext", "")
     assert "[BUGDB_MATCH]" in ctx
     assert f"id={seeded_id}" in ctx
     assert "link ws2_32.lib" in ctx
+    # 历史方案只是参考：必须提示可能过时、不得直接执行其中命令
+    assert "updated_at=" in ctx
+    assert "不得直接执行" in ctx
 
 
 @skip_no_node
-def test_hook_reads_stderr_field(tmp_path):
-    """错误可能出现在 stderr 而非 stdout，hook 必须两者都扫描。"""
-    seeded_id = _seed_record(
+def test_success_output_with_error_text_still_recalls(tmp_path):
+    """保留原设计：构建工具常以退出码 0 打印错误，成功输出里的错误行同样只读召回。"""
+    _seed_record(
         tmp_path,
         context="error LNK2019: unresolved external symbol foo",
         cause="missing definition",
         content="define foo or link the lib",
     )
     res = _run_hook({
+        "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
         "tool_response": {
-            "stdout": "",
-            "stderr": "main.cpp(1): error LNK2019: unresolved external symbol foo",
+            "stdout": "docs/faq.md:3: error LNK2019: unresolved external symbol foo",
+            "stderr": "",
         },
     }, tmp_path)
     assert res.returncode == 0
-    assert f"id={seeded_id}" in res.stdout
+    payload = json.loads(res.stdout)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert "[BUGDB_MATCH]" in payload["hookSpecificOutput"]["additionalContext"]
 
 
 @skip_no_node
@@ -229,17 +231,67 @@ def test_hook_config_timeouts_are_seconds():
     assert all(1 <= timeout <= 60 for timeout in timeouts)
 
 
-def test_hooks_register_current_shell_success_and_failure_events():
-    """Hook 注册本身属于公开合同，不能只验证脚本可被直接调用。"""
+def test_hooks_register_failure_and_prompt_events():
+    """Hook 注册本身属于公开合同：失败输出与用户粘贴的错误召回，成功输出不召回。"""
     hooks_path = PLUGIN_DIR / "hooks" / "hooks.json"
     hooks = json.loads(hooks_path.read_text(encoding="utf-8"))["hooks"]
 
-    for event_name in ("PostToolUse", "PostToolUseFailure"):
-        assert event_name in hooks
-        entry = hooks[event_name][0]
-        assert "Bash" in entry["matcher"]
-        assert "PowerShell" in entry["matcher"]
-        assert any(
-            "bugdb_check.js" in hook["command"]
-            for hook in entry["hooks"]
-        )
+    entry = hooks["PostToolUseFailure"][0]
+    assert "Bash" in entry["matcher"]
+    assert "PowerShell" in entry["matcher"]
+    assert any("bugdb_check.js" in hook["command"] for hook in entry["hooks"])
+    assert any(
+        "bugdb_prompt.js" in hook["command"]
+        for entry in hooks["UserPromptSubmit"] for hook in entry["hooks"]
+    )
+    assert "PostToolUse" in hooks, "成功输出的查库行为按原设计保留"
+
+
+PROMPT_HOOK = str(PLUGIN_DIR / "hooks" / "js" / "bugdb_check" / "bugdb_prompt.js")
+
+
+def _run_prompt_hook(prompt: str, home_dir, **env_overrides):
+    env = _hook_env(home_dir)
+    env.update(env_overrides)
+    return subprocess.run(
+        [NODE, PROMPT_HOOK],
+        input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": prompt}),
+        capture_output=True, text=True, encoding="utf-8", env=env, timeout=10,
+    )
+
+
+@skip_no_node
+def test_prompt_hook_without_error_line_is_silent(tmp_path):
+    """普通提示零输出，不打扰对话。"""
+    res = _run_prompt_hook("帮我重构一下这个函数", tmp_path)
+    assert res.returncode == 0
+    assert res.stdout == ""
+
+
+@skip_no_node
+def test_prompt_hook_recalls_pasted_error(tmp_path):
+    """用户粘贴的错误行命中知识库 → 注入 [BUGDB_MATCH]。"""
+    seeded_id = _seed_record(
+        tmp_path,
+        context="error LNK2019: unresolved external symbol foo",
+        cause="missing definition",
+        content="define foo or link the lib",
+    )
+    res = _run_prompt_hook("链接失败了：\nmain.obj : error LNK2019: unresolved external symbol foo", tmp_path)
+    hso = json.loads(res.stdout)["hookSpecificOutput"]
+    assert hso["hookEventName"] == "UserPromptSubmit"
+    assert f"id={seeded_id}" in hso["additionalContext"]
+
+
+@skip_no_node
+def test_prompt_hook_distinguishes_no_hit_from_failure(tmp_path):
+    """无命中与召回失败必须给出不同提示：失败不能被表述为“没有历史记录”。"""
+    prompt = "构建报错 fatal error C1083: Cannot open include file"
+    no_hit = json.loads(_run_prompt_hook(prompt, tmp_path).stdout)
+    assert "没有命中" in no_hit["hookSpecificOutput"]["additionalContext"]
+
+    failed = json.loads(_run_prompt_hook(
+        prompt, tmp_path, BUGDB_PYTHON=str(tmp_path / "no-such-python")).stdout)
+    ctx = failed["hookSpecificOutput"]["additionalContext"]
+    assert "召回未完成" in ctx
+    assert "没有命中" not in ctx

@@ -335,3 +335,40 @@ def test_fts_search_language_any_compat(db):
     saved = db.add(rec)
     rows = db.fts_search(["key_pattern"], "LNK2001", language="c++")
     assert any(r.id == saved.id for r in rows)
+
+
+# ---- 只读模式：Hook 召回不得创建、迁移或写入数据库 ----
+
+def test_read_only_missing_database_raises_without_creating(tmp_path):
+    """库不存在时只读打开报 DatabaseMissing，且不创建目录或文件。"""
+    from bugdb.exceptions import DatabaseMissing
+    target = tmp_path / "sub" / "bugs.db"
+    with pytest.raises(DatabaseMissing):
+        BugDB(db_path=target, read_only=True)
+    assert not target.parent.exists()
+
+
+def test_read_only_outdated_schema_is_not_migrated(tmp_path):
+    """schema 过旧时只读打开报 SchemaOutdated，且不偷偷迁移。"""
+    from bugdb.exceptions import SchemaOutdated
+    target = tmp_path / "bugs.db"
+    BugDB(db_path=target)
+    with sqlite3.connect(target) as conn:
+        conn.execute("DELETE FROM schema_version WHERE version = ?", (max(MIGRATIONS.keys()),))
+    with pytest.raises(SchemaOutdated):
+        BugDB(db_path=target, read_only=True)
+    with sqlite3.connect(target) as conn:
+        version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+    assert version == max(MIGRATIONS.keys()) - 1
+
+
+def test_read_only_connection_rejects_writes(tmp_path):
+    """只读连接可以查询，但任何写入都会被 SQLite 拒绝。"""
+    target = tmp_path / "bugs.db"
+    BugDB(db_path=target)
+    ro = BugDB(db_path=target, read_only=True)
+    with ro._connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM knowledge").fetchone()[0] == 0
+    with pytest.raises(sqlite3.OperationalError):
+        with ro._connection() as conn:
+            conn.execute("DELETE FROM knowledge")
