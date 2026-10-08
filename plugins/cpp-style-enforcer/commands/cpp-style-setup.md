@@ -17,16 +17,18 @@ description: 查看或配置 cpp-style-enforcer：编辑全局模板或为当前
 {
   "enabled": true,
   "mode": "incremental",
+  "lineEnding": "preserve",
   "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
-  "legacyChecks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": true },
+  "legacyChecks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": false },
   "copyrightInfo": { "company": "", "author": "", "dateFormat": "YYYY/MM/DD HH:mm" }
 }
 ```
 
 - `enabled`：设为 false 彻底关闭本项目所有检查。
-- `mode`：`incremental`（仅新文件走全套）| `full`（所有文件走全套）。
-- `checks.clangFormat`：格式化（含 #include 排序）；`checks.cpplint`：Google C++ 风格静态检查；`checks.copyright`：版权头；`checks.bom`：UTF-8 BOM 补全（所有构建系统统一执行）。
-- `legacyChecks.*`：`incremental` 下老文件的检查项，默认只开 `bom`，即只补 UTF-8 BOM。
+- `mode`：`incremental`（仅新文件走全套）| `full`（所有文件走全套；已跟踪文件仍保持原 BOM 状态）。
+- `lineEnding`：`preserve`（默认，按正文占多数的行尾）| `lf` | `crlf`；Visual Studio 源工程始终 CRLF。
+- `checks.clangFormat`：格式化（VS 源工程保留 #include 顺序）；`checks.cpplint`：Google C++ 风格静态检查；`checks.copyright`：版权头；`checks.bom`：新文件补 UTF-8 BOM（已跟踪文件不改编码）。
+- `legacyChecks.*`：`incremental` 下老文件的检查项，默认全部关闭（保持原编码和格式）；`bom` 仅保留兼容。
 - `copyrightInfo.company`：空 = 不写版权头，cpplint 同步屏蔽 legal/copyright；`copyrightInfo.author`：作者名；`copyrightInfo.dateFormat`：当前时间显示格式，占位符 `YYYY`/`MM`/`DD`/`HH`/`mm`。
 
 ## 常见操作
@@ -38,7 +40,8 @@ description: 查看或配置 cpp-style-enforcer：编辑全局模板或为当前
 
 ## 行为速记
 
-- **新老文件判定** = 文件是否已在 `HEAD` 中存在。`incremental` 下未提交过的新文件走全套，老文件默认只补 BOM。非 git 仓库所有文件视为新文件走全套。
-- **CMake、Visual Studio 与其他构建系统**统一执行 BOM 规则。
-- **dateFormat** 是当前时间的显示格式模板，必须含 `YYYY`/`MM`/`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；同日不重复刷新 Date 行。
+- **处理时机**：编辑时只记录文件，本轮结束（Stop / 子代理 SubagentStop）统一处理，有改写或违规时要求复查并重跑验证。
+- **新老文件判定** = 文件是否已在 `HEAD` 中存在。`incremental` 下未提交过的新文件走全套，老文件默认保持原编码和格式，只做基础行尾修复。非 git 仓库所有文件视为新文件走全套。
+- **第三方目录**（`3rd`、`third_party`、`thridpart`、`vendor` 等完整目录段）不格式化、不 lint。
+- **dateFormat** 是当前时间的显示格式模板，必须含 `YYYY`/`MM`/`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；已有 Date 行不再刷新。
 - **局部豁免** include 排序：源码里用 `// clang-format off` / `// clang-format on` 包住。

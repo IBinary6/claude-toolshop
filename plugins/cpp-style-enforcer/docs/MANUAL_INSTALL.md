@@ -1,8 +1,8 @@
 # cpp-style-enforcer 手动安装指南
 
-本指南适用于不使用 `/plugin` 命令的用户。手动将 hook 文件部署到 `~/.claude/` 并在 `settings.json` 注册。
+本指南适用于不使用 `/plugin` 命令的用户：把插件目录原样复制到本机，再在 `settings.json` 注册 hook。
 
-> **注意**：手动安装时 `CLAUDE_PLUGIN_ROOT` 环境变量不可用，所有路径均使用展开后的实际路径。本插件 hook 脚本对子脚本 / cpplint.py / 模板的引用全部基于 `__dirname` 相对定位，因此**只要保持目录层级一致**，部署到 `~/.claude/hooks/js/` 下即可正常工作。
+> **注意**：手动安装时 `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` 不可用，hook 命令使用展开后的实际路径。脚本对 `lib/`、`steps/`、`cpplint.py` 与模板的引用全部基于 `__dirname`，因此**必须保持插件目录层级不变**。`CLAUDE_PLUGIN_DATA` 缺失时，待处理记录与失败标记写入系统临时目录下的 `cpp-style-enforcer/`。
 
 ---
 
@@ -18,109 +18,72 @@
 
 ```bash
 node --version          # >= v18
-python --version        # 3.x（cpplint 用；缺失则 lint 静默跳过）
-clang-format --version  # 可选；缺失则格式化跳过
+python --version        # 3.x；Windows 也可用 py -3
+clang-format --version  # 可选；缺失则跳过格式化
 ```
 
-Python / clang-format 缺失**不报错**——hook 内部 `commandExists` 静默降级。
+Python 缺失时 cpplint 无法执行，收尾报告与提交检查会给出 `runtime/cpplint` 条目，而不是当作零违规。
 
 ---
 
 ## 二、文件部署
 
-将本仓库 `plugins/cpp-style-enforcer/` 下的文件拷贝到 `~/.claude/` 对应位置，**保持目录层级**。
-
-参考命令（Bash）：
-
 ```bash
 REPO="/path/to/bugdb-impl/plugins/cpp-style-enforcer"
-DEST="$HOME/.claude"
+DEST="$HOME/.claude/plugins-manual/cpp-style-enforcer"
 
-# hooks（保持层级，子脚本互相用 __dirname 定位）
-mkdir -p "$DEST/hooks/js/lib" \
-         "$DEST/hooks/js/cpp_style_guard" \
-         "$DEST/hooks/js/post_edit_pipeline" \
-         "$DEST/hooks/js/copyright" \
-         "$DEST/hooks/js/cpplint" \
-         "$DEST/hooks/js/pre_commit_lint"
+mkdir -p "$DEST"
+cp -R "$REPO/hooks" "$REPO/templates" "$REPO/package.json" "$DEST/"
 
-cp "$REPO/hooks/js/lib/utils.js"                            "$DEST/hooks/js/lib/"
-cp "$REPO/hooks/js/cpp_style_guard/cpp_style_guard.js"      "$DEST/hooks/js/cpp_style_guard/"
-cp "$REPO/hooks/js/cpp_style_guard/readme.txt"              "$DEST/hooks/js/cpp_style_guard/"
-cp "$REPO/hooks/js/post_edit_pipeline/post_edit_pipeline.js" "$DEST/hooks/js/post_edit_pipeline/"
-cp "$REPO/hooks/js/copyright/copyright_header.js"           "$DEST/hooks/js/copyright/"
-cp "$REPO/hooks/js/cpplint/cpplint_check.js"                "$DEST/hooks/js/cpplint/"
-cp "$REPO/hooks/js/cpplint/cpplint.py"                      "$DEST/hooks/js/cpplint/"
-cp "$REPO/hooks/js/pre_commit_lint/pre_commit_lint.js"      "$DEST/hooks/js/pre_commit_lint/"
-
-# 用户级模板（首次 SessionStart 也会自动复制；这里手动放一份更稳妥）
-cp "$REPO/templates/cpp-style-template.default.json"        "$DEST/cpp-style-template.json"
+# 用户级模板（首次 SessionStart 也会自动复制；已存在不会被覆盖）
+[ -f "$HOME/.claude/cpp-style-template.json" ] || \
+  cp "$REPO/templates/cpp-style-template.default.json" "$HOME/.claude/cpp-style-template.json"
 
 # 命令
-mkdir -p "$DEST/commands"
-cp "$REPO/commands/cpp-style-setup.md" "$DEST/commands/"
+mkdir -p "$HOME/.claude/commands"
+cp "$REPO/commands/cpp-style-setup.md" "$HOME/.claude/commands/"
 ```
-
-> **重要**：`cpp_style_guard.js` 用相对路径 `../../../templates/cpp-style-template.default.json`
-> 定位出厂模板。手动安装时该模板不在 `~/.claude/hooks/js/...` 同级层级下，
-> 因此请**手动把模板放到 `~/.claude/cpp-style-template.json`**（上面已含该步），
-> 这样 `ensureUserTemplate` 检测到已存在即不再依赖出厂模板路径。
 
 ---
 
 ## 三、settings.json Hook 注册
 
-在 `~/.claude/settings.json` 的 `hooks` 对象中**追加**以下条目（保留既有条目）：
+在 `~/.claude/settings.json` 的 `hooks` 对象中**追加**以下条目（保留既有条目），把 `<DEST>` 换成上一步的实际绝对路径（Windows 使用 `C:/Users/<you>/.claude/plugins-manual/cpp-style-enforcer` 这类正斜杠路径）：
 
 ```json
 {
   "hooks": {
     "SessionStart": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/js/cpp_style_guard/cpp_style_guard.js\"",
-            "timeout": 10
-          }
-        ]
-      }
+      { "hooks": [{ "type": "command", "command": "node \"<DEST>/hooks/js/session_start.js\"", "timeout": 10 }] }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*(?:write|edit|create|replace|insert|patch|apply|update)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/js/post_edit_pipeline/post_edit_pipeline.js\"",
-            "timeout": 30
-          }
-        ]
+        "hooks": [{ "type": "command", "command": "node \"<DEST>/hooks/js/post_edit.js\"", "timeout": 10 }]
       }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node \"<DEST>/hooks/js/stop_check.js\"", "timeout": 60 }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "node \"<DEST>/hooks/js/stop_check.js\"", "timeout": 60 }] }
     ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$HOME/.claude/hooks/js/pre_commit_lint/pre_commit_lint.js\"",
-            "timeout": 30
-          }
-        ]
+        "hooks": [{ "type": "command", "command": "node \"<DEST>/hooks/js/pre_commit.js\"", "timeout": 30 }]
       }
     ]
   }
 }
 ```
 
-Windows 用户：把 `$HOME` 替换成展开后的实际路径（如 `C:/Users/<you>/.claude`），或保留并依赖 shell 展开。
+`Stop` 与 `SubagentStop` 都必须注册：编辑时只记录文件，真正的格式化与检查在收尾时执行；缺少 `SubagentStop` 时子代理编辑的文件不会被处理。
 
 加完后验证 JSON 合法性：
 
 ```bash
-python -c "import json; json.load(open('$HOME/.claude/settings.json', encoding='utf-8'))" && echo "OK"
+node -e "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')); console.log('OK')" "$HOME/.claude/settings.json"
 ```
 
 ---
@@ -128,16 +91,8 @@ python -c "import json; json.load(open('$HOME/.claude/settings.json', encoding='
 ## 四、部署后自检
 
 ```bash
-# 1. 每个 hook 文件 node --check
-node --check "$HOME/.claude/hooks/js/cpp_style_guard/cpp_style_guard.js"
-node --check "$HOME/.claude/hooks/js/post_edit_pipeline/post_edit_pipeline.js"
-node --check "$HOME/.claude/hooks/js/copyright/copyright_header.js"
-node --check "$HOME/.claude/hooks/js/cpplint/cpplint_check.js"
-node --check "$HOME/.claude/hooks/js/pre_commit_lint/pre_commit_lint.js"
-
-# 2. utils.js 可加载
-node -e "console.log(typeof require('$HOME/.claude/hooks/js/lib/utils').getCppStyleMode)"
-# 预期输出: function
+for f in session_start post_edit stop_check pre_commit; do node --check "$DEST/hooks/js/$f.js" || echo "FAIL $f"; done
+echo '{}' | node "$DEST/hooks/js/stop_check.js"; echo "exit=$?"   # 预期：无输出，exit=0
 ```
 
 全部通过即视为安装完成。重启 Claude Code 让 settings.json 生效。
@@ -150,26 +105,20 @@ node -e "console.log(typeof require('$HOME/.claude/hooks/js/lib/utils').getCppSt
 
 ```json
 {
-  "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
   "copyrightInfo": { "company": "Your Company", "author": "you@example.com", "dateFormat": "YYYY/MM/DD HH:mm" }
 }
 ```
 
-之后新项目首次被检测时自动继承。`company` 留空 = 默认不写版权头。
+`company` 留空 = 不写版权头。
 
 ---
 
 ## 六、卸载
 
 ```bash
-rm -rf ~/.claude/hooks/js/cpp_style_guard
-rm -rf ~/.claude/hooks/js/post_edit_pipeline
-rm -rf ~/.claude/hooks/js/copyright
-rm -rf ~/.claude/hooks/js/cpplint
-rm -rf ~/.claude/hooks/js/pre_commit_lint
-rm -f  ~/.claude/commands/cpp-style-setup.md
-rm -f  ~/.claude/cpp-style-template.json   # 如不再需要
-# lib/utils.js 可能被其它 hook 共用，谨慎删除
+rm -rf "$HOME/.claude/plugins-manual/cpp-style-enforcer"
+rm -f  "$HOME/.claude/commands/cpp-style-setup.md"
+rm -f  "$HOME/.claude/cpp-style-template.json"   # 如不再需要
 ```
 
-同时移除 `settings.json` 中对应的 hook 条目。各项目根目录的 `.claude-cpp-style` 可按需删除。
+同时移除 `settings.json` 中对应的 5 个 hook 条目。各项目根目录的 `.claude-cpp-style/` 可按需删除。

@@ -18,7 +18,31 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/post_edit.js\"",
-            "timeout": 30
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/stop_check.js\"",
+            "timeout": 60,
+            "statusMessage": "Finalizing C++ style"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/js/stop_check.js\"",
+            "timeout": 60,
+            "statusMessage": "Finalizing C++ style"
           }
         ]
       }

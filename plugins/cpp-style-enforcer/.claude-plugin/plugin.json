@@ -1,7 +1,7 @@
 {
   "name": "cpp-style-enforcer",
-  "version": "0.3.15",
-  "description": "C++ 代码风格强制（Google C++ Style）：兼容内置编辑器及 Agentic Patch/MCP 批量补丁；legacyChecks 控制老文件行为（默认只补 BOM），新文件/新项目走全套；各检查项可独立开关。",
+  "version": "0.4.0",
+  "description": "C++ 代码风格强制（Google C++ Style）：编辑时只记录，Stop/SubagentStop 统一格式化、BOM、版权头、行尾与 cpplint；VS 工程保持 CRLF 与 include 顺序；提交前基于 Git index 快照检查；已跟踪文件默认保持原编码，第三方目录不处理。",
   "author": { "name": "IBinary6" },
   "homepage": "https://github.com/IBinary6/claude-toolshop/tree/main/plugins/cpp-style-enforcer",
   "license": "MIT",

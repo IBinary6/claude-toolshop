@@ -8,8 +8,9 @@ const path = require('path');
 const DEFAULT_CONFIG = {
   enabled: true,
   mode: 'incremental',
+  lineEnding: 'preserve',
   checks: { clangFormat: true, copyright: true, cpplint: true, bom: true },
-  legacyChecks: { clangFormat: false, copyright: false, cpplint: false, bom: true },
+  legacyChecks: { clangFormat: false, copyright: false, cpplint: false, bom: false },
   copyrightInfo: { company: '', author: '', dateFormat: 'YYYY/MM/DD HH:mm' },
 };
 
@@ -70,13 +71,14 @@ function normalize(base, override) {
     cpplint: checksIn.cpplint !== false,
     bom: checksIn.bom !== false,
   };
-  // legacyChecks: 老文件（git 已追踪）的每项开关；默认只跑 bom，其余关闭
+  // legacyChecks: 老文件（git 已追踪）的每项开关；默认全部关闭以保持原编码和格式。
+  // bom 仅保留兼容：已跟踪文件始终保持原 BOM 状态，不因配置被强制加 BOM。
   const legacyIn = { ...DEFAULT_CONFIG.legacyChecks, ...(base && base.legacyChecks), ...(override && override.legacyChecks) };
   const legacyChecks = {
     clangFormat: legacyIn.clangFormat === true,
     copyright: legacyIn.copyright === true,
     cpplint: legacyIn.cpplint === true,
-    bom: legacyIn.bom !== false,
+    bom: legacyIn.bom === true,
   };
   const copyrightInfo = {
     ...DEFAULT_CONFIG.copyrightInfo,
@@ -86,6 +88,7 @@ function normalize(base, override) {
   return {
     enabled: merged.enabled !== false,
     mode: merged.mode === 'full' ? 'full' : 'incremental',
+    lineEnding: ['lf', 'crlf'].includes(merged.lineEnding) ? merged.lineEnding : 'preserve',
     checks,
     legacyChecks,
     copyrightInfo,
@@ -97,7 +100,7 @@ function normalize(base, override) {
  * 全局/项目缺失或损坏 → 用默认值，绝不崩。
  * @param {string} filePath 被编辑文件路径
  * @param {string} [globalPath] 全局模板路径（默认 ~/.claude/cpp-style-template.json）
- * @returns {{enabled:boolean, mode:string, checks:object, copyrightInfo:object}}
+ * @returns {{enabled:boolean, mode:string, lineEnding:string, checks:object, legacyChecks:object, copyrightInfo:object}}
  */
 function loadConfig(filePath, globalPath = userTemplatePath()) {
   const global = readJsonSafe(globalPath) || {};

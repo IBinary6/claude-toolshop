@@ -11,15 +11,6 @@ function passSilent() {
 }
 
 /**
- * PostToolUse 强制修复：exit 0 + stdout {decision:"block",reason}
- * @param {string} reason 喂给 Claude 的修复指令
- */
-function blockClaude(reason) {
-  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
-  process.exit(0);
-}
-
-/**
  * PreToolUse 阻止工具：exit 0 + stdout hookSpecificOutput.permissionDecision=deny
  * @param {string} reason 阻止理由
  */
@@ -39,4 +30,4 @@ function diag(message) {
   process.stderr.write(String(message) + '\n');
 }
 
-module.exports = { passSilent, blockClaude, denyTool, diag };
+module.exports = { passSilent, denyTool, diag };

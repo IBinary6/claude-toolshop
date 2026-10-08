@@ -1,16 +1,18 @@
 'use strict';
 
-// 集成回归测试（spec §10）：在临时 git 仓库 spawnSync 子进程跑入口脚本，
+// 集成回归测试（spec §10）：在临时 Git 仓库或无 Git 目录 spawnSync 子进程跑入口脚本，
 // 喂 stdin，断言 (exit/stdout/stderr) 固化崩溃修复后的行为契约。
-// post_edit.js 场景 a-e + pre_commit.js denyTool/passSilent。
+// PostToolUse 延迟记录 + Stop 统一处理场景 a-e + pre_commit denyTool/passSilent。
 
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { resolvePython } = require('../lib/python');
 
 const postEdit = path.join(__dirname, '..', 'post_edit.js');
+const stopCheck = path.join(__dirname, '..', 'stop_check.js');
 const preCommit = path.join(__dirname, '..', 'pre_commit.js');
 const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
 
@@ -18,17 +20,64 @@ function sh(args, cwd) { spawnSync('git', args, { cwd, stdio: 'pipe' }); }
 
 // 隔离 HOME，避免读到真实全局模板（用硬编码默认 incremental 配置）
 const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cse-inthome-'));
-const env = { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome };
+const env = {
+  ...process.env,
+  HOME: fakeHome,
+  USERPROFILE: fakeHome,
+  CLAUDE_PLUGIN_DATA: path.join(fakeHome, 'plugin-data'),
+};
 
 const repos = [];
-function newRepo(prefix) {
+function newDirectory(prefix) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), prefix || 'cse-int-'));
   repos.push(tmp);
+  return tmp;
+}
+
+function newRepo(prefix) {
+  const tmp = newDirectory(prefix);
   sh(['init'], tmp);
   sh(['config', 'user.email', 't@t.com'], tmp);
   sh(['config', 'user.name', 't'], tmp);
   sh(['config', 'commit.gpgsign', 'false'], tmp);
   return tmp;
+}
+
+function configureCpplintOnly(root) {
+  const cfgDir = path.join(root, '.claude-cpp-style');
+  fs.mkdirSync(cfgDir, { recursive: true });
+  fs.writeFileSync(path.join(cfgDir, 'cpp-style.json'), JSON.stringify({
+    checks: { clangFormat: false, copyright: false, cpplint: true, bom: false },
+  }));
+}
+
+function writeHeader(filePath, guard) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `#ifndef ${guard}\n#define ${guard}\n\n#endif  // ${guard}\n`);
+}
+
+let turnCounter = 0;
+function runDeferred(input) {
+  turnCounter += 1;
+  const hookInput = {
+    session_id: `integration-session-${turnCounter}`,
+    tool_use_id: `tool-${turnCounter}`,
+    ...input,
+  };
+  const cwd = input.cwd || process.cwd();
+  const post = spawnSync('node', [postEdit], {
+    input: JSON.stringify(hookInput), encoding: 'utf-8', timeout: 30000, env, cwd,
+  });
+  const stop = spawnSync('node', [stopCheck], {
+    input: JSON.stringify({
+      session_id: hookInput.session_id,
+      cwd,
+      hook_event_name: 'Stop',
+      stop_hook_active: false,
+    }),
+    encoding: 'utf-8', timeout: 30000, env, cwd,
+  });
+  return { post, stop };
 }
 
 function runPost(input) {
@@ -43,33 +92,48 @@ function runPreCommit(input, cwd) {
   });
 }
 
-const hasPython = spawnSync('python', ['--version'], { stdio: 'pipe' }).status === 0
-  || spawnSync('python3', ['--version'], { stdio: 'pipe' }).status === 0;
+const hasPython = resolvePython() !== null;
 
 try {
-  // ---- 场景 (a)：未配置项目编辑已存在(已 git 跟踪).cpp → 旧崩溃场景现在 passSilent ----
-  // 老文件 incremental → 只补 BOM、不格式化/不 lint；绝不 exit2+JSON block。
+  // ---- 场景 (a)：已跟踪文件保持原始编码、BOM 和正文 ----
   {
     const repo = newRepo('cse-a-');
     const f = path.join(repo, 'old.cpp');
-    // 故意杂乱格式 + 无版权头：若被当成全套会被格式化/插头，断言可捕获
-    fs.writeFileSync(f, 'int  old_var( ){return 0;}\n');
+    const originalBytes = Buffer.from('int  old_var( ){return 0;}\n', 'utf8');
+    fs.writeFileSync(f, originalBytes);
     sh(['add', 'old.cpp'], repo);
     sh(['commit', '-m', 'init'], repo);
 
-    const r = runPost({ cwd: repo, tool_name: 'Edit', tool_input: { file_path: f } });
-    assert.strictEqual(r.status, 0, '场景a: 老文件编辑 exit 0（不崩溃）');
-    assert.strictEqual((r.stdout || '').trim(), '', '场景a: 老文件无 block（绝不 decision:block）');
-
-    const out = fs.readFileSync(f);
-    assert.ok(out.slice(0, 3).equals(BOM), '场景a: 老文件只补 BOM');
-    const bodyText = out.slice(3).toString('utf-8');
-    assert.ok(bodyText.includes('int  old_var( ){return 0;}'), '场景a: 老文件正文未被 clang-format');
-    assert.ok(!/Copyright/.test(bodyText), '场景a: 老文件未插版权头');
+    const { post, stop } = runDeferred({ cwd: repo, tool_name: 'Edit', tool_input: { file_path: f } });
+    assert.strictEqual(post.status, 0, '场景a: 老文件编辑 exit 0（不崩溃）');
+    assert.strictEqual((post.stdout || '').trim(), '', '场景a: 编辑阶段只记录、不 block');
+    assert.strictEqual(stop.status, 0, '场景a: Stop 统一处理 exit 0');
+    assert.strictEqual((stop.stdout || '').trim(), '', '场景a: 字节未变化时 Stop 静默结束');
+    assert.ok(fs.readFileSync(f).equals(originalBytes), '场景a: 老文件编码、BOM 与正文均保持不变');
   }
 
-  // ---- 场景 (c)：与 (a) 同一契约的显式重述（老文件 incremental 只补 BOM）----
-  // 已在场景 a 覆盖：已 git 跟踪文件不格式化/不 lint，仅 BOM。此处不再重复仓库。
+  // 旧版生成的配置可能仍含 legacyChecks.bom:true，也不得改写已跟踪文件。
+  {
+    const repo = newRepo('cse-a-legacy-config-');
+    const cfgDir = path.join(repo, '.claude-cpp-style');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(path.join(cfgDir, 'cpp-style.json'), JSON.stringify({
+      mode: 'incremental',
+      legacyChecks: { bom: true },
+    }));
+    const f = path.join(repo, 'legacy-config.cpp');
+    const originalBytes = Buffer.from('int legacy_config;\n', 'utf8');
+    fs.writeFileSync(f, originalBytes);
+    sh(['add', 'legacy-config.cpp'], repo);
+    sh(['commit', '-m', 'init'], repo);
+
+    const { stop } = runDeferred({ cwd: repo, tool_name: 'Edit', tool_input: { file_path: f } });
+    assert.strictEqual((stop.stdout || '').trim(), '', '旧版 BOM 配置不得触发老文件改写');
+    assert.ok(fs.readFileSync(f).equals(originalBytes), '旧版配置下仍保持原始 BOM 状态');
+  }
+
+  // ---- 场景 (c)：与 (a) 同一契约的显式重述（老文件保持原编码）----
+  // 已在场景 a 覆盖，不再重复创建仓库。
 
   // ---- 场景 (d)：enabled:false → 完全 no-op（exit0 无输出 + 文件字节零改动）----
   {
@@ -82,9 +146,10 @@ try {
     fs.writeFileSync(f, 'int  main( ){int x=1;return x;}\n');
     const before = fs.readFileSync(f);
 
-    const r = runPost({ cwd: repo, tool_name: 'Write', tool_input: { file_path: f } });
-    assert.strictEqual(r.status, 0, '场景d: enabled:false exit 0');
-    assert.strictEqual((r.stdout || '').trim(), '', '场景d: enabled:false stdout 空（no-op）');
+    const { post, stop } = runDeferred({ cwd: repo, tool_name: 'Write', tool_input: { file_path: f } });
+    assert.strictEqual(post.status, 0, '场景d: enabled:false exit 0');
+    assert.strictEqual((post.stdout || '').trim(), '', '场景d: 编辑阶段 stdout 空');
+    assert.strictEqual((stop.stdout || '').trim(), '', '场景d: Stop no-op');
     assert.ok(fs.readFileSync(f).equals(before), '场景d: enabled:false 文件字节零改动');
   }
 
@@ -118,14 +183,69 @@ try {
     // 未跟踪新文件 → incremental 走全套
     fs.writeFileSync(f, VIOLATION_CPP);
 
-    const r = runPost({ cwd: repo, tool_name: 'Write', tool_input: { file_path: f } });
-    assert.strictEqual(r.status, 0, '场景b: 新文件违规 exit 0（绝不 exit 2）');
-    const stdout = (r.stdout || '').trim();
-    assert.ok(stdout.length > 0, '场景b: 新文件违规必产出 stdout（block）');
+    const { post, stop } = runDeferred({ cwd: repo, tool_name: 'Write', tool_input: { file_path: f } });
+    assert.strictEqual(post.status, 0, '场景b: 编辑阶段 exit 0');
+    assert.strictEqual((post.stdout || '').trim(), '', '场景b: 编辑阶段不检查、不 block');
+    assert.strictEqual(stop.status, 0, '场景b: Stop 检查 exit 0（绝不 exit 2）');
+    const stdout = (stop.stdout || '').trim();
+    assert.ok(stdout.length > 0, '场景b: Stop 发现违规必产出 stdout（block）');
     const parsed = JSON.parse(stdout);
     assert.strictEqual(parsed.decision, 'block', '场景b: 新文件违规 → decision:block JSON');
     assert.ok(typeof parsed.reason === 'string' && parsed.reason.length > 0, '场景b: reason 非空');
     assert.ok(/casting/.test(parsed.reason), '场景b: reason 含 readability/casting 违规');
+  }
+
+  // 无 Git 项目：真实 Stop 使用任务目录推导稳定 guard，并拒绝机器绝对路径 guard。
+  if (hasPython) {
+    const workspace = newDirectory('cse-no-git-guard-');
+    configureCpplintOnly(workspace);
+    const f = path.join(workspace, 'work_cpp_smoke', 'batch_collector.h');
+    const guard = 'WORK_CPP_SMOKE_BATCH_COLLECTOR_H_';
+    writeHeader(f, guard);
+    const originalBytes = fs.readFileSync(f);
+
+    const { post, stop } = runDeferred({ cwd: workspace, tool_name: 'Write', tool_input: { file_path: f } });
+    assert.strictEqual(post.status, 0, '无 Git guard: PostToolUse exit 0');
+    assert.strictEqual((post.stdout || '').trim(), '', '无 Git guard: 编辑阶段仅记录');
+    assert.strictEqual(stop.status, 0, '无 Git guard: Stop exit 0');
+    assert.strictEqual((stop.stdout || '').trim(), '', '无 Git guard: 项目相对路径 guard 通过');
+    assert.ok(fs.readFileSync(f).equals(originalBytes), '无 Git guard: 检查不改写头文件');
+
+    const absoluteGuard = f.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase() + '_';
+    writeHeader(f, absoluteGuard);
+    const { stop: invalidStop } = runDeferred({
+      cwd: workspace, tool_name: 'Edit', tool_input: { file_path: f },
+    });
+    assert.strictEqual(invalidStop.status, 0, '绝对路径 guard: Stop exit 0');
+    const invalid = JSON.parse(invalidStop.stdout);
+    assert.strictEqual(invalid.decision, 'block', '绝对路径 guard: 必须拒绝');
+    assert.ok(invalid.reason.includes('[build/header_guard]'), '绝对路径 guard: 保留 guard 检查');
+    assert.ok(invalid.reason.includes(`please use: ${guard}`), '绝对路径 guard: 提示稳定的项目相对路径宏名');
+
+    // cwd 与文件目录共享名称前缀，但两者互不包含，必须回退到文件所在目录。
+    const cwd = path.join(workspace, 'project');
+    fs.mkdirSync(cwd);
+    const external = path.join(workspace, 'project-other', 'include', 'batch_collector.h');
+    writeHeader(external, 'BATCH_COLLECTOR_H_');
+    const { stop: externalStop } = runDeferred({
+      cwd, tool_name: 'Write', tool_input: { file_path: external },
+    });
+    assert.strictEqual(externalStop.status, 0, '同名前缀目录: Stop exit 0');
+    assert.strictEqual((externalStop.stdout || '').trim(), '',
+      '同名前缀目录: 不把 cwd 当作包含根，使用文件所在目录的 guard');
+  }
+
+  // Git 根目录优先于任务 cwd：从子目录编辑头文件仍使用仓库相对路径 guard。
+  if (hasPython) {
+    const repo = newRepo('cse-git-guard-');
+    configureCpplintOnly(repo);
+    const f = path.join(repo, 'work_cpp_smoke', 'batch_collector.h');
+    writeHeader(f, 'WORK_CPP_SMOKE_BATCH_COLLECTOR_H_');
+    const { stop } = runDeferred({
+      cwd: path.dirname(f), tool_name: 'Write', tool_input: { file_path: f },
+    });
+    assert.strictEqual(stop.status, 0, 'Git guard: Stop exit 0');
+    assert.strictEqual((stop.stdout || '').trim(), '', 'Git guard: 真实 Git 根目录优先于 cwd');
   }
 
   // ---- pre_commit 集成：暂存含违规 .cpp + 真 git commit 命令 → denyTool（exit0 + permissionDecision:deny）----

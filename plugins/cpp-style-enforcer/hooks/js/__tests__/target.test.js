@@ -44,6 +44,15 @@ assert.strictEqual(shouldHandle('/p/a.CPP'), true, '.CPP 大小写不敏感命�
 assert.strictEqual(shouldHandle('/p/a.Hpp'), true, '.Hpp 大小写不敏感命中');
 // 回归：Windows 反斜杠路径 + 排除目录大小写不敏感
 assert.strictEqual(shouldHandle('C:\\proj\\BUILD\\a.cpp'), false, 'BUILD 大小写不敏感排除');
+// 第三方目录各种拼写（含常见错拼 thrid）都排除；业务目录仅含子串时不排除。
+for (const dir of ['3rd', '3rdparty', '3rd_party', '3rd-party', 'thirdparty', 'third_party',
+  'third-party', 'thirdpart', 'third_part', 'third-part', 'thridpart', 'thridparty',
+  'thrid_party', 'thrid-party', 'vendor', 'external', 'deps', 'packages']) {
+  assert.strictEqual(shouldHandle(`/proj/${dir}/lib/a.cpp`), false, dir);
+  assert.strictEqual(shouldHandle(`C:\\proj\\${dir.toUpperCase()}\\lib\\a.cpp`), false, dir);
+}
+assert.strictEqual(shouldHandle('/proj/third_party_adapter/a.cpp'), true, '目录名仅含子串不排除');
+assert.strictEqual(shouldHandle('/proj/vendor_manager/a.cpp'), true, '目录名仅含子串不排除');
 
 // 回归：resolveFilePath 各形态
 assert.strictEqual(
@@ -116,5 +125,19 @@ assert.deepStrictEqual(
   }),
   [path.resolve('/proj', 'src/a.cpp')],
   'unified diff 仅采用新文件头并去重');
+
+// 补丁中的重命名目标同样需要收尾处理。
+assert.deepStrictEqual(
+  resolveFilePaths({
+    cwd: '/proj',
+    tool_input: {
+      patch: [
+        '*** Begin Patch', '*** Update File: src/a.cpp',
+        '*** Move to: src/renamed.cpp', '*** End Patch',
+      ].join('\n'),
+    },
+  }),
+  [path.resolve('/proj', 'src/a.cpp'), path.resolve('/proj', 'src/renamed.cpp')],
+  'Move to 重命名目标被识别');
 
 console.log('target.test.js PASS');

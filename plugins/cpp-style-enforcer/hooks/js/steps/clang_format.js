@@ -5,6 +5,7 @@ const { spawnSync } = require('child_process');
 const { stripBom, restoreBom } = require('../lib/bom_util.js');
 const { changedLineRanges } = require('../lib/git.js');
 const { detectClangFormat } = require('../lib/ensure_deps.js');
+const { isVisualStudioSource } = require('../lib/line_endings.js');
 
 const isWindows = process.platform === 'win32';
 
@@ -35,9 +36,10 @@ function matchLineEnding(formatted, source) {
  * → 仅变化时 restoreBom 写回。clang-format 缺失/失败静默返回 false。不用 -i。
  *
  * 模式（由 opts.isNew 决定，缺省视为新文件）：
- * - 新文件：整文件全格，-style=file -fallback-style=Google，include 正常排序。
- * - 老文件：仅格 git 改动行（--lines=s:e），-style 内联 SortIncludes:Never
- *   强制 include 不排序；无改动行则不格式化返回 false。
+ * - 新文件：整文件格式化，-style=file -fallback-style=Google；VS 源工程保留 include
+ *   顺序，其他工程使用项目排序配置。已有局部 clang-format off/on 保护保持有效。
+ * - 老文件：仅格式化 git 改动行（--lines=s:e），读取项目风格并关闭 include 排序；
+ *   无改动行则不格式化返回 false。
  *
  * 行号说明：--lines 作用于 stdin 输入（已剥 BOM 的正文）。剥 BOM 仅去掉文件最前
  * 3 字节（BOM 在第一行行首，不增减行），故 git diff 的改动行号可直接用作 --lines。
@@ -62,10 +64,12 @@ function applyClangFormat(filePath, opts) {
   let args;
   if (isNew) {
     args = ['-style=file', '-fallback-style=Google', `-assume-filename=${filePath}`];
+    // VS 头文件可能依赖前置类型/宏，不能因文件尚未提交就自动重排 include。
+    if (isVisualStudioSource(filePath, root)) args.push('--sort-includes=false');
   } else {
     const ranges = changedLineRanges(filePath, root);
     if (!ranges || ranges.length === 0) return false; // 无改动行 → 不格式化
-    args = ['-style={BasedOnStyle: Google, SortIncludes: Never}', `-assume-filename=${filePath}`];
+    args = ['-style=file', '-fallback-style=Google', '--sort-includes=false', `-assume-filename=${filePath}`];
     for (const [s, e] of ranges) args.push(`--lines=${s}:${e}`);
   }
 

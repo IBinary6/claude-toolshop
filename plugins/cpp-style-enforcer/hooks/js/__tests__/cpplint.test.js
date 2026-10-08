@@ -2,8 +2,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { runCpplint, formatViolations, parseCpplintOutput, buildFilterArg, MAX_ERRORS_SHOWN } = require('../steps/cpplint.js');
+const { resolvePython } = require('../lib/python');
 
 // ---- formatViolations：逐字去重后取前 5 + 「还有 N 条」----
 const many = [];
@@ -50,25 +50,42 @@ assert.strictEqual(parsed[1].line, 12, 'line 解析');
 assert.strictEqual(parsed[1].category, 'whitespace/braces', 'category 解析');
 assert.ok(/Missing space/.test(parsed[1].message), 'message 解析');
 
-// ---- buildFilterArg：默认抑制 namespace 缩进误报，按需叠加版权过滤 ----
+// ---- buildFilterArg：保留团队默认 filter 项，并按需追加版权屏蔽 ----
 assert.strictEqual(
   buildFilterArg({}),
   '--filter=-whitespace/indent_namespace',
-  '默认抑制 namespace 缩进误报',
+  '默认屏蔽 namespace 缩进误报',
 );
 assert.strictEqual(
   buildFilterArg({ suppressCopyright: true }),
   '--filter=-whitespace/indent_namespace,-legal/copyright',
-  'suppressCopyright 叠加 -legal/copyright',
+  'suppressCopyright 追加 -legal/copyright',
 );
 assert.ok(
   String(buildFilterArg({ suppressCopyright: false })).includes('-whitespace/indent_namespace'),
-  '不抑制版权时仍保留默认 namespace 缩进过滤',
+  '不抑制版权时仍保留团队默认 filter',
 );
+assert.ok(buildFilterArg({ preserveIncludeOrder: true }).includes('-build/include_order'));
+assert.ok(!buildFilterArg({}).includes('-build/include_order'));
+
+// 运行时失败不能冒充零违规，不依赖本机 Python 或 Git。
+assert.ok(runCpplint(__filename, { resolvePython: () => null })
+  .some((item) => item.category === 'runtime/cpplint'));
+for (const result of [
+  { status: 7, stderr: Buffer.from('Traceback: linter failed') },
+  { status: null, signal: 'SIGTERM' },
+  { error: { code: 'ENOENT' } },
+  { status: 0, stderr: Buffer.from('Line length must be numeric.') },
+]) {
+  const violations = runCpplint(__filename, {
+    resolvePython: () => ({ cmd: 'test-python', args: [] }),
+    spawnSync: () => result,
+  });
+  assert.ok(violations.some((item) => item.category === 'runtime/cpplint'));
+}
 
 // ---- runCpplint：真实文件名下无误报 + 原文件零改动（需 python）----
-const hasPython = spawnSync('python', ['--version'], { stdio: 'pipe' }).status === 0
-  || spawnSync('python3', ['--version'], { stdio: 'pipe' }).status === 0;
+const hasPython = resolvePython() !== null;
 if (hasPython) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cpplint-'));
   try {
@@ -122,12 +139,15 @@ if (hasPython) {
     const bazGuard = '#ifndef PROJ_SRC_BAZ_H_\r\n#define PROJ_SRC_BAZ_H_\r\n\r\nclass Baz {};\r\n\r\n#endif  // PROJ_SRC_BAZ_H_\r\n';
     const bomBytes = Buffer.concat([BOM, Buffer.from(bazGuard, 'utf-8')]);
     fs.writeFileSync(bomH, bomBytes);
+    fs.utimesSync(bomH, new Date(1000000), new Date(1000000));
+    const bomMtime = fs.statSync(bomH).mtimeMs;
     const vBom = runCpplint(bomH, { root: tmp, suppressCopyright: true });
     assert.ok(
       !vBom.some((v) => v.category === 'build/header_guard'),
       'BOM 头文件剥 BOM 后不误报 header_guard',
     );
     assert.ok(fs.readFileSync(bomH).equals(bomBytes), 'BOM + CRLF 文件 lint 后原字节（含 BOM 与 CRLF）恢复');
+    assert.strictEqual(fs.statSync(bomH).mtimeMs, bomMtime, 'BOM lint 过程中也不能写文件');
 
     // 5) suppressCopyright 开关
     const fc = path.join(src, 'nocopy.cpp');

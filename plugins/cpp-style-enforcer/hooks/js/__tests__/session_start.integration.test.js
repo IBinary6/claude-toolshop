@@ -32,7 +32,6 @@ function mkGitRepo() {
   return t;
 }
 function cfgPath(root) { return path.join(root, '.claude-cpp-style', 'cpp-style.json'); }
-const BOM = Buffer.from([0xEF, 0xBB, 0xBF]);
 
 try {
   // 1) 首次运行 → 创建全局模板，无输出，exit 0
@@ -55,7 +54,7 @@ try {
     assert.ok(before.equals(after), '已存在模板必须字节级不变（不覆盖用户 company）');
   }
 
-  // 3) cwd 为 C++ git 项目（有 .cpp）→ 提前生成 .claude-cpp-style/cpp-style.json，静默 exit 0
+  // 3) 只打开 C++ 项目还未编辑时，不生成项目配置（尚无用户任务，不写项目文件）。
   {
     const root = mkGitRepo();
     fs.writeFileSync(path.join(root, 'main.cpp'), 'int main(){return 0;}\n');
@@ -63,10 +62,9 @@ try {
     assert.strictEqual(r.status, 0, 'C++ 项目 SessionStart 应 exit 0');
     assert.strictEqual(r.stdout, '', 'C++ 项目 SessionStart 应 stdout 空');
     assert.strictEqual(r.stderr, '', 'C++ 项目 SessionStart 应 stderr 空');
-    assert.ok(fs.existsSync(cfgPath(root)), 'C++ 项目应提前生成 cpp-style.json');
-    const buf = fs.readFileSync(cfgPath(root));
-    assert.ok(!buf.subarray(0, 3).equals(BOM), '生成配置无 BOM');
-    JSON.parse(buf.toString('utf-8')); // 合法 JSON
+    assert.ok(!fs.existsSync(cfgPath(root)), 'SessionStart 不得写入待审查项目');
+    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), 'SessionStart 不得写入格式配置');
+    assert.ok(!fs.existsSync(path.join(root, '.gitignore')), 'SessionStart 不得改写 .gitignore');
   }
 
   // 4) 已存在 cpp-style.json → 不覆盖（字节不变）

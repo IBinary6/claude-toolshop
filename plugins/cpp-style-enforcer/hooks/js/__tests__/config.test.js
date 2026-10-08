@@ -51,6 +51,23 @@ try {
   assert.strictEqual(cfg.copyrightInfo.company, 'OVERRIDE', '项目覆盖 company');
   assert.strictEqual(cfg.copyrightInfo.author, 'kevin', '未覆盖 author 回退全局');
   assert.strictEqual(cfg.enabled, true, 'enabled 缺省 true');
+  assert.strictEqual(cfg.lineEnding, 'preserve');
+  fs.writeFileSync(path.join(cfgDir, 'cpp-style.json'), JSON.stringify({ lineEnding: 'crlf' }));
+  assert.strictEqual(loadConfig(srcFile, userPath).lineEnding, 'crlf');
+  fs.writeFileSync(path.join(cfgDir, 'cpp-style.json'), JSON.stringify({ lineEnding: 'lf' }));
+  assert.strictEqual(loadConfig(srcFile, userPath).lineEnding, 'lf');
+  fs.writeFileSync(path.join(cfgDir, 'cpp-style.json'), JSON.stringify({ lineEnding: 'invalid' }));
+  assert.strictEqual(loadConfig(srcFile, userPath).lineEnding, 'preserve');
+
+  // ---- loadConfig：项目配置向上查找（文件位于子目录） ----
+  const legacyProj = mkTmp('legacy-proj-');
+  const legacyCfgDir = path.join(legacyProj, '.claude-cpp-style');
+  fs.mkdirSync(legacyCfgDir, { recursive: true });
+  fs.writeFileSync(path.join(legacyCfgDir, 'cpp-style.json'), JSON.stringify({ checks: { cpplint: false } }));
+  fs.mkdirSync(path.join(legacyProj, 'src'));
+  const legacySrc = path.join(legacyProj, 'src', 'legacy.cpp');
+  fs.writeFileSync(legacySrc, 'int legacy;');
+  assert.strictEqual(loadConfig(legacySrc, userPath).checks.cpplint, false, '子目录文件向上找到项目配置');
 
   // ---- loadConfig：损坏 JSON 回退默认 ----
   const proj2 = mkTmp('proj2-');
@@ -63,6 +80,11 @@ try {
   assert.strictEqual(cfg2.enabled, true, '损坏 JSON + 无全局 → 硬编码默认 enabled true');
   assert.strictEqual(cfg2.mode, 'incremental', '损坏 JSON → 默认 incremental');
   assert.deepStrictEqual(cfg2.checks, { clangFormat: true, copyright: true, cpplint: true, bom: true }, '损坏 JSON → checks 全默认 true');
+  assert.deepStrictEqual(
+    cfg2.legacyChecks,
+    { clangFormat: false, copyright: false, cpplint: false, bom: false },
+    '损坏 JSON → 已跟踪文件默认不改编码和格式',
+  );
 
   // ---- loadConfig：enabled:false 生效 ----
   const proj3 = mkTmp('proj3-');

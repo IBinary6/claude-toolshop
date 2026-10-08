@@ -10,6 +10,9 @@ const EXCLUDED_DIRS = new Set([
   'node_modules', 'build', 'dist', 'out', 'bin', 'obj',
   '.git', 'target', 'third_party', 'thirdparty', 'external',
   'vendor', 'deps', 'packages',
+  '3rd', '3rdparty', '3rd_party', '3rd-party',
+  'thirdpart', 'third-party', 'third_part', 'third-part',
+  'thridpart', 'thridparty', 'thrid_party', 'thrid-party',
 ]);
 
 /** 跳过的特定文件名（VS 自动生成 / 不该被风格化） */
@@ -23,7 +26,7 @@ const PATCH_KEYS = new Set(['patch', 'diff']);
 
 /**
  * 从 Agentic Patch / apply-patch 风格文本中提取目标文件。
- * 同时兼容 `*** Update File:` 与 unified diff 的 `+++ b/...` 头。
+ * 同时兼容 `*** Update File:`、重命名目标 `*** Move to:` 与 unified diff 的 `+++ b/...` 头。
  * @param {string} patchText
  * @returns {string[]}
  */
@@ -31,7 +34,7 @@ function patchPaths(patchText) {
   if (typeof patchText !== 'string') return [];
   const result = [];
   const patterns = [
-    /^\*\*\* (?:Add|Update|Delete) File:\s*(.+?)\s*$/gm,
+    /^\*\*\* (?:(?:Add|Update|Delete) File|Move to):\s*(.+?)\s*$/gm,
     /^\+\+\+\s+(?:b\/)?(.+?)\s*$/gm,
   ];
   for (const pattern of patterns) {
@@ -116,16 +119,27 @@ function shouldHandle(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (!CPP_EXTENSIONS.has(ext)) return false;
   if (SKIPPED_FILES.has(path.basename(filePath).toLowerCase())) return false;
-  for (const part of filePath.split(/[/\\]/)) {
-    if (EXCLUDED_DIRS.has(part.toLowerCase())) return false;
-  }
-  return true;
+  return !isExcludedPath(filePath);
+}
+
+/**
+ * 按完整目录段匹配排除目录；文件名本身不参与，业务目录含 vendor/thirdparty 子串也不排除。
+ * @param {string} filePath
+ * @returns {boolean}
+ * @example
+ * isExcludedPath('/p/3rdparty/zlib/zlib.h') // true
+ * isExcludedPath('/p/src/vendor_api.cpp')  // false
+ */
+function isExcludedPath(filePath) {
+  return typeof filePath === 'string' && filePath.split(/[/\\]/).slice(0, -1)
+    .some((part) => EXCLUDED_DIRS.has(part.toLowerCase()));
 }
 
 module.exports = {
   resolveFilePath,
   resolveFilePaths,
   shouldHandle,
+  isExcludedPath,
   CPP_EXTENSIONS,
   EXCLUDED_DIRS,
   SKIPPED_FILES,

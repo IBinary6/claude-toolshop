@@ -7550,7 +7550,8 @@ def ProcessFile(filename, vlevel, extra_check_functions=None):
         if filename == "-":
             lines = sys.stdin.read().split("\n")
         else:
-            with codecs.open(filename, "r", "utf8", "replace") as target_file:
+            # 在读取时忽略 UTF-8 BOM，检查过程不需要临时改写源文件。
+            with codecs.open(filename, "r", "utf-8-sig", "replace") as target_file:
                 lines = target_file.read().split("\n")
 
         # Remove trailing '\r'.
@@ -7591,16 +7592,15 @@ def ProcessFile(filename, vlevel, extra_check_functions=None):
         # end-of-line sequence should be, since that will return the
         # server-side end-of-line sequence.
         if lf_lines and crlf_lines:
-            # Warn on every line with CR.  An alternative approach might be to
-            # check whether the file is mostly CRLF or just LF, and warn on the
-            # minority, we bias toward LF here since most tools prefer LF.
+            # 保留原有诊断位置，但不建议统一转成 LF；修复应遵循项目行尾规则。
             for linenum in crlf_lines:
                 Error(
                     filename,
                     linenum,
                     "whitespace/newline",
                     1,
-                    "Unexpected \\r (^M) found; better to use only \\n",
+                    "Mixed LF and CRLF line endings; use a consistent project line ending "
+                    "(CRLF for Visual Studio source projects).",
                 )
 
     # Suppress printing anything if --quiet was passed unless the error
