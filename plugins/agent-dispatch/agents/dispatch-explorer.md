@@ -1,8 +1,8 @@
 ---
 name: dispatch-explorer
 description: 快速完成边界明确的跨文件搜索、符号定位和证据收集；不修改代码。
-model: sonnet
-effort: low
+model: haiku
+effort: medium
 maxTurns: 20
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Agent
 ---

@@ -1,7 +1,7 @@
 ---
 name: dispatch-mapper
 description: 对仓库或跨模块关系进行广泛的只读扫描，输出结构化证据和影响面。
-model: sonnet
+model: haiku
 effort: medium
 maxTurns: 30
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Agent

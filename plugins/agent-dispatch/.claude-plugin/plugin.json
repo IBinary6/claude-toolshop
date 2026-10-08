@@ -1,7 +1,7 @@
 {
   "name": "agent-dispatch",
-  "version": "0.3.0",
-  "description": "基于 Claude Code 原生 Agent 与 Hook 语义进行任务路由、子代理约束和报告校验。",
+  "version": "0.4.0",
+  "description": "智能调度：Claude 原生插件 subagents（haiku 低成本取证/测试/研究、sonnet 写码与审查、opus 规划与关键审查），按当前消息给出候选路由；子代理 Git 硬拦截，主 Agent 工具门禁改为可选。",
   "author": {
     "name": "IBinary6"
   },

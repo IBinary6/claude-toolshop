@@ -7,8 +7,15 @@ const os = require('os');
 
 const ENFORCER = path.resolve(__dirname, '..', 'enforcer.js');
 
-function runHook(input, envOverrides = {}) {
+// 主 Agent 门禁默认关闭；下面的门禁用例通过全局配置显式开启 enforcer 来覆盖 opt-in 行为。
+const GATE_ON = { modules: { enforcer: true } };
+
+function runHook(input, envOverrides = {}, globalConfig = GATE_ON) {
   const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-dispatch-test-'));
+  if (globalConfig) {
+    fs.mkdirSync(path.join(fakeHome, '.agent-dispatch'));
+    fs.writeFileSync(path.join(fakeHome, '.agent-dispatch', 'config.json'), JSON.stringify(globalConfig));
+  }
   const env = {
     ...process.env,
     HOME: fakeHome,
@@ -45,6 +52,26 @@ function assertBlock(result, toolName) {
   }
 }
 
+// --- 默认配置：主 Agent 不被单次工具调用拦截，子代理 Git 守卫仍生效 ---
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/x' } }, {}, null);
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'mcp__unknown__heavy_tool', tool_input: {} }, {}, null);
+  assertPass(r);
+}
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git status' }, agent_id: 'sub-123' }, {}, null);
+  assertBlock(r);
+}
+// 子代理 Git 守卫可单独关闭，且不受 enforcer 开关影响
+{
+  const r = runHook({ tool_name: 'Bash', tool_input: { command: 'git status' }, agent_id: 'sub-123' }, {},
+    { modules: { subagent_git_guard: false, enforcer: true } });
+  assertPass(r);
+}
+
 // --- subagent exemption ---
 {
   const r = runHook({ tool_name: 'Bash', tool_input: { command: 'npm test' }, agent_id: 'sub-123' });
@@ -78,6 +105,15 @@ function assertBlock(result, toolName) {
 {
   const r = runHook({ tool_name: 'Write', tool_input: { file_path: '/tmp/x.txt', content: 'hi' } });
   assertPass(r);
+}
+
+// --- 跨插件契约：codemap-boost 自带 MCP 的真实工具名（mcp__plugin_<插件>_<服务>__<工具>）门禁开启时也必须放行 ---
+for (const tool of [
+  'mcp__plugin_codemap-boost_code-review-graph__query_graph_tool',
+  'mcp__plugin_codemap-boost_code-review-graph__detect_changes_tool',
+  'mcp__plugin_codemap-boost_serena__find_symbol',
+]) {
+  assertPass(runHook({ tool_name: tool, tool_input: {} }));
 }
 
 // --- MCP prefix whitelist (短格式不在 block_exact 名单中，仍通过前缀白名单放行) ---

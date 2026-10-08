@@ -1,8 +1,8 @@
 ---
 name: dispatch-planner
-description: 为非琐碎架构、接口契约或困难实现制定只读计划，并给出风险与验收条件。
+description: 为非琐碎架构、接口契约或困难实现制定只读计划，并给出风险与验收条件；已有可执行方案时不使用。
 model: opus
-effort: xhigh
+effort: high
 maxTurns: 30
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Agent
 ---

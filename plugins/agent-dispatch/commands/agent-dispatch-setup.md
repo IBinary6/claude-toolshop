@@ -27,7 +27,8 @@ description: 查看或配置 agent-dispatch：开关模块、调度策略和增�
 ### 修改配置
 
 用户可能想要：
-- **开关模块**：`modules.enforcer` / `modules.prompt_inject` / `modules.session_guidance` / `modules.subagent_guidance` / `modules.subagent_report_guard`
+- **开关模块**：`modules.enforcer`（主 Agent 工具硬门禁，默认 `false`）/ `modules.subagent_git_guard`（子代理 Git 拦截，默认 `true`）/ `modules.prompt_inject` / `modules.session_guidance` / `modules.subagent_guidance` / `modules.subagent_report_guard`
+- 白名单、安全 Bash 命令头与 MCP 精确黑名单只在开启 `modules.enforcer` 后生效。
 - **调度策略**：`policy.max_parallel_subagents` 以及三个最终报告必填开关
 - **添加白名单工具**：`overrides.tools_add: ["ToolName"]`
 - **移除白名单工具**：`overrides.tools_remove: ["ToolName"]`

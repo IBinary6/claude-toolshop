@@ -205,6 +205,25 @@ function containsGitCommand(command) {
   });
 }
 
+/**
+ * 判断整段文本是否为可安全解析、且每一段都只执行 Git 的命令行。
+ * 用于提示词路由：`git commit -m "fix review"` 里的 fix/review 是参数，不是任务意图。
+ * @param {string} command
+ * @returns {boolean}
+ * @example
+ * isPureGitCommand('git status && git diff') // true
+ * isPureGitCommand('git status && rm -rf .') // false
+ */
+function isPureGitCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  if (hasCommandSubstitution(command) || hasAmbiguousCrossShellEscape(command)) return false;
+  const segments = splitSegments(tokenize(command));
+  return segments.length > 0 && segments.every((segment) => {
+    const head = commandHead(segment);
+    return head === 'git' || head === 'git.exe';
+  });
+}
+
 function isSafeBashCommand(command, config) {
   if (typeof command !== 'string' || !command.trim()) return false;
   if (hasCommandSubstitution(command)) return false;
@@ -230,5 +249,6 @@ module.exports = {
   isDangerousBashSegment,
   classifySegment,
   containsGitCommand,
+  isPureGitCommand,
   isSafeBashCommand,
 };

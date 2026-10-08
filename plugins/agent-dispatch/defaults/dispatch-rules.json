@@ -1,7 +1,8 @@
 {
   "schema_version": 3,
   "modules": {
-    "enforcer": true,
+    "enforcer": false,
+    "subagent_git_guard": true,
     "prompt_inject": true,
     "session_guidance": true,
     "subagent_guidance": true,
@@ -32,6 +33,7 @@
       "mcp__context-mode__",
       "mcp__plugin_claude-mem_",
       "mcp__sequential-thinking",
+      "mcp__plugin_codemap-boost_",
       "mcp__code_review_graph__",
       "mcp__code-review-graph__",
       "mcp__codegraph__",

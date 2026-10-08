@@ -2,7 +2,7 @@
 name: dispatch-hard-worker
 description: 在主 Agent 已审定计划后执行困难实现或复杂调试，严格控制改动和风险。
 model: opus
-effort: max
+effort: high
 maxTurns: 60
 disallowedTools: Agent
 ---

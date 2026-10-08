@@ -55,21 +55,25 @@ async function main() {
 
   const cwd = hookCwd(input);
   const config = loadConfig(cwd);
-  if (!config.modules.enforcer) { process.exit(0); return; }
 
   const toolName = input.tool_name || '';
   const toolInput = input.tool_input || {};
 
-  // Claude Code 会在子代理工具事件中提供 agent_id。子代理继续豁免普通工具，
-  // 但 Git 始终留在主代理，避免分支、索引和提交操作并发冲突。
+  // Claude Code 会在子代理工具事件中提供 agent_id。子代理豁免普通工具，
+  // 但 Git 始终留在主代理，避免分支、索引和提交操作并发冲突（subagent_git_guard 默认开启）。
   if (input.agent_id) {
-    if ((toolName === 'Bash' || toolName === 'PowerShell')
+    if (config.modules.subagent_git_guard !== false
+        && (toolName === 'Bash' || toolName === 'PowerShell')
         && containsGitCommand(toolInput.command)) {
       denyTool(buildSubagentGitMessage());
     }
     process.exit(0);
     return;
   }
+
+  // 主 Agent 工具门禁默认关闭：单次工具调用不足以判断任务是否该委派，
+  // 路由由 SessionStart / UserPromptSubmit 的候选建议负责；需要硬门禁时在配置中开启 enforcer。
+  if (!config.modules.enforcer) { process.exit(0); return; }
 
   // deny 优先：精确拦截名单中的工具，即使前缀白名单匹配也强制 block
   if (isMcpBlocked(toolName, config)) {

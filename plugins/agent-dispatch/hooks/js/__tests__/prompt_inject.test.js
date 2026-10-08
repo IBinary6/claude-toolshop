@@ -85,9 +85,18 @@ function additionalContext(result) {
   assert.equal(result.stdout, '');
 }
 
-// 高风险实现先规划，再交给困难实现角色。
+// 高风险实现：主 Agent 先核对契约与授权，不因风险关键词强制规划或升级 opus。
 {
   const result = runInject({ prompt: '实现权限校验并修复安全漏洞' });
+  const context = additionalContext(result);
+  assert.ok(context.includes('主 Agent 先核对真实调用路径'));
+  assert.ok(context.includes('agent-dispatch:dispatch-worker'));
+  assert.ok(!context.includes('dispatch-planner'));
+}
+
+// 明确要求先出方案的困难任务：planner 只读规划，主 Agent 拍板后交困难实现角色。
+{
+  const result = runInject({ prompt: '请先制定计划，然后实现复杂的跨模块缓存迁移' });
   const context = additionalContext(result);
   assert.ok(context.includes('dispatch-planner'));
   assert.ok(context.includes('dispatch-hard-worker'));
