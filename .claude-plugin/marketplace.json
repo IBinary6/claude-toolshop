@@ -12,26 +12,26 @@
     {
       "name": "bugdb-knowledge",
       "source": "./plugins/bugdb-knowledge",
-      "version": "0.1.8",
-      "description": "本地 Bug 知识库：SQLite + FTS5，Bash/PowerShell 成功输出与执行失败 Hook 自动查询，Skill 标准化录入"
+      "version": "0.2.0",
+      "description": "本地 Bug 知识库 —— SQLite + FTS5，Shell 命令失败或用户粘贴错误时只读自动查库（不创建/迁移数据库，区分无命中与召回失败）；bugdb-lookup / bugdb-record Skill 提供标准化的查/录流程；/bugfix /bugsearch 命令供手动使用。"
     },
     {
       "name": "codemap-boost",
       "source": "./plugins/codemap-boost",
-      "version": "0.2.23",
-      "description": "自动维护 code-review-graph / graphify：覆盖内置编辑、Shell 与 Agentic Patch/MCP 补丁，读图前同步刷新，并通过 SessionStart/Grep/SubagentStart 注入自适应检索与 ToolSearch 发现规则。"
+      "version": "0.3.0",
+      "description": "内置 code-review-graph 与 Serena（私有 venv，.mcp.json 自带 MCP，无需 pip 或 cc-switch 注册），自动维护代码结构图：覆盖内置编辑、Shell 与 Agentic Patch/MCP 补丁，读图前同步刷新，并通过 SessionStart/Grep/SubagentStart 注入自适应检索与 ToolSearch 发现规则。"
     },
     {
       "name": "cpp-style-enforcer",
       "source": "./plugins/cpp-style-enforcer",
-      "version": "0.3.15",
-      "description": "C++ 代码风格强制（Google C++ Style + 现代 C++ 规范）：兼容内置编辑与 Agentic Patch/MCP 批量补丁；新项目全量，旧文件按 legacyChecks 增量处理。"
+      "version": "0.4.0",
+      "description": "C++ 代码风格强制（Google C++ Style）：编辑时只记录，Stop/SubagentStop 统一格式化、BOM、版权头、行尾与 cpplint；VS 工程保持 CRLF 与 include 顺序；提交前基于 Git index 快照检查；已跟踪文件默认保持原编码，第三方目录不处理。"
     },
     {
       "name": "agent-dispatch",
       "source": "./plugins/agent-dispatch",
-      "version": "0.3.0",
-      "description": "智能调度：使用 Claude 原生插件 subagents 与 SubagentStart/SubagentStop，按任务风险和工作类型选择最低可靠角色，同时保留主 agent 工具边界。"
+      "version": "0.4.0",
+      "description": "智能调度：Claude 原生插件 subagents（haiku 低成本取证/测试/研究、sonnet 写码与审查、opus 规划与关键审查），按当前消息给出候选路由；子代理 Git 硬拦截，主 Agent 工具门禁改为可选。"
     },
     {
       "name": "codemap-pro",
