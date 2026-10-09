@@ -1,7 +1,7 @@
 {
   "name": "agent-dispatch",
-  "version": "0.4.0",
-  "description": "智能调度：Claude 原生插件 subagents（haiku 低成本取证/测试/研究、sonnet 写码与审查、opus 规划与关键审查），按当前消息给出候选路由；子代理 Git 硬拦截，主 Agent 工具门禁改为可选。",
+  "version": "0.4.1",
+  "description": "智能调度：Claude 原生插件 subagents，opus 规划与审查、sonnet 写代码、haiku 读代码/日志/搜索/研究/测试；按当前消息给出候选路由，子代理 Git 硬拦截，主 Agent 工具门禁可选。",
   "author": {
     "name": "IBinary6"
   },

@@ -1,7 +1,7 @@
 ---
 name: dispatch-reviewer
 description: 对常规改动进行独立只读审查，检查正确性、回归风险和测试缺口。
-model: sonnet
+model: opus
 effort: high
 maxTurns: 30
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Agent

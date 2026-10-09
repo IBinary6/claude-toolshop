@@ -83,7 +83,7 @@ assert.equal(routePrompt('请 review 这个补丁', config).category, 'review', 
 {
   const review = routePrompt('全面审查这个权限安全问题', config);
   assert.equal(review.category, 'high-risk-review');
-  assert.equal(review.role, 'dispatch-reviewer', 'risk keywords alone must not pick the opus reviewer');
+  assert.equal(review.role, 'dispatch-reviewer', 'risk keywords alone must not pick deep-reviewer');
   assert.match(promptGuidance('全面审查这个权限安全问题', config), /dispatch-deep-reviewer.*风险关键词本身不要求升级/);
   const fix = routePrompt('实现权限校验并修复安全漏洞', config);
   assert.equal(fix.category, 'high-risk-implementation');
@@ -156,7 +156,9 @@ assert.equal(routePrompt('git status && rg architecture', config).shouldDispatch
   const main = mainAgentGuidance(config);
   assert.match(main, /候选建议/);
   assert.match(main, /haiku/);
-  assert.match(main, /不因审查或风险关键词自动升级到 opus/);
+  assert.match(main, /opus 负责规划与审查/);
+  assert.match(main, /sonnet 负责写代码/);
+  assert.match(main, /一律 haiku/);
   assert.match(main, /third_party/);
   const sub = subagentGuidance(config);
   assert.match(sub, /不要运行任何 Git 命令/);

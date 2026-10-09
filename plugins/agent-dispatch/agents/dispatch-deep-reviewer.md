@@ -2,7 +2,7 @@
 name: dispatch-deep-reviewer
 description: 关键验收或极复杂约束需要更强判断时的独立只读审查；风险关键词本身不要求使用。
 model: opus
-effort: high
+effort: xhigh
 maxTurns: 40
 disallowedTools: Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Agent
 ---

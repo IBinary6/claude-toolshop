@@ -27,11 +27,11 @@ Claude Code 可以在 `SubagentStart` 注入约束，并在 `SubagentStop` 检�
 | `dispatch-tester` | haiku / high | 按既定用例运行测试、复现步骤和日志取证，不改被验收代码 |
 | `dispatch-planner` | opus / high | 非琐碎计划、架构和接口契约；已有可执行方案时不用 |
 | `dispatch-worker` | sonnet / high | 代码写作（含写测试）与常规交付执行 |
-| `dispatch-hard-worker` | opus / high | 困难实现或复杂调试 |
-| `dispatch-reviewer` | sonnet / high | 常规与高风险的默认独立审查 |
-| `dispatch-deep-reviewer` | opus / high | 关键验收或极复杂约束确需更强判断时才用 |
+| `dispatch-hard-worker` | sonnet / xhigh | 困难实现或复杂调试（仍是写代码，用 sonnet 并提高 effort） |
+| `dispatch-reviewer` | opus / high | 常规与高风险的默认独立审查 |
+| `dispatch-deep-reviewer` | opus / xhigh | 关键验收或极复杂约束需要更高推理强度时才用 |
 
-分工语义与 Codex 版一致：haiku 承接日志、源码/调用取证、既定测试执行和外部研究等低成本劳动；sonnet 承接代码写作与常规审查；opus 只用于规划、困难实现与关键审查。**风险或审查关键词本身不触发 opus**，混合任务只把证据阶段交给 haiku。审查默认排除 `3rd`、`third_party`、`thridpart`、`vendor` 等第三方实现目录，只核对自有代码接入。
+**分工规则**：opus 负责**规划与审查**；sonnet 负责**写代码**（困难实现只提高 effort，不换模型）；其余——读代码、搜索扫描、读日志、外部研究、既定测试执行——一律 **haiku**。风险或审查关键词本身不决定换模型，混合任务只把证据阶段交给 haiku。审查默认排除 `3rd`、`third_party`、`thridpart`、`vendor` 等第三方实现目录，只核对自有代码接入。sonnet 不支持的 effort 档位会由 Claude Code 自动回落到其支持的最高档。
 
 只读角色通过 `disallowedTools` 禁止编辑和继续派遣（tester 保留 Shell 以运行测试）；写入角色禁止继续派遣，并由 Hook 额外阻止子代理 Git。CodeMap MCP schema 延迟加载时角色先用 `ToolSearch` 发现工具（Haiku 4.5 及以后支持 tool search）。
 

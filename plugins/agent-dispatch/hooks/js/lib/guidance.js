@@ -13,9 +13,9 @@ const ROLES = {
   'dispatch-tester': { model: 'haiku', effort: 'high' },
   'dispatch-planner': { model: 'opus', effort: 'high' },
   'dispatch-worker': { model: 'sonnet', effort: 'high' },
-  'dispatch-hard-worker': { model: 'opus', effort: 'high' },
-  'dispatch-reviewer': { model: 'sonnet', effort: 'high' },
-  'dispatch-deep-reviewer': { model: 'opus', effort: 'high' },
+  'dispatch-hard-worker': { model: 'sonnet', effort: 'xhigh' },
+  'dispatch-reviewer': { model: 'opus', effort: 'high' },
+  'dispatch-deep-reviewer': { model: 'opus', effort: 'xhigh' },
 };
 
 const ROLE_LABELS = Object.fromEntries(Object.entries(ROLES).map(([name, { model, effort }]) => [
@@ -483,7 +483,7 @@ function routeGuidance(route) {
     case 'high-risk-implementation':
       return `任务路由：涉及安全、权限或并发等风险的修改。主 Agent 先核对真实调用路径、契约、已有授权和验收标准，明确边界后才委派有界修改，不因关键词扩大权限。${writer} ${REVIEW_FEEDBACK_GUIDANCE}${lowCostEvidenceGuidance(route)}`;
     case 'high-risk-review':
-      return `任务路由：高风险审查。默认 ${role}；关键验收或极复杂约束确需更强判断时，主 Agent 可改用 ${ROLE_LABELS['dispatch-deep-reviewer']}，风险关键词本身不要求升级。纯证据收集或既定测试结果不等于独立审查通过。${THIRD_PARTY_GUIDANCE}`;
+      return `任务路由：高风险审查。默认 ${role}（已是 opus）；关键验收或极复杂约束确需更高推理强度时，主 Agent 可改用 ${ROLE_LABELS['dispatch-deep-reviewer']}（opus/xhigh），风险关键词本身不要求升级。纯证据收集或既定测试结果不等于独立审查通过。${THIRD_PARTY_GUIDANCE}`;
     case 'hard-task':
       if (!route.requiresPlanner) {
         return `任务路由：困难任务执行。主 Agent 先固定范围和验收标准，再交 ${ROLE_LABELS['dispatch-hard-worker']} 执行；不要仅因任务困难启动规划角色。${REVIEW_FEEDBACK_GUIDANCE}${lowCostEvidenceGuidance(route)}`;
@@ -535,7 +535,7 @@ function mainAgentGuidance(config) {
     'Agent Dispatch（Claude Code 原生语义）：你是主 Agent，负责需求澄清、关键方案与公开契约决策、任务拆分、结果审查和最终整合。',
     '按完整对话和用户最新明确要求判断当前任务；产品行为和引用材料不等于任务限制。UserPromptSubmit 的路由只是候选建议，不是宿主限制或持久任务状态；后续没有新建议不代表旧路线继续生效。',
     '明确、有界的调查、规划分析、交付执行、验证与审查可交给 agent-dispatch:* 子代理；琐碎读取、小改和强耦合步骤直接完成。',
-    '模型分工：haiku 承接有界搜索、扫描、外部研究、日志取证和既定测试执行（dispatch-explorer/mapper/researcher/tester）；sonnet 承接代码写作与常规审查（dispatch-worker/reviewer）；opus 只用于非琐碎规划、困难实现和关键审查（dispatch-planner/hard-worker/deep-reviewer）。不因审查或风险关键词自动升级到 opus；用户明确指定的模型优先。',
+    '模型分工：opus 负责规划与审查（dispatch-planner/reviewer，关键验收用 dispatch-deep-reviewer 提高 effort）；sonnet 负责写代码（dispatch-worker，困难实现用 dispatch-hard-worker 提高 effort）；其余——读代码、搜索扫描、读日志、外部研究、既定测试执行——一律 haiku（dispatch-explorer/mapper/researcher/tester）。风险关键词不决定换模型；用户明确指定的模型优先。',
     '混合任务按阶段拆分：只把日志、调用链、源码位置和既定测试证据交给 haiku 角色；实现与关键判断不随之降级。',
     `独立且并行有收益时才并行，最多 ${maxParallel} 个子代理；结果已整合或不再需要时立即停止后台 Agent。`,
     '所有 Git 命令由主 Agent 串行执行；子代理运行 Git 会被 Hook 拦截。委派不扩大文件、网络、权限、对外发布、付费、生产或真实数据变更的授权。',
