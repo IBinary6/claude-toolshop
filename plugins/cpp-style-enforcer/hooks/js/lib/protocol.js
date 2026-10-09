@@ -1,18 +1,18 @@
 'use strict';
 
 /**
- * 唯一输出出口。铁律：全程 exit 0；诊断走 stderr；stdout 要么空要么纯 JSON。
- * 永不 exit 1（issue #4809）、永不 exit 2+stdout JSON（旧崩溃源）。
+ * The only output exit. Iron rules: always exit 0; diagnostics go to stderr; stdout is either empty or pure JSON.
+ * Never exit 1 (issue #4809) and never exit 2 with stdout JSON (the old crash source).
  */
 
-/** 静默通过：stdout/stderr 均空，exit 0 */
+/** Pass silently: stdout and stderr stay empty, exit 0. */
 function passSilent() {
   process.exit(0);
 }
 
 /**
- * PreToolUse 阻止工具：exit 0 + stdout hookSpecificOutput.permissionDecision=deny
- * @param {string} reason 阻止理由
+ * PreToolUse deny: exit 0 + stdout hookSpecificOutput.permissionDecision=deny
+ * @param {string} reason The reason for blocking.
  */
 function denyTool(reason) {
   process.stdout.write(JSON.stringify({
@@ -25,7 +25,7 @@ function denyTool(reason) {
   process.exit(0);
 }
 
-/** 诊断信息（用户/Claude 可见），绝不混入 stdout */
+/** Diagnostics (visible to the user and Claude); never mixed into stdout. */
 function diag(message) {
   process.stderr.write(String(message) + '\n');
 }

@@ -6,7 +6,7 @@ const { formatChangedFiles, MAX_CHANGED_FILES_SHOWN } = require('../lib/report')
 assert.strictEqual(
   formatChangedFiles(['a.cc', 'b.cc']),
   '  - a.cc\n  - b.cc',
-  '少量文件应完整显示',
+  'a handful of files are shown in full',
 );
 
 const manyFiles = Array.from(
@@ -16,6 +16,6 @@ const manyFiles = Array.from(
 const report = formatChangedFiles(manyFiles);
 assert.ok(report.includes(`  - file-${MAX_CHANGED_FILES_SHOWN - 1}.cc`));
 assert.ok(!report.includes(`  - file-${MAX_CHANGED_FILES_SHOWN}.cc`));
-assert.ok(report.includes('还有 3 个文件未显示'));
+assert.ok(report.includes('3 more file(s) not shown'));
 
 console.log('report.test.js PASS');

@@ -42,31 +42,31 @@ function writeBytes(filePath, bytes) {
   fs.writeFileSync(filePath, bytes);
 }
 
-// isGitCommit 单元断言：真 commit 命中，假阳性放行
-assert.strictEqual(isGitCommit('git commit -m "x"'), true, '真 git commit 应命中');
-assert.strictEqual(isGitCommit('git commit'), true, '裸 git commit 应命中');
-assert.strictEqual(isGitCommit('  git   commit  --amend'), true, '多空格 git commit 应命中');
-assert.strictEqual(isGitCommit('git -C repo commit -m "x"'), true, 'git -C repo commit 应命中');
-assert.strictEqual(isGitCommit('git -c user.name=x commit -m "x"'), true, 'git -c ... commit 应命中');
-assert.strictEqual(isGitCommit('cd repo; git commit -m "x"'), true, '组合命令中的 git commit 应命中');
-assert.strictEqual(isGitCommit('cmd /c git commit -m "x"'), true, 'cmd /c git commit 应命中');
-assert.strictEqual(isGitCommit('GIT COMMIT -m "x"'), true, '大小写不同的 GIT COMMIT 应命中');
-assert.strictEqual(isGitCommit('git.exe commit -m "x"'), true, 'Windows git.exe commit 应命中');
-assert.strictEqual(isGitCommit('/usr/bin/git commit -m "x"'), true, '绝对路径 git commit 应命中');
+// isGitCommit unit assertions: real commits match, false positives pass through
+assert.strictEqual(isGitCommit('git commit -m "x"'), true, 'a real git commit should match');
+assert.strictEqual(isGitCommit('git commit'), true, 'a bare git commit should match');
+assert.strictEqual(isGitCommit('  git   commit  --amend'), true, 'git commit with extra spaces should match');
+assert.strictEqual(isGitCommit('git -C repo commit -m "x"'), true, 'git -C repo commit should match');
+assert.strictEqual(isGitCommit('git -c user.name=x commit -m "x"'), true, 'git -c ... commit should match');
+assert.strictEqual(isGitCommit('cd repo; git commit -m "x"'), true, 'git commit inside a compound command should match');
+assert.strictEqual(isGitCommit('cmd /c git commit -m "x"'), true, 'cmd /c git commit should match');
+assert.strictEqual(isGitCommit('GIT COMMIT -m "x"'), true, 'GIT COMMIT in a different case should match');
+assert.strictEqual(isGitCommit('git.exe commit -m "x"'), true, 'Windows git.exe commit should match');
+assert.strictEqual(isGitCommit('/usr/bin/git commit -m "x"'), true, 'an absolute-path git commit should match');
 assert.strictEqual(isGitCommit('"C:\\Program Files\\Git\\cmd\\git.exe" commit -m "x"'), true,
-  '带空格的 Windows 绝对路径 git.exe commit 应命中');
-assert.strictEqual(isGitCommit('cmd.exe /C git.exe COMMIT -m "x"'), true, 'cmd /c 包装的 git.exe commit 应命中');
+  'a Windows absolute path with spaces to git.exe commit should match');
+assert.strictEqual(isGitCommit('cmd.exe /C git.exe COMMIT -m "x"'), true, 'git.exe commit wrapped by cmd /c should match');
 assert.strictEqual(isGitCommit('cmd /c "C:\\Program Files\\Git\\cmd\\git.exe" commit -m "x"'), true,
-  'cmd /c 包装的带空格绝对路径 git.exe commit 应命中');
+  'an absolute path with spaces to git.exe commit wrapped by cmd /c should match');
 assert.strictEqual(isGitCommit('cmd.exe /d /s /c git.exe commit -m "x"'), true,
-  '带常见 cmd 开关的 /c 包装应命中');
+  'a /c wrapper with common cmd switches should match');
 assert.strictEqual(isGitCommit('& "C:\\Program Files\\Git\\cmd\\git.exe" commit -m "x"'), true,
-  'PowerShell 调用运算符执行绝对路径 git.exe commit 应命中');
-assert.strictEqual(isGitCommit('command git commit -m "x"'), true, 'command 包装的 git commit 应命中');
-assert.strictEqual(isGitCommit('echo "git commit"'), false, 'echo 内 git commit 不应命中');
-assert.strictEqual(isGitCommit('git commit-graph write'), false, 'commit-graph 不应命中');
-assert.strictEqual(isGitCommit('git commit-tree HEAD^{tree}'), false, 'commit-tree 不应命中');
-assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
+  'the PowerShell call operator running an absolute-path git.exe commit should match');
+assert.strictEqual(isGitCommit('command git commit -m "x"'), true, 'git commit wrapped by command should match');
+assert.strictEqual(isGitCommit('echo "git commit"'), false, 'git commit inside echo should not match');
+assert.strictEqual(isGitCommit('git commit-graph write'), false, 'commit-graph should not match');
+assert.strictEqual(isGitCommit('git commit-tree HEAD^{tree}'), false, 'commit-tree should not match');
+assert.strictEqual(isGitCommit('git status'), false, 'git status should not match');
 
 {
   const base = path.resolve('base');
@@ -77,41 +77,41 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
   assert.strictEqual(commitCwd('cd /d "repo with space" && git.exe commit -m "x"', base),
     path.join(base, 'repo with space'));
   assert.strictEqual(commitCwd('cmd /c "cd /d repo && git.exe commit -m x"', base),
-    path.join(base, 'repo'), 'cmd 引号内的 cd 必须决定实际提交目录');
+    path.join(base, 'repo'), 'a cd inside cmd quotes must decide the real commit directory');
 }
 
-// Git -z 输出必须原样保留空格、中文、shell 元字符；POSIX 还覆盖文件名内换行。
+// Git -z output must keep spaces, non-ASCII names and shell metacharacters intact; on POSIX it also covers newlines inside file names.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-paths-'));
   try {
     git(['init'], tmp);
-    const names = ['src/with space.cc', 'src/中文.cpp', 'src/hash#bracket[1].hpp'];
+    const names = ['src/with space.cc', 'src/\u4e2d\u6587.cpp', 'src/hash#bracket[1].hpp'];
     if (process.platform !== 'win32') names.push('src/line\nbreak.cc');
     for (const name of names) writeBytes(path.join(tmp, ...name.split('/')), CLEAN_CPP);
     git(['add', '--', ...names], tmp);
 
     const actual = stagedCppFiles(tmp).map((filePath) => path.relative(tmp, filePath).split(path.sep).join('/'));
-    assert.deepStrictEqual(actual.sort(), [...names].sort(), '暂存文件名必须按 NUL 边界完整解析');
+    assert.deepStrictEqual(actual.sort(), [...names].sort(), 'staged file names must be parsed completely at NUL boundaries');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// 非 commit 命令 → passSilent（exit 0，stdout 空）
+// A non-commit command -> passSilent (exit 0, empty stdout)
 {
   const r = runHook('git status');
-  assert.strictEqual(r.status, 0, '非 commit 应 exit 0');
-  assert.strictEqual(r.stdout, '', '非 commit 应 stdout 空');
+  assert.strictEqual(r.status, 0, 'a non-commit command should exit 0');
+  assert.strictEqual(r.stdout, '', 'a non-commit command should leave stdout empty');
 }
 
-// echo 含 git commit → 不触发 lint，passSilent
+// echo containing git commit -> no lint, passSilent
 {
   const r = runHook('echo "git commit"');
-  assert.strictEqual(r.status, 0, 'echo 应 exit 0');
-  assert.strictEqual(r.stdout, '', 'echo 应 stdout 空');
+  assert.strictEqual(r.status, 0, 'echo should exit 0');
+  assert.strictEqual(r.stdout, '', 'echo should leave stdout empty');
 }
 
-// git -C 指向的仓库有 staged C++ 违规时，应检查目标仓库而不是 hook 进程 cwd。
+// When the repo targeted by git -C has staged C++ violations, the target repo is checked, not the hook process cwd.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-scope-'));
   try {
@@ -125,7 +125,7 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     git(['add', 'bad.cc'], repoB);
 
     const r = runHook(`git -C "${repoB}" commit -m "x"`, repoA);
-    assert.strictEqual(r.status, 0, 'hook 协议要求 exit 0');
+    assert.strictEqual(r.status, 0, 'the hook protocol requires exit 0');
     const payload = JSON.parse(r.stdout);
     assert.strictEqual(payload.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(payload.hookSpecificOutput.permissionDecisionReason.includes('bad.cc'));
@@ -134,7 +134,7 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
   }
 }
 
-// 暂存区是 LF、工作区后来改成 CRLF 且存在违规时，必须检查 index 的干净版本，不能误读工作区。
+// When the index holds LF and the working tree was later changed to CRLF with violations, the clean index version must be checked, not the working tree.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-index-lf-'));
   try {
@@ -148,15 +148,15 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     const before = fs.readFileSync(source);
 
     const r = runHook(`git commit -m "x"`, tmp);
-    assert.strictEqual(r.status, 0, '暂存区干净版本应通过提交检查');
-    assert.strictEqual(r.stdout, '', '暂存区干净版本通过时应静默');
-    assert.ok(fs.readFileSync(source).equals(before), '提交检查不得改写 CRLF 工作区');
+    assert.strictEqual(r.status, 0, 'the clean staged version should pass the commit check');
+    assert.strictEqual(r.stdout, '', 'the clean staged version should pass silently');
+    assert.ok(fs.readFileSync(source).equals(before), 'the commit check must not rewrite a CRLF working tree');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// 暂存区是 LF 且存在违规、工作区后来变成干净 CRLF 时，必须按 index 版本阻止提交。
+// When the index holds LF with violations and the working tree later became clean CRLF, the commit must still be blocked by the index version.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-index-violation-'));
   try {
@@ -170,18 +170,18 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     const before = fs.readFileSync(source);
 
     const r = runHook(`git commit -m "x"`, tmp);
-    assert.strictEqual(r.status, 0, 'hook 协议要求 exit 0');
+    assert.strictEqual(r.status, 0, 'the hook protocol requires exit 0');
     const payload = JSON.parse(r.stdout);
     assert.strictEqual(payload.hookSpecificOutput.permissionDecision, 'deny',
-      '暂存区违规版本必须阻止提交');
+      'a violating staged version must block the commit');
     assert.ok(payload.hookSpecificOutput.permissionDecisionReason.includes('src/main.cc'));
-    assert.ok(fs.readFileSync(source).equals(before), '提交检查不得改写 CRLF 工作区');
+    assert.ok(fs.readFileSync(source).equals(before), 'the commit check must not rewrite a CRLF working tree');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// CPPLINT.cfg 也必须取 index 版本：暂存配置关闭 casting 检查时应生效，即使工作区已重新开启。
+// CPPLINT.cfg must also come from the index: a staged config that turns off the casting check must take effect even if the working tree turned it back on.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-index-cpplint-'));
   try {
@@ -197,15 +197,15 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     const before = fs.readFileSync(config);
 
     const r = runHook(`git commit -m "x"`, tmp);
-    assert.strictEqual(r.status, 0, '暂存 CPPLINT.cfg 应使对应源码通过检查');
-    assert.strictEqual(r.stdout, '', '暂存 CPPLINT.cfg 生效时应静默');
-    assert.ok(fs.readFileSync(config).equals(before), '提交检查不得改写工作区 CPPLINT.cfg');
+    assert.strictEqual(r.status, 0, 'a staged CPPLINT.cfg should let the matching source pass');
+    assert.strictEqual(r.stdout, '', 'a staged CPPLINT.cfg in effect should pass silently');
+    assert.ok(fs.readFileSync(config).equals(before), 'the commit check must not rewrite the working-tree CPPLINT.cfg');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// 无法枚举暂存区时检查不完整，必须明确拒绝提交，不能当作“没有 C++ 文件”。
+// When the staged files cannot be listed the check is incomplete; the commit must be explicitly rejected, not treated as "no C++ files".
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-staged-diff-failure-'));
   try {
@@ -214,16 +214,16 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     git(['add', 'clean.cc'], tmp);
 
     const r = runHook('git commit -m "x"', tmp, undefined, ['--require', stagedDiffFailureFixture]);
-    assert.strictEqual(r.status, 0, 'hook 协议要求拒绝提交时仍 exit 0');
+    assert.strictEqual(r.status, 0, 'the hook protocol requires exit 0 even when rejecting the commit');
     const payload = JSON.parse(r.stdout);
     assert.strictEqual(payload.hookSpecificOutput.permissionDecision, 'deny');
-    assert.match(payload.hookSpecificOutput.permissionDecisionReason, /暂存区|git diff/i);
+    assert.match(payload.hookSpecificOutput.permissionDecisionReason, /staged files|git diff/i);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// 快照清理失败属于检查不完整，必须明确拒绝提交，不能落入顶层 fail-open。
+// A snapshot cleanup failure makes the check incomplete; the commit must be explicitly rejected and must not fall into the top-level fail-open.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-cleanup-failure-'));
   try {
@@ -232,16 +232,16 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     git(['add', 'clean.cc'], tmp);
 
     const r = runHook('git commit -m "x"', tmp, undefined, ['--require', cleanupFailureFixture]);
-    assert.strictEqual(r.status, 0, 'hook 协议要求拒绝提交时仍 exit 0');
+    assert.strictEqual(r.status, 0, 'the hook protocol requires exit 0 even when rejecting the commit');
     const payload = JSON.parse(r.stdout);
     assert.strictEqual(payload.hookSpecificOutput.permissionDecision, 'deny');
-    assert.match(payload.hookSpecificOutput.permissionDecisionReason, /清理.*快照|快照.*清理/);
+    assert.match(payload.hookSpecificOutput.permissionDecisionReason, /clean.*snapshot|snapshot.*clean/i);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-// 显式启用 legacyChecks.cpplint 时，已提交过的文件同样必须检查。
+// With legacyChecks.cpplint explicitly enabled, previously committed files must be checked too.
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pre-commit-legacy-checks-'));
   try {
@@ -254,7 +254,7 @@ assert.strictEqual(isGitCommit('git status'), false, 'git status 不应命中');
     git(['commit', '-m', 'baseline'], tmp);
     writeBytes(path.join(tmp, '.claude-cpp-style', 'cpp-style.json'), Buffer.from(JSON.stringify({
       mode: 'incremental', checks: { cpplint: false },
-      legacyChecks: { cpplint: true, copyright: false },
+      legacyChecks: { cpplint: true },
     })));
     writeBytes(path.join(tmp, 'legacy.cc'), VIOLATION_CPP);
     git(['add', 'legacy.cc'], tmp);

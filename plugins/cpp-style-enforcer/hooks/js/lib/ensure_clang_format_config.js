@@ -10,19 +10,19 @@ NamespaceIndentation: None
 `;
 
 /**
- * 走全套流程且项目根缺少 .clang-format 时，生成一份 Google 风格配置。
- * 让 VS / clangd / 本插件三方读同一份配置，风格一致。
+ * When the full set runs and the project root has no .clang-format, generate a Google-style one.
+ * VS, clangd and this plugin then all read the same config, so the style stays consistent.
  *
- * - root 为 null（非 git）→ 不生成（无可靠项目根概念）。
- * - 已存在 .clang-format 或 _clang-format（Windows 兼容名）→ 绝不覆盖，直接返回。
- * - 写文件 UTF-8 无 BOM、LF；失败 try/catch 不崩。
+ * - root is null (not a git repo) -> nothing is generated (no reliable project root).
+ * - .clang-format or _clang-format (the Windows-compatible name) already exists -> never overwritten, return immediately.
+ * - Files are written as UTF-8 without BOM and with LF; failures are swallowed with try/catch.
  *
- * @param {string|null} root git 仓库根
+ * @param {string|null} root Git repository root.
  */
 function ensureClangFormatConfig(root) {
   if (!root) return;
   try {
-    // clang-format 向父目录继承配置；不要新建根配置遮盖已经适用的风格。
+    // clang-format inherits config from parent directories; do not create a root config that would shadow a style that already applies.
     let current = path.resolve(root);
     while (true) {
       if (fs.existsSync(path.join(current, '.clang-format'))
@@ -33,7 +33,7 @@ function ensureClangFormatConfig(root) {
     }
     fs.writeFileSync(path.join(root, '.clang-format'), Buffer.from(CONTENT, 'utf-8'), { flag: 'wx' });
   } catch (_) {
-    // 生成失败不影响主流程
+    // A generation failure must not affect the main flow.
   }
 }
 

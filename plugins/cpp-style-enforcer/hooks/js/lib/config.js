@@ -4,26 +4,33 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-/** 硬编码安全默认（全局模板/项目配置都缺失或损坏时的兜底） */
+/** Hard-coded safe defaults, used when the global template and project config are missing or corrupt. */
 const DEFAULT_CONFIG = {
   enabled: true,
   mode: 'incremental',
   lineEnding: 'preserve',
-  checks: { clangFormat: true, copyright: true, cpplint: true, bom: true },
-  legacyChecks: { clangFormat: false, copyright: false, cpplint: false, bom: false },
-  copyrightInfo: { company: '', author: '', dateFormat: 'YYYY/MM/DD HH:mm' },
+  checks: { clangFormat: true, cpplint: true, bom: true },
+  legacyChecks: { clangFormat: false, cpplint: false, bom: false },
 };
 
-/** 全局模板默认路径 ~/.claude/cpp-style-template.json */
+/**
+ * Default path of the global template: `~/.claude/cpp-style-template.json`.
+ * @returns {string}
+ * @example
+ * userTemplatePath() // '/home/me/.claude/cpp-style-template.json'
+ */
 function userTemplatePath() {
   return path.join(os.homedir(), '.claude', 'cpp-style-template.json');
 }
 
 /**
- * 用户全局模板不存在才从出厂默认复制；已存在绝不覆盖。复制失败 try/catch 吞掉。
- * @param {string} defaultPath 插件出厂默认模板绝对路径
- * @param {string} [userPath] 用户模板路径（默认 ~/.claude/cpp-style-template.json）
- * @returns {string} 用户模板路径
+ * Copy the factory template to the user's global template only when it does not exist yet;
+ * an existing template is never overwritten. Copy failures are swallowed.
+ * @param {string} defaultPath Absolute path of the plugin's factory template.
+ * @param {string} [userPath] User template path (default `~/.claude/cpp-style-template.json`).
+ * @returns {string} The user template path.
+ * @example
+ * ensureUserTemplate('/plugin/templates/cpp-style-template.default.json');
  */
 function ensureUserTemplate(defaultPath, userPath = userTemplatePath()) {
   try {
@@ -31,12 +38,12 @@ function ensureUserTemplate(defaultPath, userPath = userTemplatePath()) {
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
     fs.copyFileSync(defaultPath, userPath);
   } catch (_) {
-    // 权限/源缺失等 → 降级到硬编码默认，不崩
+    // Permission problems or a missing source: fall back to the hard-coded defaults.
   }
   return userPath;
 }
 
-/** 安全读 JSON 文件，失败返回 null */
+/** Read a JSON file safely; returns null on any failure. */
 function readJsonSafe(filePath) {
   try {
     if (!filePath || !fs.existsSync(filePath)) return null;
@@ -46,7 +53,7 @@ function readJsonSafe(filePath) {
   }
 }
 
-/** 从被编辑文件向上找 .claude-cpp-style/cpp-style.json，找不到返回 null */
+/** Walk up from the edited file looking for `.claude-cpp-style/cpp-style.json`; null when not found. */
 function findProjectConfig(filePath) {
   try {
     let dir = path.dirname(path.resolve(filePath));
@@ -61,29 +68,26 @@ function findProjectConfig(filePath) {
   return null;
 }
 
-/** 规范化：字段级合并 base ⊕ override，checks/legacyChecks 各项缺失默认见注释 */
+/**
+ * Normalize by merging field by field: `base` first, then `override`.
+ * Unknown keys (for example the removed `copyright` / `copyrightInfo`) are ignored.
+ */
 function normalize(base, override) {
   const merged = { ...DEFAULT_CONFIG, ...base, ...override };
   const checksIn = { ...DEFAULT_CONFIG.checks, ...(base && base.checks), ...(override && override.checks) };
   const checks = {
     clangFormat: checksIn.clangFormat !== false,
-    copyright: checksIn.copyright !== false,
     cpplint: checksIn.cpplint !== false,
     bom: checksIn.bom !== false,
   };
-  // legacyChecks: 老文件（git 已追踪）的每项开关；默认全部关闭以保持原编码和格式。
-  // bom 仅保留兼容：已跟踪文件始终保持原 BOM 状态，不因配置被强制加 BOM。
+  // legacyChecks are the per-check switches for tracked (old) files. Everything is off by default
+  // so original encoding and formatting are preserved. `bom` is kept only for compatibility:
+  // tracked files always keep their original BOM state regardless of this flag.
   const legacyIn = { ...DEFAULT_CONFIG.legacyChecks, ...(base && base.legacyChecks), ...(override && override.legacyChecks) };
   const legacyChecks = {
     clangFormat: legacyIn.clangFormat === true,
-    copyright: legacyIn.copyright === true,
     cpplint: legacyIn.cpplint === true,
     bom: legacyIn.bom === true,
-  };
-  const copyrightInfo = {
-    ...DEFAULT_CONFIG.copyrightInfo,
-    ...(base && base.copyrightInfo),
-    ...(override && override.copyrightInfo),
   };
   return {
     enabled: merged.enabled !== false,
@@ -91,16 +95,17 @@ function normalize(base, override) {
     lineEnding: ['lf', 'crlf'].includes(merged.lineEnding) ? merged.lineEnding : 'preserve',
     checks,
     legacyChecks,
-    copyrightInfo,
   };
 }
 
 /**
- * 读全局模板 ⊕ 项目配置字段级覆盖，返回规范化配置对象。
- * 全局/项目缺失或损坏 → 用默认值，绝不崩。
- * @param {string} filePath 被编辑文件路径
- * @param {string} [globalPath] 全局模板路径（默认 ~/.claude/cpp-style-template.json）
- * @returns {{enabled:boolean, mode:string, lineEnding:string, checks:object, legacyChecks:object, copyrightInfo:object}}
+ * Read the global template, overlay the project config field by field, and return the
+ * normalized configuration. Missing or corrupt files fall back to defaults and never throw.
+ * @param {string} filePath Path of the edited file.
+ * @param {string} [globalPath] Global template path (default `~/.claude/cpp-style-template.json`).
+ * @returns {{enabled:boolean, mode:string, lineEnding:string, checks:object, legacyChecks:object}}
+ * @example
+ * loadConfig('/proj/src/a.cc').checks.cpplint // true
  */
 function loadConfig(filePath, globalPath = userTemplatePath()) {
   const global = readJsonSafe(globalPath) || {};

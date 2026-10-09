@@ -3,7 +3,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const script = path.join(__dirname, 'fixtures', 'stdin-runner.js');
-// fixtures/stdin-runner.js: 调用 readStdinJson 并 console.log(JSON.stringify(result))
+// fixtures/stdin-runner.js: calls readStdinJson and console.log(JSON.stringify(result))
 require('fs').mkdirSync(path.dirname(script), { recursive: true });
 require('fs').writeFileSync(script, `
 const { readStdinJson } = require('${path.join(__dirname, '..', 'lib', 'stdin.js').replace(/\\/g, '/')}');
@@ -15,7 +15,7 @@ function run(input) {
   return JSON.parse(r.stdout.trim() || '{}');
 }
 
-assert.deepStrictEqual(run('{"a":1}'), { a: 1 }, '合法 JSON 应解析');
-assert.deepStrictEqual(run(''), {}, '空输入应返回 {}');
-assert.deepStrictEqual(run('not json'), {}, '非法 JSON 应返回 {}');
+assert.deepStrictEqual(run('{"a":1}'), { a: 1 }, 'valid JSON should be parsed');
+assert.deepStrictEqual(run(''), {}, 'empty input should return {}');
+assert.deepStrictEqual(run('not json'), {}, 'invalid JSON should return {}');
 console.log('stdin.test.js PASS');

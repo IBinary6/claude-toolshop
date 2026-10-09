@@ -3,14 +3,14 @@
 const path = require('path');
 const { ensureUserTemplate } = require('./lib/config');
 
-// 插件出厂默认模板绝对路径（hooks/js → 插件根 → templates/）
+// Absolute path of the plugin's factory default template (hooks/js -> plugin root -> templates/)
 const PLUGIN_DEFAULT_TEMPLATE = path.join(__dirname, '..', '..', 'templates', 'cpp-style-template.default.json');
 
 try {
   ensureUserTemplate(PLUGIN_DEFAULT_TEMPLATE);
 } catch (_) {
-  // 复制失败（权限等）→ 静默吞掉，调用方按无全局模板降级硬编码默认
+  // Copy failed (permissions, etc.): swallow it; callers fall back to the hard-coded defaults without a global template.
 }
 
-// 此时尚未收到用户任务，不能因为打开 C++ 仓库就写项目文件。
-// 项目配置在实际编辑后的 Stop / SubagentStop 收尾流程中按需初始化。
+// No user task has arrived yet, so opening a C++ repository must not write project files.
+// The project config is created on demand by the Stop / SubagentStop closing step after real edits.

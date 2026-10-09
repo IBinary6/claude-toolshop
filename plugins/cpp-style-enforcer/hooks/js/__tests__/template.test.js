@@ -4,34 +4,33 @@ const path = require('path');
 
 const pluginRoot = path.join(__dirname, '..', '..', '..');
 
-// 出厂模板必须含 enabled/mode/lineEnding/checks/legacyChecks/copyrightInfo 全字段，且为合法 JSON
+// The factory template must contain enabled/mode/lineEnding/checks/legacyChecks and be valid JSON
 const tplPath = path.join(pluginRoot, 'templates', 'cpp-style-template.default.json');
-assert.ok(fs.existsSync(tplPath), '出厂模板文件应存在');
+assert.ok(fs.existsSync(tplPath), 'the factory template file should exist');
 const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf-8'));
-assert.strictEqual(tpl.enabled, true, 'enabled 缺省 true');
-assert.strictEqual(tpl.mode, 'incremental', 'mode 缺省 incremental');
-assert.deepStrictEqual(tpl.checks, { clangFormat: true, copyright: true, cpplint: true, bom: true }, 'checks 四项全 true');
+assert.strictEqual(tpl.enabled, true, 'enabled defaults to true');
+assert.strictEqual(tpl.mode, 'incremental', 'mode defaults to incremental');
+assert.deepStrictEqual(tpl.checks, { clangFormat: true, cpplint: true, bom: true }, 'all three checks default to true');
 assert.deepStrictEqual(
   tpl.legacyChecks,
-  { clangFormat: false, copyright: false, cpplint: false, bom: false },
-  '已跟踪文件默认保持原编码和格式',
+  { clangFormat: false, cpplint: false, bom: false },
+  'tracked files keep their original encoding and format by default',
 );
-assert.strictEqual(tpl.lineEnding, 'preserve', '非 VS 工程默认保留原行尾');
-assert.strictEqual(tpl.copyrightInfo.company, '', 'company 缺省空串');
-assert.strictEqual(tpl.copyrightInfo.author, '', 'author 缺省空串');
-assert.strictEqual(tpl.copyrightInfo.dateFormat, 'YYYY/MM/DD HH:mm', 'dateFormat 缺省值');
+assert.strictEqual(tpl.lineEnding, 'preserve', 'non-VS projects keep the original line endings by default');
+assert.strictEqual(tpl.copyrightInfo, undefined, 'the removed copyright settings are not part of the template');
+assert.strictEqual(tpl.checks.copyright, undefined, 'the removed copyright check is not part of the template');
 
-// plugin.json / package.json / marketplace.json 版本必须一致，避免发布口径漂移
+// plugin.json / package.json / marketplace.json versions must agree, so the release numbers cannot drift
 const pj = JSON.parse(fs.readFileSync(path.join(pluginRoot, '.claude-plugin', 'plugin.json'), 'utf-8'));
 const pkg = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'package.json'), 'utf-8'));
 const market = JSON.parse(fs.readFileSync(path.join(pluginRoot, '..', '..', '.claude-plugin', 'marketplace.json'), 'utf-8'));
 const marketEntry = market.plugins.find((p) => p.name === 'cpp-style-enforcer');
-assert.ok(marketEntry, 'marketplace.json 应包含 cpp-style-enforcer');
-assert.strictEqual(pkg.version, pj.version, 'package.json 版本应与 plugin.json 一致');
-assert.strictEqual(marketEntry.version, pj.version, 'marketplace.json 版本应与 plugin.json 一致');
+assert.ok(marketEntry, 'marketplace.json should include cpp-style-enforcer');
+assert.strictEqual(pkg.version, pj.version, 'the package.json version should match plugin.json');
+assert.strictEqual(marketEntry.version, pj.version, 'the marketplace.json version should match plugin.json');
 
-// 目录骨架存在
+// The directory skeleton exists
 for (const d of ['hooks/js/lib', 'hooks/js/steps', 'hooks/js/__tests__']) {
-  assert.ok(fs.existsSync(path.join(pluginRoot, d)), `${d} 目录应存在`);
+  assert.ok(fs.existsSync(path.join(pluginRoot, d)), `${d} directory should exist`);
 }
 console.log('template.test.js PASS');

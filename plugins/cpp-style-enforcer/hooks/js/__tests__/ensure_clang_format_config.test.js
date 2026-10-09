@@ -18,51 +18,51 @@ function mkRepo() {
 }
 
 try {
-  // 1. git 仓库无 .clang-format → 生成，含 BasedOnStyle: Google，无 BOM，LF
+  // 1. A git repo without .clang-format -> generated, with BasedOnStyle: Google, no BOM, LF
   {
     const root = mkRepo();
     ensureClangFormatConfig(root);
     const p = path.join(root, '.clang-format');
-    assert.ok(fs.existsSync(p), '应生成 .clang-format');
+    assert.ok(fs.existsSync(p), '.clang-format should be generated');
     const buf = fs.readFileSync(p);
-    assert.ok(!buf.subarray(0, 3).equals(BOM), '生成文件不应有 BOM');
+    assert.ok(!buf.subarray(0, 3).equals(BOM), 'the generated file should have no BOM');
     const txt = buf.toString('utf-8');
-    assert.ok(/BasedOnStyle:\s*Google/.test(txt), '内容应含 BasedOnStyle: Google');
-    assert.ok(!txt.includes('\r'), '应为 LF 换行');
+    assert.ok(/BasedOnStyle:\s*Google/.test(txt), 'the content should contain BasedOnStyle: Google');
+    assert.ok(!txt.includes('\r'), 'it should use LF line endings');
   }
 
-  // 2. 已有 .clang-format（用户自定义）→ 字节不变，绝不覆盖
+  // 2. An existing .clang-format (user customized) -> bytes unchanged, never overwritten
   {
     const root = mkRepo();
     const p = path.join(root, '.clang-format');
     const custom = Buffer.from('BasedOnStyle: LLVM\nIndentWidth: 8\n', 'utf-8');
     fs.writeFileSync(p, custom);
     ensureClangFormatConfig(root);
-    assert.ok(fs.readFileSync(p).equals(custom), '已存在 .clang-format 字节不变');
+    assert.ok(fs.readFileSync(p).equals(custom), 'an existing .clang-format keeps its bytes');
   }
 
-  // 3. 已有 _clang-format（Windows 兼容名）→ 不生成 .clang-format
+  // 3. An existing _clang-format (the Windows-compatible name) -> .clang-format is not generated
   {
     const root = mkRepo();
     const compat = path.join(root, '_clang-format');
     fs.writeFileSync(compat, 'BasedOnStyle: LLVM\n', 'utf-8');
     ensureClangFormatConfig(root);
-    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), '存在 _clang-format 时不生成 .clang-format');
+    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), '.clang-format is not generated when _clang-format exists');
   }
 
-  // 4. 非 git（root=null）→ 不生成、不崩
+  // 4. Not a git repo (root=null) -> nothing generated, no crash
   {
-    assert.doesNotThrow(() => ensureClangFormatConfig(null), 'root=null 不应抛出');
+    assert.doesNotThrow(() => ensureClangFormatConfig(null), 'root=null should not throw');
   }
 
-  // 5. 父目录风格正在生效时，不用仓库根的缺省风格遮盖它。
+  // 5. When a parent directory's style already applies, do not shadow it with a default style at the repo root.
   {
     const parent = mkRepo();
     const root = path.join(parent, 'nested');
     fs.mkdirSync(root);
     fs.writeFileSync(path.join(parent, '.clang-format'), 'BasedOnStyle: LLVM\nIndentWidth: 4\n');
     ensureClangFormatConfig(root);
-    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), '保留父目录配置继承');
+    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), 'the parent directory config inheritance is preserved');
   }
 
   console.log('ensure_clang_format_config.test.js PASS');

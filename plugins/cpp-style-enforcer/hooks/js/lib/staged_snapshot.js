@@ -9,7 +9,7 @@ const isWindows = process.platform === 'win32';
 const MAX_BLOB_SIZE = 32 * 1024 * 1024;
 
 /**
- * 将工作区路径转换为安全的仓库相对路径，供 Git index 查询使用。
+ * Convert a working-tree path to a safe repository-relative path for Git index queries.
  * @param {string} root
  * @param {string} filePath
  * @returns {string}
@@ -17,13 +17,13 @@ const MAX_BLOB_SIZE = 32 * 1024 * 1024;
 function relativeGitPath(root, filePath) {
   const relative = path.relative(path.resolve(root), path.resolve(filePath));
   if (!relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) {
-    throw new Error(`文件不在仓库根目录内：${filePath}`);
+    throw new Error(`The file is not inside the repository root: ${filePath}`);
   }
   return relative.split(path.sep).join('/');
 }
 
 /**
- * 读取 Git index 中指定路径的 blob；返回 null 表示该路径当前不存在于 index。
+ * Read the blob at the given path from the Git index; null means the path is not in the index right now.
  * @param {string} root
  * @param {string} relativePath
  * @returns {Buffer|null}
@@ -41,7 +41,7 @@ function readIndexBlob(root, relativePath) {
 }
 
 /**
- * 列出当前 index 中的全部路径，用于查找适用的 CPPLINT.cfg。
+ * List every path currently in the index, used to find the applicable CPPLINT.cfg files.
  * @param {string} root
  * @returns {string[]}
  */
@@ -53,13 +53,13 @@ function listIndexPaths(root) {
     windowsHide: isWindows,
   });
   if (result.error || result.status !== 0 || !Buffer.isBuffer(result.stdout)) {
-    throw new Error('无法读取 Git index 文件列表');
+    throw new Error('Could not read the Git index file list');
   }
   return result.stdout.toString('utf8').split('\0').filter(Boolean);
 }
 
 /**
- * 将 index blob 写入快照，保持仓库相对路径和原始字节。
+ * Write an index blob into the snapshot, keeping the repository-relative path and the original bytes.
  * @param {string} snapshotRoot
  * @param {string} relativePath
  * @param {Buffer} contents
@@ -69,7 +69,7 @@ function writeSnapshotFile(snapshotRoot, relativePath, contents) {
   const target = path.resolve(snapshotRoot, ...relativePath.split('/'));
   const rootWithSeparator = `${path.resolve(snapshotRoot)}${path.sep}`;
   if (!target.startsWith(rootWithSeparator)) {
-    throw new Error(`非法仓库相对路径：${relativePath}`);
+    throw new Error(`Illegal repository-relative path: ${relativePath}`);
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, contents);
@@ -77,11 +77,11 @@ function writeSnapshotFile(snapshotRoot, relativePath, contents) {
 }
 
 /**
- * 创建只读语义上的 Git index 临时快照。
- * 快照包含要检查的 C++ 文件，以及 index 中全部 CPPLINT.cfg，供 cpplint 保持
- * header guard、include_order 和目录级配置语义。调用方必须在 finally 中清理。
+ * Create a temporary snapshot of the Git index (read-only in spirit).
+ * The snapshot holds the C++ files to check plus every CPPLINT.cfg in the index, so cpplint keeps
+ * its header guard, include_order and directory-level configuration semantics. Callers must clean it up in finally.
  * @param {string} root
- * @param {string[]} filePaths 要检查的工作区绝对路径
+ * @param {string[]} filePaths Absolute working-tree paths of the files to check.
  * @returns {{root:string, files:Array<{relativePath:string,filePath:string}>, cleanup:Function}}
  * @example
  * const snap = createStagedSnapshot(root, [path.join(root, 'src/a.cpp')]);
@@ -98,7 +98,7 @@ function createStagedSnapshot(root, filePaths) {
 
     for (const relativePath of pathsToCopy) {
       const blob = readIndexBlob(root, relativePath);
-      if (!blob) throw new Error(`无法读取 Git index blob：${relativePath}`);
+      if (!blob) throw new Error(`Could not read the Git index blob: ${relativePath}`);
       writeSnapshotFile(snapshotRoot, relativePath, blob);
     }
 

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * 从 stdin 读取 JSON（hook 输入）。空输入或解析失败返回 {}。
+ * Read JSON (the hook input) from stdin. Empty input or a parse failure returns {}.
  * @param {{timeoutMs?:number, maxSize?:number}} options
  * @returns {Promise<object>}
  */

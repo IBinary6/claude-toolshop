@@ -25,27 +25,21 @@
 
 | 插件 | 当前用途 | 日常用法 |
 | --- | --- | --- |
-| `agent-dispatch` | Claude 原生插件 subagents 与任务级路由，保护主上下文并按风险选择角色。 | 安装后自动创建配置骨架；SessionStart、UserPromptSubmit 和 subagent 生命周期 hook 协同工作。 |
-| `bugdb-knowledge` | 本地 Bug 知识库，Shell 成功输出或执行失败时召回历史解决方案。 | 安装后正常工作；需要手动查询时使用插件命令，知识库存储在本机。 |
-| `codemap-boost` | 基于 `code-review-graph` 和可选 `graphify` 的代码结构图增强。 | 首次运行 `/codemap-boost-setup`；之后覆盖内置编辑、Shell 与 MCP 补丁并自动维护图谱。 |
-| `cpp-style-enforcer` | 团队 C++ 风格流程：clang-format、cpplint、版权头、BOM 和提交前检查。 | 内置编辑或 Agentic Patch/MCP 批量补丁都会触发对应 C++ 文件检查。 |
+| `agent-dispatch` | Claude 原生插件 subagents 与任务级路由：opus 规划与审查、sonnet 写代码、haiku 读代码/日志/搜索/研究/测试。 | 安装后自动创建配置骨架；SessionStart、UserPromptSubmit 和 subagent 生命周期 hook 协同工作，子代理不得运行 Git。 |
+| `bugdb-knowledge` | 本地 Bug 知识库，Shell 输出或用户粘贴的错误行命中时只读召回历史解决方案。 | 安装后正常工作；召回不会创建或迁移数据库；需要手动查询时使用插件命令。 |
+| `codemap-boost` | 内置 `code-review-graph` 与 Serena（插件私有环境，自带 MCP），可选 `graphify`。 | 安装后首次会话自动后台安装，装好后 `/mcp` 重连；之后自动维护图谱，无需 pip 或另行注册 MCP。 |
+| `cpp-style-enforcer` | Google C++ 风格流程：clang-format、cpplint、行尾、BOM 和提交前检查（插件内文本与提示全部为英文）。 | 编辑时只记录，本轮结束（Stop/SubagentStop）统一处理；已跟踪文件默认保持原编码和格式。 |
 
 ## 推荐使用顺序
 
 1. 添加 marketplace。
 2. 安装需要的插件。
-3. 对 CodeMap 运行一次 setup：
-
-```text
-/codemap-boost-setup
-```
-
-4. 完全重启 Claude Code。
-5. 在项目中正常提问、编辑、提交；hook 会在后台维护图谱和风格检查。
+3. 完全重启 Claude Code；首次会话 codemap-boost 在后台安装内置的 code-review-graph 与 Serena，装好后运行 `/mcp` 重连（排障用 `/codemap-boost-setup`）。
+4. 在项目中正常提问、编辑、提交；hook 会在后台维护图谱和风格检查。
 
 ## CodeMap Boost 怎么用
 
-`codemap-boost` 的依赖安装和 MCP 注册通过 `/codemap-boost-setup` 完成。setup 完成后：
+`codemap-boost` 自带 `.mcp.json`，code-review-graph 与 Serena 装在插件私有环境（`CLAUDE_PLUGIN_DATA`），不需要全局 pip，也不要再在 cc-switch 或 `~/.claude.json` 里注册同名 MCP。运行后：
 
 - `SessionStart` 会检查 `.code-review-graph/`，缺失或空图时后台 build。
 - `PostToolUse` 会在编辑或 Bash 后低频触发 `code-review-graph update`。
@@ -56,16 +50,15 @@
 常用检查：
 
 ```bash
-code-review-graph --version
-code-review-graph status
+node "<插件目录>/scripts/ensure-runtime.cjs" --doctor
 ```
 
 ## C++ Style 怎么用
 
 `cpp-style-enforcer` 安装后会自动处理 C/C++ 编辑流程：
 
-- `SessionStart` 准备全局和项目配置。
-- `PostToolUse` 对 C/C++ 写入执行格式化、BOM、版权头和 cpplint。
+- `SessionStart` 只准备全局模板，不写项目文件。
+- `PostToolUse` 只记录本轮编辑的 C/C++ 文件；`Stop`/`SubagentStop` 统一执行格式化、BOM（仅新文件）、行尾和 cpplint。
 - `PreToolUse:Bash` 识别真正的 `git commit`，对暂存区 C++ 文件做提交前检查。
 
 全局模板通常在：

@@ -9,13 +9,13 @@ const { pythonCandidates, resolvePythonCandidates } = require('./python');
 const isWindows = process.platform === 'win32';
 const ICONV_LITE_SPEC = 'iconv-lite@0.6.3';
 const CLANG_FORMAT_SPEC = 'clang-format==18.1.8';
-// 插件根：hooks/js/lib → hooks/js → hooks → 插件根。
-// 优先用 hook 运行时注入的 CLAUDE_PLUGIN_ROOT；缺失（如直接 node 跑测试）回退到相对 __dirname。
+// Plugin root: hooks/js/lib -> hooks/js -> hooks -> plugin root.
+// Prefer CLAUDE_PLUGIN_ROOT injected by the hook runtime; when missing (for example tests run directly with node) fall back to a path relative to __dirname.
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.join(__dirname, '..', '..', '..');
 
 /**
- * 持久数据目录（~/.claude/plugins/data/{id}/）。由 hook 运行时注入 CLAUDE_PLUGIN_DATA。
- * 缺失（直接 node 跑测试 / 老版本宿主）→ null，调用方据此降级。
+ * Persistent data directory (~/.claude/plugins/data/{id}/), injected by the hook runtime as CLAUDE_PLUGIN_DATA.
+ * Missing (tests run directly with node, or an old host) -> null, and callers degrade accordingly.
  */
 function pluginDataDir() {
   const d = process.env.CLAUDE_PLUGIN_DATA;
@@ -23,21 +23,21 @@ function pluginDataDir() {
 }
 
 /**
- * 标记文件绝对路径（用于“安装已失败、勿重试”）。
- * 安装目标在 PLUGIN_DATA，失败标记也应随之落 PLUGIN_DATA（持久、可写）；
- * PLUGIN_DATA 缺失时回退系统临时目录，避免污染 marketplace 插件缓存导致更新失败。
+ * Absolute path of a marker file (meaning "the install already failed, do not retry").
+ * The install target is PLUGIN_DATA, so the failure marker also lives there (persistent and writable);
+ * when PLUGIN_DATA is missing it falls back to the system temp dir so the marketplace plugin cache is not polluted and updates keep working.
  */
 function markerPath(name) {
   const dataDir = pluginDataDir();
   return path.join(dataDir || path.join(os.tmpdir(), 'cpp-style-enforcer'), name);
 }
 
-/** 安全检测：标记文件是否存在 */
+/** Safe check: does the marker file exist? */
 function markerExists(p) {
   try { return !!p && fs.existsSync(p); } catch (_) { return false; }
 }
 
-/** 安全写标记，失败静默 */
+/** Write a marker safely; failures are silent. */
 function writeMarker(p) {
   try {
     if (!p) return;
@@ -47,14 +47,14 @@ function writeMarker(p) {
 }
 
 /**
- * 安装 iconv-lite 到持久数据目录 PLUGIN_DATA（而非插件根）。
- * 原因：marketplace bundle 通道会剥离打包的 node_modules，且插件目录每次更新整体替换、
- * 只读场景不可写；PLUGIN_DATA 持久且可写。PLUGIN_DATA 缺失 → 跳过安装返回 false（别崩）。
- * 用 `npm install <pkg> --prefix <dataDir>`，依赖名硬编码与 package.json 一致。
+ * Install iconv-lite into the persistent data directory PLUGIN_DATA (not the plugin root).
+ * Why: the marketplace bundle channel strips the packaged node_modules, the plugin directory is replaced wholesale on every update,
+ * and it may be read-only; PLUGIN_DATA is persistent and writable. PLUGIN_DATA missing -> skip the install and return false (do not crash).
+ * Uses `npm install <pkg> --prefix <dataDir>`; the dependency name is hard-coded to match package.json.
  */
 function npmInstall() {
   const dataDir = pluginDataDir();
-  if (!dataDir) return false; // 无持久目录 → 不安装（降级，不崩）
+  if (!dataDir) return false; // No persistent directory -> do not install (degrade, do not crash)
   try {
     fs.mkdirSync(dataDir, { recursive: true });
   } catch (_) {}
@@ -70,7 +70,7 @@ function npmInstall() {
   }
 }
 
-/** 默认：pip 安装 clang-format（靠 python，跨平台最稳） */
+/** Default: pip-install clang-format (relies on python, the most reliable cross-platform route). */
 function pipInstallClangFormat() {
   for (const py of resolvePythonCandidates()) {
     try {
@@ -86,7 +86,7 @@ function pipInstallClangFormat() {
 }
 
 /**
- * 默认探测：以 `<cmd> [...args] --version` 试跑一个调用描述是否可用。
+ * Default probe: try running `<cmd> [...args] --version` to see whether an invocation descriptor works.
  * @param {{cmd:string, args:string[]}} desc
  * @returns {boolean}
  */
@@ -100,8 +100,8 @@ function probeClangFormat(desc) {
 }
 
 /**
- * 默认：拿已验证 Python 3 启动器的 Scripts 目录里 clang-format 可执行的绝对路径候选。
- * pip 安装的入口脚本常落在此目录，可能不在 PATH。失败静默返回 []。
+ * Default: candidate absolute paths of the clang-format executable in the Scripts directory of verified Python 3 launchers.
+ * Entry scripts installed by pip often land there and may not be on PATH. Failures silently return [].
  * @returns {Array<{cmd:string, args:string[]}>}
  */
 function scriptsDirCandidates() {
@@ -123,14 +123,14 @@ function scriptsDirCandidates() {
 }
 
 /**
- * 默认：按顺序找出可用的 clang-format 调用方式，返回调用描述 {cmd, args}，找不到返回 null。
- * 顺序：1) PATH 的 clang-format  2) pip 包模块入口 python -m clang_format（仅 Python 3）
- *      3) python Scripts 目录下的 clang-format 可执行。
+ * Default: find a usable way to call clang-format in order and return the invocation descriptor {cmd, args}; null when none is found.
+ * Order: 1) clang-format on PATH  2) the pip package module entry python -m clang_format (Python 3 only)
+ *        3) the clang-format executable in the python Scripts directory.
  *
  * @param {object} [opts]
- * @param {function({cmd:string,args:string[]}):boolean} [opts.probe] 注入探测函数（测试用）
- * @param {function():Array<{cmd:string,args:string[]}>} [opts.scriptsDirs] 注入 Scripts 候选生成（测试用）
- * @param {function():Array<{cmd:string,args:string[]}>} [opts.pythons] 注入已验证的 Python 3 候选（测试用）
+ * @param {function({cmd:string,args:string[]}):boolean} [opts.probe] Injected probe function (for tests).
+ * @param {function():Array<{cmd:string,args:string[]}>} [opts.scriptsDirs] Injected Scripts-directory candidate generator (for tests).
+ * @param {function():Array<{cmd:string,args:string[]}>} [opts.pythons] Injected verified Python 3 candidates (for tests).
  * @returns {{cmd:string, args:string[]}|null}
  */
 function detectClangFormat(opts) {
@@ -155,12 +155,12 @@ function detectClangFormat(opts) {
 }
 
 /**
- * 按双保险顺序解析一个模块的入口绝对路径，找不到返回 null。
- * 顺序：(a) ${CLAUDE_PLUGIN_ROOT}/node_modules/<name>（打包的，本地/git 源装即用）
- *      (b) ${CLAUDE_PLUGIN_DATA}/node_modules/<name>（兜底，SessionStart 装的）
- * 用 require.resolve(paths) 让 Node 在指定目录树里解析。全程不抛。
- * @param {string} name 模块名
- * @returns {string|null} 解析到的入口路径
+ * Resolve a module's absolute entry path in "belt and braces" order; returns null when not found.
+ * Order: (a) ${CLAUDE_PLUGIN_ROOT}/node_modules/<name> (bundled, works straight away for local/git installs)
+ *        (b) ${CLAUDE_PLUGIN_DATA}/node_modules/<name> (fallback, installed on demand)
+ * Uses require.resolve(paths) so Node resolves inside the given directory trees. Never throws.
+ * @param {string} name Module name.
+ * @returns {string|null} The resolved entry path.
  */
 function resolveModulePath(name) {
   const roots = [];
@@ -175,10 +175,10 @@ function resolveModulePath(name) {
   return null;
 }
 
-let _iconvCache; // undefined=未解析；null=确认不可用；object=模块
+let _iconvCache; // undefined = not resolved yet; null = confirmed unavailable; object = the module
 /**
- * 解析 iconv-lite 模块（双保险 ROOT→DATA），只解析不安装，结果缓存。
- * 供频繁调用的 bom_util 使用——轻量、不触发任何子进程。找不到返回 null（GBK 降级）。
+ * Resolve the iconv-lite module (belt and braces: ROOT then DATA). Resolve only, never install; the result is cached.
+ * Used by the frequently called bom_util: lightweight and spawns no child process. Returns null when not found (GBK degrades).
  * @returns {object|null}
  */
 function requireIconv() {
@@ -193,16 +193,16 @@ function requireIconv() {
 }
 
 /**
- * 解析 iconv-lite。运行态默认只检测不安装；显式 allowInstall 时安装一次到 PLUGIN_DATA。
- * 仍失败 → 写失败标记并返回 null（降级：GBK 跳过）。全程不抛。
+ * Resolve iconv-lite. At run time it only detects by default; with an explicit allowInstall it installs once into PLUGIN_DATA.
+ * Still failing -> write a failure marker and return null (degrade: GBK files are skipped). Never throws.
  *
- * 解析采用双保险：缺省模块名走 requireIconv（ROOT→DATA）；注入 moduleName 时按该名解析（测试用）。
+ * Resolution is belt and braces: the default module name goes through requireIconv (ROOT -> DATA); an injected moduleName is resolved by that name (for tests).
  *
  * @param {object} [opts]
- * @param {string} [opts.moduleName] 注入测试用；缺省走 requireIconv 双保险解析
- * @param {string} [opts.marker] 失败标记路径，缺省 PLUGIN_DATA(或插件根) .iconv-install-failed
- * @param {boolean} [opts.allowInstall] 显式允许安装；普通 hook 路径不要开启
- * @param {function():boolean} [opts.install] 注入安装函数，缺省 npmInstall（装到 PLUGIN_DATA）
+ * @param {string} [opts.moduleName] Injected for tests; by default requireIconv's belt-and-braces resolution is used.
+ * @param {string} [opts.marker] Failure marker path; defaults to .iconv-install-failed under PLUGIN_DATA (or the plugin root).
+ * @param {boolean} [opts.allowInstall] Explicitly allow installing; do not enable on ordinary hook paths.
+ * @param {function():boolean} [opts.install] Injected install function; defaults to npmInstall (installs into PLUGIN_DATA).
  * @returns {object|null}
  */
 function ensureIconvLite(opts) {
@@ -211,20 +211,20 @@ function ensureIconvLite(opts) {
   const allowInstall = o.allowInstall === true;
   const install = o.install || npmInstall;
 
-  // 注入了 moduleName → 按该名解析（测试用，可模拟“缺失”）；否则走双保险路径解析。
+  // An injected moduleName is resolved by that name (for tests, can simulate "missing"); otherwise use belt-and-braces path resolution.
   const tryRequire = o.moduleName
     ? () => { try { return require(o.moduleName); } catch (_) { return null; } }
     : () => requireIconv();
 
   const found = tryRequire();
-  if (found) return found;                 // 已装 → 不触发安装
-  if (markerExists(marker)) return null;    // 曾失败 → 不重试
-  if (!allowInstall) return null;           // 运行态只检测，不在 hook 内安装
+  if (found) return found;                 // Already installed -> do not trigger an install
+  if (markerExists(marker)) return null;    // Failed before -> do not retry
+  if (!allowInstall) return null;           // Run time only detects; never installs inside a hook
 
   let ok = false;
   try { ok = !!install(); } catch (_) { ok = false; }
   if (ok) {
-    // 安装后清缓存重解析（PLUGIN_DATA 刚装上的）
+    // Clear the cache and re-resolve after installing (PLUGIN_DATA was just populated)
     _iconvCache = undefined;
     const after = tryRequire();
     if (after) return after;
@@ -234,14 +234,14 @@ function ensureIconvLite(opts) {
 }
 
 /**
- * 解析 clang-format。运行态默认只检测不安装；显式 allowInstall 时 pip 安装一次。
- * 仍检测不到 → 写失败标记并返回 null（降级：clang-format 跳过）。全程不抛。
+ * Resolve clang-format. At run time it only detects by default; with an explicit allowInstall it pip-installs once.
+ * Still not detected -> write a failure marker and return null (degrade: clang-format is skipped). Never throws.
  *
  * @param {object} [opts]
- * @param {function():({cmd:string,args:string[]}|null)} [opts.detect] 注入检测函数，缺省 detectClangFormat
- * @param {string} [opts.marker] 失败标记路径，缺省插件根 .clang-format-install-failed
- * @param {boolean} [opts.allowInstall] 显式允许安装；普通 hook 路径不要开启
- * @param {function():boolean} [opts.install] 注入安装函数，缺省 pipInstallClangFormat
+ * @param {function():({cmd:string,args:string[]}|null)} [opts.detect] Injected detector; defaults to detectClangFormat.
+ * @param {string} [opts.marker] Failure marker path; defaults to .clang-format-install-failed under the plugin root.
+ * @param {boolean} [opts.allowInstall] Explicitly allow installing; do not enable on ordinary hook paths.
+ * @param {function():boolean} [opts.install] Injected install function; defaults to pipInstallClangFormat.
  * @returns {{cmd:string, args:string[]}|null}
  */
 function ensureClangFormat(opts) {
@@ -253,9 +253,9 @@ function ensureClangFormat(opts) {
 
   let desc = null;
   try { desc = detect(); } catch (_) { desc = null; }
-  if (desc) return desc;                      // 已可用 → 不触发安装
-  if (markerExists(marker)) return null;      // 曾失败 → 不重试
-  if (!allowInstall) return null;             // 运行态只检测，不在 hook 内安装
+  if (desc) return desc;                      // Already usable -> do not trigger an install
+  if (markerExists(marker)) return null;      // Failed before -> do not retry
+  if (!allowInstall) return null;             // Run time only detects; never installs inside a hook
 
   let ok = false;
   try { ok = !!install(); } catch (_) { ok = false; }
@@ -268,7 +268,7 @@ function ensureClangFormat(opts) {
 }
 
 /**
- * 兼容旧测试/调用方的 no-op。被动 SessionStart 不再后台安装依赖。
+ * No-op kept for older tests/callers. The passive SessionStart no longer installs dependencies in the background.
  * @returns {null}
  */
 function spawnPrewarm() {
@@ -285,7 +285,7 @@ module.exports = {
   pythonCandidates,
 };
 
-// CLI: 手动预热入口。仅做安装/检测，绝不输出。
+// CLI: manual prewarm entry. Only installs/detects and never prints anything.
 if (require.main === module && process.argv.includes('--prewarm')) {
   try { ensureIconvLite({ allowInstall: true }); } catch (_) {}
   try { ensureClangFormat({ allowInstall: true }); } catch (_) {}

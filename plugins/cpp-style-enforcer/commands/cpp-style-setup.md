@@ -1,47 +1,45 @@
 ---
-description: 查看或配置 cpp-style-enforcer：编辑全局模板或为当前项目写覆盖配置
+description: View or configure cpp-style-enforcer - edit the global template or write an override for the current project
 ---
 
-# cpp-style-enforcer 配置
+# cpp-style-enforcer configuration
 
-本命令是**按需配置工具**，纯查看与编辑配置，不做任何交互式提问或拦截。根据需要选择以下操作之一。
+This command is an **on-demand configuration tool**: it only views and edits configuration, and asks no interactive questions and blocks nothing. Pick one of the operations below as needed.
 
-## 配置层级
+## Configuration layers
 
-1. **全局模板** `~/.claude/cpp-style-template.json`：所有项目的默认值（公司名、作者、默认 mode、各检查开关）。SessionStart 首次自动创建，**已存在绝不覆盖**。
-2. **项目覆盖** `<项目根>/.claude-cpp-style/cpp-style.json`：对当前项目做**字段级覆盖**（只写想改的字段，其余回退全局模板）。注意是 `.claude-cpp-style` 文件夹内的 `cpp-style.json` 文件。
+1. **Global template** `~/.claude/cpp-style-template.json`: defaults for every project (default mode, per-check switches). SessionStart creates it the first time and **never overwrites an existing one**.
+2. **Project override** `<project root>/.claude-cpp-style/cpp-style.json`: overrides the global template **field by field** for this project (write only what you want to change). Note that it is the `cpp-style.json` file inside the `.claude-cpp-style` folder.
 
-## Schema（两层同构）
+## Schema (both layers have the same shape)
 
 ```json
 {
   "enabled": true,
   "mode": "incremental",
   "lineEnding": "preserve",
-  "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
-  "legacyChecks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": false },
-  "copyrightInfo": { "company": "", "author": "", "dateFormat": "YYYY/MM/DD HH:mm" }
+  "checks": { "clangFormat": true, "cpplint": true, "bom": true },
+  "legacyChecks": { "clangFormat": false, "cpplint": false, "bom": false }
 }
 ```
 
-- `enabled`：设为 false 彻底关闭本项目所有检查。
-- `mode`：`incremental`（仅新文件走全套）| `full`（所有文件走全套；已跟踪文件仍保持原 BOM 状态）。
-- `lineEnding`：`preserve`（默认，按正文占多数的行尾）| `lf` | `crlf`；Visual Studio 源工程始终 CRLF。
-- `checks.clangFormat`：格式化（VS 源工程保留 #include 顺序）；`checks.cpplint`：Google C++ 风格静态检查；`checks.copyright`：版权头；`checks.bom`：新文件补 UTF-8 BOM（已跟踪文件不改编码）。
-- `legacyChecks.*`：`incremental` 下老文件的检查项，默认全部关闭（保持原编码和格式）；`bom` 仅保留兼容。
-- `copyrightInfo.company`：空 = 不写版权头，cpplint 同步屏蔽 legal/copyright；`copyrightInfo.author`：作者名；`copyrightInfo.dateFormat`：当前时间显示格式，占位符 `YYYY`/`MM`/`DD`/`HH`/`mm`。
+- `enabled`: set to false to turn off all processing for the project.
+- `mode`: `incremental` (only new files get the full set) | `full` (every file gets the full set; tracked files still keep their BOM state).
+- `lineEnding`: `preserve` (default, keep the majority line ending) | `lf` | `crlf`; Visual Studio source projects are always CRLF.
+- `checks.clangFormat`: formatting (Visual Studio projects keep `#include` order); `checks.cpplint`: Google C++ style static check; `checks.bom`: add a UTF-8 BOM to new files (tracked files keep their encoding).
+- `legacyChecks.*`: the checks applied to tracked files under `incremental`. All off by default so the original encoding and format are kept; `bom` is kept for compatibility only.
+- The copyright-header feature was removed; any `copyright` / `copyrightInfo` keys in old configs are ignored.
 
-## 常见操作
+## Common operations
 
-- 设公司名/作者（全局）：编辑 `~/.claude/cpp-style-template.json` 的 `copyrightInfo.company` / `copyrightInfo.author`。
-- 某项目关闭：项目根 `.claude-cpp-style/cpp-style.json` 写 `{ "enabled": false }`。
-- 新项目要求所有文件规范：写 `{ "mode": "full" }`。
-- 只要 BOM：写 `{ "checks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": true } }`。
+- Disable a project: write `{ "enabled": false }` to `.claude-cpp-style/cpp-style.json` at the project root.
+- Require every file in a new project to comply: write `{ "mode": "full" }`.
+- Skip cpplint for new files: write `{ "checks": { "cpplint": false } }`.
+- Lint tracked files too: write `{ "legacyChecks": { "cpplint": true } }`.
 
-## 行为速记
+## Behaviour cheat sheet
 
-- **处理时机**：编辑时只记录文件，本轮结束（Stop / 子代理 SubagentStop）统一处理，有改写或违规时要求复查并重跑验证。
-- **新老文件判定** = 文件是否已在 `HEAD` 中存在。`incremental` 下未提交过的新文件走全套，老文件默认保持原编码和格式，只做基础行尾修复。非 git 仓库所有文件视为新文件走全套。
-- **第三方目录**（`3rd`、`third_party`、`thridpart`、`vendor` 等完整目录段）不格式化、不 lint。
-- **dateFormat** 是当前时间的显示格式模板，必须含 `YYYY`/`MM`/`DD`，否则回退默认 `YYYY/MM/DD HH:mm`；已有 Date 行不再刷新。
-- **局部豁免** include 排序：源码里用 `// clang-format off` / `// clang-format on` 包住。
+- **When processing runs**: edits are only recorded; the files are processed together when the round ends (Stop, or SubagentStop for a subagent), and Claude is asked to review and re-verify when something was rewritten or a violation remains.
+- **New vs. old file** = whether the file already exists in `HEAD`. Under `incremental`, files never committed get the full set; tracked files keep their original encoding and format and only get the basic line-ending repair. Outside a git repo every file counts as new.
+- **Third-party directories** (`3rd`, `third_party`, `thridpart`, `vendor`, and so on, matched as whole path segments) are neither formatted nor linted.
+- **Local opt-out** of include sorting: wrap the lines in `// clang-format off` / `// clang-format on`.

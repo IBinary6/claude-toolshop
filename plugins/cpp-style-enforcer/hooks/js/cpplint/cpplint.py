@@ -7550,7 +7550,7 @@ def ProcessFile(filename, vlevel, extra_check_functions=None):
         if filename == "-":
             lines = sys.stdin.read().split("\n")
         else:
-            # 在读取时忽略 UTF-8 BOM，检查过程不需要临时改写源文件。
+            # Ignore the UTF-8 BOM while reading; the check does not need to rewrite the source file temporarily.
             with codecs.open(filename, "r", "utf-8-sig", "replace") as target_file:
                 lines = target_file.read().split("\n")
 
@@ -7592,7 +7592,7 @@ def ProcessFile(filename, vlevel, extra_check_functions=None):
         # end-of-line sequence should be, since that will return the
         # server-side end-of-line sequence.
         if lf_lines and crlf_lines:
-            # 保留原有诊断位置，但不建议统一转成 LF；修复应遵循项目行尾规则。
+            # Keep the original diagnostic locations, but do not suggest converting everything to LF; fixes should follow the project's line-ending rules.
             for linenum in crlf_lines:
                 Error(
                     filename,

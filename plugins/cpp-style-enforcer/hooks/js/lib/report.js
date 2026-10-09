@@ -3,7 +3,7 @@
 const MAX_CHANGED_FILES_SHOWN = 10;
 
 /**
- * 限制自动改写文件列表长度，避免 Stop 报告无界占用模型上下文。
+ * Cap the length of the auto-rewritten file list so the Stop report cannot take unbounded model context.
  * @param {string[]} filePaths
  * @returns {string}
  * @example
@@ -14,7 +14,7 @@ function formatChangedFiles(filePaths) {
   let output = shown.map((filePath) => `  - ${filePath}`).join('\n');
   const remaining = filePaths.length - shown.length;
   if (remaining > 0) {
-    output += `\n  ... 还有 ${remaining} 个文件未显示`;
+    output += `\n  ... and ${remaining} more file(s) not shown`;
   }
   return output;
 }

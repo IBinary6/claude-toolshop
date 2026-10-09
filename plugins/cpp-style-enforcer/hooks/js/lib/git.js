@@ -7,8 +7,8 @@ const { spawnSync } = require('child_process');
 const isWindows = process.platform === 'win32';
 
 /**
- * 解析真实路径；Windows 8.3 短路径（如 RUNNER~1）与 Git 返回的长路径统一后再比较。
- * 路径不存在时回退 path.resolve。
+ * Resolve the real path; Windows 8.3 short paths (such as RUNNER~1) and the long path Git returns are unified before comparing.
+ * Falls back to path.resolve when the path does not exist.
  * @param {string} filePath
  * @returns {string}
  * @example
@@ -33,7 +33,7 @@ function gitDir(filePath) {
 }
 
 /**
- * 从文件向上找 git 仓库根。非 git 仓库返回 null。
+ * Walk up from the file to find the git repository root. Returns null outside a git repo.
  * @param {string} filePath
  * @returns {string|null}
  */
@@ -46,16 +46,16 @@ function repoRoot(filePath) {
 }
 
 /**
- * 新文件判定：文件不在 HEAD（已提交历史）中即为新文件。
- * 涵盖未跟踪、已暂存未提交、首次提交。非 git 仓库(root=null) → true（视为新）。
- * 仓库无任何 commit（HEAD 无效）→ cat-file 失败 → 所有文件视为新。
+ * New-file check: a file that is not in HEAD (the committed history) is new.
+ * Covers untracked, staged-but-uncommitted and first-commit files. Not a git repo (root=null) -> true (treated as new).
+ * A repository with no commits (invalid HEAD) -> cat-file fails -> every file counts as new.
  * @param {string} filePath
  * @param {string|null} root
  * @returns {boolean}
  */
 function isNew(filePath, root) {
   if (!root) return true;
-  // 先统一真实路径，避免短路径让 path.relative 生成 ../../RUNNER~1/... 而误判为新文件。
+  // Unify real paths first, so a short path does not make path.relative produce ../../RUNNER~1/... and misjudge the file as new.
   const rel = path.relative(canonicalPath(root), canonicalPath(filePath))
     .split(path.sep).join('/');
   const r = spawnSync('git', ['cat-file', '-e', `HEAD:${rel}`], {
@@ -65,9 +65,9 @@ function isNew(filePath, root) {
 }
 
 /**
- * 工作区+暂存区相对 HEAD 的改动行范围 [[start,end],...]。
- * 基于 git diff -U0 HEAD 解析 @@ +start,len @@；len=0（纯删除）跳过。
- * 非 git(root=null) 或 diff 失败返回 null；无改动返回 []。
+ * Changed-line ranges [[start,end],...] of the working tree plus index relative to HEAD.
+ * Parsed from `git diff -U0 HEAD` hunk headers @@ +start,len @@; len=0 (pure deletion) is skipped.
+ * Returns null when not a git repo (root=null) or diff fails; returns [] when nothing changed.
  * @param {string} filePath
  * @param {string|null} root
  * @returns {Array<[number,number]>|null}
@@ -85,7 +85,7 @@ function changedLineRanges(filePath, root) {
   while ((m = re.exec(out)) !== null) {
     const start = parseInt(m[1], 10);
     const len = m[2] !== undefined ? parseInt(m[2], 10) : 1;
-    if (len === 0) continue; // 纯删除：新文件侧无对应行
+    if (len === 0) continue; // Pure deletion: no corresponding line on the new-file side
     ranges.push([start, start + len - 1]);
   }
   return ranges;

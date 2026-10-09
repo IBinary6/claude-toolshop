@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 /**
- * 把会话/代理标识收敛为安全目录名，避免路径穿越与超长文件名。
+ * Reduce a session/agent id to a safe directory name, avoiding path traversal and over-long names.
  * @param {*} value
  * @param {string} fallback
  * @returns {string}
@@ -18,11 +18,11 @@ function safePart(value, fallback) {
 }
 
 /**
- * 待处理 C++ 编辑记录目录：<数据目录>/pending-edits/<session_id>/<agent_id|main>。
+ * Directory of pending C++ edit records: <data dir>/pending-edits/<session_id>/<agent_id|main>.
  *
- * 按 agent_id 分桶：子代理的编辑由它自己的 SubagentStop 收尾，主 Agent 的编辑由 Stop 收尾，
- * 互不抢占。数据目录优先 CLAUDE_PLUGIN_DATA；手动安装缺失时回退系统临时目录，
- * 不写插件根，也不因缺少环境变量而静默跳过记录。
+ * Bucketed by agent_id: a subagent's edits are finished by its own SubagentStop and the main agent's
+ * by Stop, so neither steals the other's. The data dir prefers CLAUDE_PLUGIN_DATA; for manual installs
+ * it falls back to the system temp dir, never the plugin root, and never silently skips recording.
  * @param {object} input hook stdin JSON
  * @returns {string}
  * @example
@@ -40,8 +40,8 @@ function pendingDir(input) {
 }
 
 /**
- * 记录本次编辑触碰的 C++ 文件；每次工具调用一个 JSON 文件，先写临时文件再 rename，
- * 并行 PostToolUse 不会互相覆盖。失败返回 false，不影响编辑流程。
+ * Record the C++ files touched by this edit; one JSON file per tool call, written to a temp file and renamed,
+ * so parallel PostToolUse hooks never overwrite each other. Returns false on failure without affecting the edit.
  * @param {object} input hook stdin JSON
  * @param {string[]} filePaths
  * @returns {boolean}
@@ -65,7 +65,7 @@ function recordPendingPaths(input, filePaths) {
 }
 
 /**
- * 取出并删除当前桶内全部待处理路径（去重）。目录不存在返回 []。
+ * Take and delete every pending path in the current bucket (deduplicated). Returns [] when the directory is missing.
  * @param {object} input Stop / SubagentStop stdin JSON
  * @returns {string[]}
  * @example

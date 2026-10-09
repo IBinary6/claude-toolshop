@@ -3,12 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const _cache = new Map(); // 单进程内缓存（每次 hook 是独立进程）
+const _cache = new Map(); // In-process cache (every hook run is its own process)
 
 /**
- * 从被编辑文件向上逐级找 CMakeLists.txt，与 git 解耦。
+ * Walk up from the edited file looking for CMakeLists.txt, independent of git.
  * @param {string} filePath
- * @returns {string|null} CMake 项目根（含 CMakeLists.txt 的目录）；找不到 null
+ * @returns {string|null} The CMake project root (the directory containing CMakeLists.txt), or null.
  */
 function findCMakeRoot(filePath) {
   if (!filePath || typeof filePath !== 'string') return null;

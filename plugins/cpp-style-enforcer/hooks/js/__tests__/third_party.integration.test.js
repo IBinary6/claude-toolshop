@@ -22,8 +22,8 @@ try {
   run('git', ['init', '-q']);
   fs.mkdirSync(path.join(tmp, '.claude-cpp-style'));
   fs.writeFileSync(path.join(tmp, '.claude-cpp-style/cpp-style.json'), JSON.stringify({
-    mode: 'full', copyrightInfo: { company: 'Example' },
-    checks: { clangFormat: true, copyright: true, cpplint: true, bom: true },
+    mode: 'full',
+    checks: { clangFormat: true, cpplint: true, bom: true },
   }));
   fs.writeFileSync(path.join(tmp, 'app.vcxproj'), '<Project />');
   const bad = Buffer.from('int  f( ) { double d = 1.5; return (int)d; }');
@@ -34,7 +34,7 @@ try {
     assert.deepEqual(runCpplint(file, { resolvePython() { throw new Error('Must not launch lint'); } }), []);
     assert.equal(hook('post_edit', { session_id: `third-party-${name}`, tool_input: { file_path: file } }), '');
     assert.equal(hook('stop_check', { session_id: `third-party-${name}` }), '');
-    assert.deepEqual(fs.readFileSync(file), bad, '不格式化、加 BOM、版权头或 CRLF');
+    assert.deepEqual(fs.readFileSync(file), bad, 'no formatting, BOM or CRLF is applied');
     run('git', ['add', '--', name + '/lib.cpp']);
   }
   assert.equal(hook('pre_commit', { tool_input: { command: 'git commit -m check' } }), '');

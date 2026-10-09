@@ -16,10 +16,10 @@ const isWindows = process.platform === 'win32';
 const PRE_COMMIT_DEADLINE_MS = 25000;
 
 /**
- * 将 shell 命令拆成 token，供后续判定真正的 `git commit`：
- * - Git 可执行文件允许大小写差异、git.exe、绝对路径和常见包装命令。
- * - commit 必须是独立子命令，排除 commit-graph、commit-tree 和 echo 中的字符串。
- * - 存疑一律返回 false（放行，不阻止）。
+ * Split a shell command into tokens so the rest can tell a real `git commit` apart:
+ * - The Git executable may differ in case, be git.exe, an absolute path, or sit behind common wrappers.
+ * - `commit` must be its own subcommand; commit-graph, commit-tree and strings inside echo are excluded.
+ * - When in doubt return false (let it through, do not block).
  * @param {string} command
  * @returns {boolean}
  */
@@ -32,10 +32,10 @@ function unquote(token) {
 }
 
 /**
- * 按未被引号包裹的 shell 连接符拆分命令，保留 `cmd /c "... && ..."` 的内部结构。
+ * Split a command on shell connectors outside quotes, keeping the inner structure of `cmd /c "... && ..."`.
  *
- * @param {string} command 原始命令
- * @returns {string[]} 顺序命令片段
+ * @param {string} command The raw command.
+ * @returns {string[]} Command segments in order.
  * @example
  * splitCommandSegments('cd repo && git commit') // ['cd repo', 'git commit']
  */
@@ -78,10 +78,10 @@ function splitCommandSegments(command) {
 }
 
 /**
- * 提取命令路径的文件名并统一为小写，同时兼容 POSIX 与 Windows 分隔符。
+ * Extract the file name of a command path and lower-case it; handles POSIX and Windows separators.
  *
- * @param {string} token 命令 token
- * @returns {string} 规范化后的命令名
+ * @param {string} token A command token.
+ * @returns {string} The normalized command name.
  * @example
  * commandName('C:\\Program Files\\Git\\cmd\\git.exe') // 'git.exe'
  */
@@ -91,10 +91,10 @@ function commandName(token) {
 }
 
 /**
- * 判断 token 是否为 Git 可执行文件，接受 git、git.exe 和它们的绝对路径。
+ * Whether a token is the Git executable: git, git.exe, or an absolute path to either.
  *
- * @param {string} token 命令 token
- * @returns {boolean} 是否为 Git 可执行文件
+ * @param {string} token A command token.
+ * @returns {boolean} True for a Git executable.
  * @example
  * isGitExecutable('/usr/bin/git') // true
  */
@@ -117,10 +117,10 @@ function normalizedCommandTokens(segment) {
 }
 
 /**
- * 提取 Windows `cmd[.exe] ... /c <command>` 的被包装命令；非 cmd 包装返回 null。
+ * Extract the command wrapped by Windows `cmd[.exe] ... /c <command>`; returns null for non-cmd wrappers.
  *
- * @param {string} segment 单个外层命令片段
- * @returns {string|null} 被包装命令
+ * @param {string} segment One outer command segment.
+ * @returns {string|null} The wrapped command.
  * @example
  * cmdWrappedCommand('cmd.exe /d /s /c git commit') // 'git commit'
  */
@@ -223,9 +223,9 @@ function isGitCommit(command) {
 }
 
 /**
- * 通过 Git `-z` 列出暂存区 C++ 文件（--diff-filter=ACM），按 NUL 边界保留原文件名。
+ * List staged C++ files through Git `-z` (--diff-filter=ACM), keeping file names intact at NUL boundaries.
  * @param {string} root
- * @returns {string[]} 绝对路径数组
+ * @returns {string[]} Absolute paths.
  */
 function stagedCppFiles(root, options = {}) {
   const spawn = options.spawnSync || spawnSync;
@@ -239,13 +239,13 @@ function stagedCppFiles(root, options = {}) {
       windowsHide: isWindows,
     });
   } catch (error) {
-    throw new Error(`git diff --cached 启动失败：${error && error.message ? error.message : error}`);
+    throw new Error(`git diff --cached failed to start: ${error && error.message ? error.message : error}`);
   }
   if (!r || r.error || r.status !== 0) {
     const reason = r && r.error
       ? (r.error.code || r.error.message)
-      : `退出码 ${r && r.status !== undefined ? r.status : '未知'}`;
-    throw new Error(`git diff --cached 无法枚举暂存区：${reason}`);
+      : `exit code ${r && r.status !== undefined ? r.status : 'unknown'}`;
+    throw new Error(`git diff --cached could not list the staged files: ${reason}`);
   }
   if (!r.stdout) return [];
   return Buffer.from(r.stdout)
@@ -265,8 +265,8 @@ async function main() {
   const cwd = commitCwd(command, baseCwd);
   if (!cwd) return passSilent();
 
-  // loadConfig/findProjectConfig 从 path.dirname(filePath) 向上找；传 cwd 下的探针文件，
-  // 使其 dirname 落在 cwd，从而包含 cwd 本身的 .claude-cpp-style/cpp-style.json。
+  // loadConfig/findProjectConfig walk up from path.dirname(filePath); pass a probe file under cwd
+  // so its dirname is cwd itself and cwd's own .claude-cpp-style/cpp-style.json is included.
   const config = loadConfig(path.join(cwd, '.cpp-style-probe'));
   if (config.enabled === false || (!config.checks.cpplint
       && (config.mode === 'full' || !config.legacyChecks.cpplint))) return passSilent();
@@ -278,7 +278,7 @@ async function main() {
   try {
     files = stagedCppFiles(root);
   } catch (error) {
-    return denyTool(`提交被阻止：无法枚举 Git 暂存区，未执行完整 cpplint 检查。${error && error.message ? ` ${error.message}` : ''}`);
+    return denyTool(`Commit blocked: the staged files could not be listed, so the full cpplint check did not run.${error && error.message ? ` ${error.message}` : ''}`);
   }
   const fileChecks = new Map(files.map((file) => [file,
     config.mode === 'full' || isNew(file, root) !== false ? config.checks : config.legacyChecks]));
@@ -298,18 +298,14 @@ async function main() {
           file: stagedFile.relativePath,
           line: 0,
           category: 'runtime/timeout',
-          message: 'pre-commit cpplint 总耗时超限，剩余文件未检查',
+          message: 'pre-commit cpplint exceeded its total time budget; the remaining files were not checked',
         });
         break;
       }
       try {
-        const effectiveChecks = fileChecks.get(path.resolve(root, stagedFile.relativePath));
-        const suppressCopyright = !(config.copyrightInfo && config.copyrightInfo.company)
-          || !effectiveChecks.copyright;
         const v = runCpplint(stagedFile.filePath, {
           root: snapshot.root,
-          suppressCopyright,
-          // 快照不一定包含工程文件；从原路径判断工程类型，源码仍只读取 index。
+          // The snapshot may not contain project files; detect the project type from the original path while the source is still read only from the index.
           preserveIncludeOrder: isVisualStudioSource(path.resolve(root, stagedFile.relativePath), root),
           timeoutMs: Math.min(15000, remainingMs),
         });
@@ -318,11 +314,11 @@ async function main() {
       } catch (e) {
         allViolations.push({ file: stagedFile.relativePath, line: 0,
           category: 'runtime/cpplint',
-          message: `检查异常，未完成验证：${e && e.message ? e.message : e}` });
+          message: `The check failed and verification did not complete: ${e && e.message ? e.message : e}` });
       }
     }
   } catch (e) {
-    return denyTool(`提交被阻止：无法创建 Git index 快照，未执行 cpplint 检查。${e && e.message ? ` ${e.message}` : ''}`);
+    return denyTool(`Commit blocked: the Git index snapshot could not be created, so cpplint did not run.${e && e.message ? ` ${e.message}` : ''}`);
   } finally {
     if (snapshot) {
       try { snapshot.cleanup(); } catch (error) { cleanupError = error; }
@@ -330,21 +326,21 @@ async function main() {
   }
 
   if (cleanupError) {
-    return denyTool(`提交被阻止：无法清理 Git index 临时快照。${cleanupError.message ? ` ${cleanupError.message}` : ''}`);
+    return denyTool(`Commit blocked: the temporary Git index snapshot could not be cleaned up.${cleanupError.message ? ` ${cleanupError.message}` : ''}`);
   }
 
-  // 一律硬违规：暂存文件存在任何 cpplint 违规即拦截提交。
+  // Always a hard failure: any cpplint violation in a staged file blocks the commit.
   if (allViolations.length > 0) {
-    return denyTool('提交被阻止：暂存的 C++ 文件存在 cpplint 违规。\n' + formatViolations(allViolations));
+    return denyTool('Commit blocked: the staged C++ files have cpplint violations.\n' + formatViolations(allViolations));
   }
   return passSilent();
 }
 
-// 仅作为 hook 入口直接执行时运行流水线；被 require（测试）时只导出函数，避免读 stdin 挂死。
+// Run the pipeline only when executed directly as the hook entry point; when required (tests) just export the functions so reading stdin cannot hang.
 if (require.main === module) {
   main().catch((e) => {
-    try { diag(`pre_commit 检查异常: ${e && e.message ? e.message : e}`); } catch (_) {}
-    denyTool('提交前 C++ 检查异常，未完成验证；修复检查环境后重试。');
+    try { diag(`pre_commit check error: ${e && e.message ? e.message : e}`); } catch (_) {}
+    denyTool('The pre-commit C++ check failed and verification did not complete; fix the checking environment and retry.');
   });
 }
 

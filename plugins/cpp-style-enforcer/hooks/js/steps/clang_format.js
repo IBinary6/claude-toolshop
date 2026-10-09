@@ -10,52 +10,52 @@ const { isVisualStudioSource } = require('../lib/line_endings.js');
 const isWindows = process.platform === 'win32';
 
 /**
- * 将 formatted 的行尾风格还原成 source 的行尾风格。
+ * Restore the line-ending style of the formatted output to that of the source.
  *
- * clang-format 部分版本 / BasedOnStyle 预设会把 CRLF 输出成 LF（DeriveLineEnding
- * 行为差异）。VS 项目源码多为 CRLF，行尾被悄悄改成 LF 会导致 git 整文件每行都 diff。
- * 此处不依赖 clang-format 配置，直接按输入行尾强制还原，覆盖所有版本与存量项目。
+ * Some clang-format versions / BasedOnStyle presets emit CRLF input as LF (a DeriveLineEnding
+ * difference). VS project sources are mostly CRLF, and silently turning them into LF makes git diff every line of the file.
+ * This does not depend on any clang-format setting: it forces the input's line endings back, covering all versions and existing projects.
  *
- * 实现：用 latin1（字节安全）把输出统一到 LF，再按 source 风格决定是否还原成 CRLF。
- * latin1 双向映射不破坏 UTF-8 多字节，replace 只触碰 \r(0x0D)\n(0x0A)。
+ * Implementation: normalize the output to LF through latin1 (byte-safe), then restore CRLF when the source style is CRLF.
+ * The two-way latin1 mapping leaves UTF-8 multi-byte sequences intact, and replace only touches \r(0x0D)\n(0x0A).
  *
- * @param {Buffer} formatted clang-format 的输出字节
- * @param {Buffer} source 剥 BOM 后的输入正文（作为行尾基准）
- * @returns {Buffer} 行尾与 source 一致的输出
+ * @param {Buffer} formatted The bytes clang-format produced.
+ * @param {Buffer} source The input body without BOM (the line-ending baseline).
+ * @returns {Buffer} Output whose line endings match the source.
  */
 function matchLineEnding(formatted, source) {
   const sourceCRLF = source.includes('\r\n');
-  let s = formatted.toString('latin1').replace(/\r\n/g, '\n'); // 统一到 LF
-  if (sourceCRLF) s = s.replace(/\n/g, '\r\n');                // 还原成 CRLF
+  let s = formatted.toString('latin1').replace(/\r\n/g, '\n'); // Normalize to LF
+  if (sourceCRLF) s = s.replace(/\n/g, '\r\n');                // Restore CRLF
   return Buffer.from(s, 'latin1');
 }
 
 /**
- * BOM 感知的双模式 clang-format。
- * 剥 BOM → 无 BOM 正文经 stdin 喂 clang-format(stdout) → 与无 BOM 正文 diff
- * → 仅变化时 restoreBom 写回。clang-format 缺失/失败静默返回 false。不用 -i。
+ * BOM-aware, two-mode clang-format.
+ * Strip the BOM -> feed the BOM-free body to clang-format through stdin (stdout) -> diff against the BOM-free body
+ * -> write back with restoreBom only when it changed. A missing or failing clang-format silently returns false. No -i.
  *
- * 模式（由 opts.isNew 决定，缺省视为新文件）：
- * - 新文件：整文件格式化，-style=file -fallback-style=Google；VS 源工程保留 include
- *   顺序，其他工程使用项目排序配置。已有局部 clang-format off/on 保护保持有效。
- * - 老文件：仅格式化 git 改动行（--lines=s:e），读取项目风格并关闭 include 排序；
- *   无改动行则不格式化返回 false。
+ * Modes (chosen by opts.isNew; the default is a new file):
+ * - New file: format the whole file with -style=file -fallback-style=Google; Visual Studio projects keep include
+ *   order, other projects use the project's sort setting. Existing local clang-format off/on guards keep working.
+ * - Old file: format only the lines git changed (--lines=s:e), read the project style and turn include sorting off;
+ *   with no changed lines nothing is formatted and false is returned.
  *
- * 行号说明：--lines 作用于 stdin 输入（已剥 BOM 的正文）。剥 BOM 仅去掉文件最前
- * 3 字节（BOM 在第一行行首，不增减行），故 git diff 的改动行号可直接用作 --lines。
+ * About line numbers: --lines applies to the stdin input (the body with BOM removed). Removing the BOM only drops the first
+ * 3 bytes of the file (the BOM sits at the start of line 1 and adds or removes no lines), so git diff line numbers can be used for --lines directly.
  *
  * @param {string} filePath
  * @param {{isNew?:boolean, root?:string|null, detect?:function():({cmd:string,args:string[]}|null)}} [opts]
- * @returns {boolean} 是否改写了文件
+ * @returns {boolean} Whether the file was rewritten.
  */
 function applyClangFormat(filePath, opts) {
-  const isNew = !opts || opts.isNew !== false; // 缺省 → 新文件整文件模式
+  const isNew = !opts || opts.isNew !== false; // Default -> new file, whole-file mode
   const root = opts && opts.root ? opts.root : null;
-  // 只检测不安装：编辑 hook 不做 pip 安装，避免阻塞或超时。
+  // Detect only, never install: the edit hook must not pip-install, which could block or time out.
   const detect = (opts && opts.detect) || detectClangFormat;
   let desc = null;
   try { desc = detect(); } catch (_) { desc = null; }
-  if (!desc) return false; // clang-format 不可用 → 静默降级
+  if (!desc) return false; // clang-format unavailable -> degrade silently
 
   let raw;
   try { raw = fs.readFileSync(filePath); } catch (_) { return false; }
@@ -64,11 +64,11 @@ function applyClangFormat(filePath, opts) {
   let args;
   if (isNew) {
     args = ['-style=file', '-fallback-style=Google', `-assume-filename=${filePath}`];
-    // VS 头文件可能依赖前置类型/宏，不能因文件尚未提交就自动重排 include。
+    // VS headers can depend on earlier types/macros, so include order must not be rearranged just because the file is not committed yet.
     if (isVisualStudioSource(filePath, root)) args.push('--sort-includes=false');
   } else {
     const ranges = changedLineRanges(filePath, root);
-    if (!ranges || ranges.length === 0) return false; // 无改动行 → 不格式化
+    if (!ranges || ranges.length === 0) return false; // No changed lines -> do not format
     args = ['-style=file', '-fallback-style=Google', '--sort-includes=false', `-assume-filename=${filePath}`];
     for (const [s, e] of ranges) args.push(`--lines=${s}:${e}`);
   }
@@ -78,13 +78,13 @@ function applyClangFormat(filePath, opts) {
     [...desc.args, ...args],
     { input: body, stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000, maxBuffer: 32 * 1024 * 1024, windowsHide: isWindows }
   );
-  // clang-format 执行失败 → 静默跳过
+  // clang-format failed -> skip silently
   if (r.error || r.status !== 0 || !r.stdout) return false;
 
   const rawFormatted = Buffer.isBuffer(r.stdout) ? r.stdout : Buffer.from(r.stdout);
-  // 行尾还原成输入风格（防 CRLF 被 clang-format 改成 LF 致全文 diff）
+  // Restore the input's line endings (prevents clang-format from turning CRLF into LF and diffing the whole file)
   const formatted = matchLineEnding(rawFormatted, body);
-  if (formatted.equals(body)) return false; // 还原行尾后仍无变化 → 不写
+  if (formatted.equals(body)) return false; // Still unchanged after restoring line endings -> do not write
 
   try {
     fs.writeFileSync(filePath, restoreBom(hadBom, formatted));

@@ -2,11 +2,6 @@
   "enabled": true,
   "mode": "incremental",
   "lineEnding": "preserve",
-  "checks": { "clangFormat": true, "copyright": true, "cpplint": true, "bom": true },
-  "legacyChecks": { "clangFormat": false, "copyright": false, "cpplint": false, "bom": false },
-  "copyrightInfo": {
-    "company": "",
-    "author": "",
-    "dateFormat": "YYYY/MM/DD HH:mm"
-  }
+  "checks": { "clangFormat": true, "cpplint": true, "bom": true },
+  "legacyChecks": { "clangFormat": false, "cpplint": false, "bom": false }
 }

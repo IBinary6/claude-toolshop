@@ -7,10 +7,10 @@ const realRmSync = fs.rmSync;
 let failedSnapshot = null;
 
 /**
- * 仅让第一次 staged snapshot 清理失败，用于验证提交检查的 fail-closed 语义。
+ * Make only the first staged-snapshot cleanup fail, to verify the fail-closed semantics of the commit check.
  *
- * @param {string} target 待删除路径
- * @param {object} options rmSync 选项
+ * @param {string} target The path to delete.
+ * @param {object} options The rmSync options.
  * @returns {void}
  */
 fs.rmSync = function failFirstSnapshotCleanup(target, options) {

@@ -24,8 +24,8 @@
     {
       "name": "cpp-style-enforcer",
       "source": "./plugins/cpp-style-enforcer",
-      "version": "0.4.0",
-      "description": "C++ 代码风格强制（Google C++ Style）：编辑时只记录，Stop/SubagentStop 统一格式化、BOM、版权头、行尾与 cpplint；VS 工程保持 CRLF 与 include 顺序；提交前基于 Git index 快照检查；已跟踪文件默认保持原编码，第三方目录不处理。"
+      "version": "0.5.0",
+      "description": "C++ style enforcement for Google C++ Style: edits are only recorded, then clang-format, BOM, line endings and cpplint run once at Stop/SubagentStop. Visual Studio projects keep CRLF and include order, the commit check lints the staged Git index, tracked files keep their original encoding, and third-party directories are skipped."
     },
     {
       "name": "agent-dispatch",

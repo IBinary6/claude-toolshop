@@ -6,41 +6,41 @@ const { findCMakeRoot, isCMakeProject } = require('../lib/project.js');
 
 const cleanup = [];
 try {
-  // 文件同级有 CMakeLists.txt
+  // CMakeLists.txt next to the file
   const root1 = fs.mkdtempSync(path.join(os.tmpdir(), 'cmake-'));
   cleanup.push(root1);
   fs.writeFileSync(path.join(root1, 'CMakeLists.txt'), 'project(x)');
   const f1 = path.join(root1, 'main.cpp');
   fs.writeFileSync(f1, 'int main(){}');
-  assert.strictEqual(findCMakeRoot(f1), fs.realpathSync(root1), '同级命中');
+  assert.strictEqual(findCMakeRoot(f1), fs.realpathSync(root1), 'found at the same level');
   assert.strictEqual(isCMakeProject(f1), true, 'isCMakeProject true');
 
-  // 上层有 CMakeLists.txt（文件在子目录）
+  // CMakeLists.txt in a parent (the file is in a subdirectory)
   const sub = path.join(root1, 'src', 'core');
   fs.mkdirSync(sub, { recursive: true });
   const f2 = path.join(sub, 'a.cc');
   fs.writeFileSync(f2, 'int x;');
-  assert.strictEqual(findCMakeRoot(f2), fs.realpathSync(root1), '上层向上找到');
+  assert.strictEqual(findCMakeRoot(f2), fs.realpathSync(root1), 'found by walking up');
 
-  // 都没有 → null（非 CMake 项目）
+  // Neither -> null (not a CMake project)
   const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nocmake-'));
   cleanup.push(root2);
   const f3 = path.join(root2, 'b.cpp');
   fs.writeFileSync(f3, 'int y;');
-  assert.strictEqual(findCMakeRoot(f3), null, '无 CMakeLists.txt → null');
+  assert.strictEqual(findCMakeRoot(f3), null, 'no CMakeLists.txt -> null');
   assert.strictEqual(isCMakeProject(f3), false, 'isCMakeProject false');
 
-  // 非 git 的 CMake 项目（无 .git，但有 CMakeLists.txt）→ 仍命中
+  // A CMake project outside git (no .git but a CMakeLists.txt) -> still found
   const root3 = fs.mkdtempSync(path.join(os.tmpdir(), 'cmake-nogit-'));
   cleanup.push(root3);
   fs.writeFileSync(path.join(root3, 'CMakeLists.txt'), 'project(z)');
   const f4 = path.join(root3, 'z.cpp');
   fs.writeFileSync(f4, 'int z;');
-  assert.strictEqual(isCMakeProject(f4), true, '非 git CMake 项目仍命中');
+  assert.strictEqual(isCMakeProject(f4), true, 'a CMake project outside git is still found');
 
-  // null / 不存在路径 → 不崩
-  assert.strictEqual(findCMakeRoot(null), null, 'null 安全');
-  assert.strictEqual(findCMakeRoot('/no/such/path/x.cpp'), null, '不存在路径安全');
+  // null / a nonexistent path -> no crash
+  assert.strictEqual(findCMakeRoot(null), null, 'null is safe');
+  assert.strictEqual(findCMakeRoot('/no/such/path/x.cpp'), null, 'a nonexistent path is safe');
   console.log('project.test.js PASS');
 } finally {
   for (const dir of cleanup) {

@@ -7,10 +7,10 @@ const path = require('path');
 const pluginRoot = path.join(__dirname, '..', '..', '..');
 const entry = path.join(pluginRoot, 'hooks', 'js', 'session_start.js');
 
-// 用临时 HOME 隔离全局模板，避免污染真实 ~/.claude
+// Use a temporary HOME to isolate the global template and avoid polluting the real ~/.claude
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cse-home-'));
 const env = { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome };
-delete env.CLAUDE_PROJECT_DIR; // 避免外部环境干扰 cwd 判定
+delete env.CLAUDE_PROJECT_DIR; // Keep the external environment from interfering with the cwd decision
 const userTpl = path.join(tmpHome, '.claude', 'cpp-style-template.json');
 
 const tmps = [];
@@ -34,40 +34,40 @@ function mkGitRepo() {
 function cfgPath(root) { return path.join(root, '.claude-cpp-style', 'cpp-style.json'); }
 
 try {
-  // 1) 首次运行 → 创建全局模板，无输出，exit 0
+  // 1) First run -> create the global template, no output, exit 0
   {
     const r = runHook();
-    assert.strictEqual(r.status, 0, 'SessionStart 应 exit 0');
-    assert.strictEqual(r.stdout, '', 'SessionStart 应 stdout 空（完全静默）');
-    assert.strictEqual(r.stderr, '', 'SessionStart 应 stderr 空（完全静默）');
-    assert.ok(fs.existsSync(userTpl), '首次运行应创建全局模板');
+    assert.strictEqual(r.status, 0, 'SessionStart should exit 0');
+    assert.strictEqual(r.stdout, '', 'SessionStart should leave stdout empty (completely silent)');
+    assert.strictEqual(r.stderr, '', 'SessionStart should leave stderr empty (completely silent)');
+    assert.ok(fs.existsSync(userTpl), 'the first run should create the global template');
   }
 
-  // 2) 已存在用户自填模板 → 绝不覆盖（字节级一致）
+  // 2) A user-customized template already exists -> never overwritten (byte-identical)
   {
-    const custom = JSON.stringify({ enabled: true, mode: 'full', copyrightInfo: { company: 'ACME' } });
+    const custom = JSON.stringify({ enabled: true, mode: 'full', lineEnding: 'crlf' });
     fs.writeFileSync(userTpl, custom);
     const before = fs.readFileSync(userTpl);
     const r = runHook();
-    assert.strictEqual(r.status, 0, '二次运行应 exit 0');
+    assert.strictEqual(r.status, 0, 'the second run should exit 0');
     const after = fs.readFileSync(userTpl);
-    assert.ok(before.equals(after), '已存在模板必须字节级不变（不覆盖用户 company）');
+    assert.ok(before.equals(after), 'an existing template must stay byte-identical (the user customization is not overwritten)');
   }
 
-  // 3) 只打开 C++ 项目还未编辑时，不生成项目配置（尚无用户任务，不写项目文件）。
+  // 3) Merely opening a C++ project, before any edit, does not generate project config (no user task yet, so no project files are written).
   {
     const root = mkGitRepo();
     fs.writeFileSync(path.join(root, 'main.cpp'), 'int main(){return 0;}\n');
     const r = runHook({ hook_event_name: 'SessionStart', cwd: root });
-    assert.strictEqual(r.status, 0, 'C++ 项目 SessionStart 应 exit 0');
-    assert.strictEqual(r.stdout, '', 'C++ 项目 SessionStart 应 stdout 空');
-    assert.strictEqual(r.stderr, '', 'C++ 项目 SessionStart 应 stderr 空');
-    assert.ok(!fs.existsSync(cfgPath(root)), 'SessionStart 不得写入待审查项目');
-    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), 'SessionStart 不得写入格式配置');
-    assert.ok(!fs.existsSync(path.join(root, '.gitignore')), 'SessionStart 不得改写 .gitignore');
+    assert.strictEqual(r.status, 0, 'SessionStart in a C++ project should exit 0');
+    assert.strictEqual(r.stdout, '', 'SessionStart in a C++ project should leave stdout empty');
+    assert.strictEqual(r.stderr, '', 'SessionStart in a C++ project should leave stderr empty');
+    assert.ok(!fs.existsSync(cfgPath(root)), 'SessionStart must not write into the project under review');
+    assert.ok(!fs.existsSync(path.join(root, '.clang-format')), 'SessionStart must not write format config');
+    assert.ok(!fs.existsSync(path.join(root, '.gitignore')), 'SessionStart must not rewrite .gitignore');
   }
 
-  // 4) 已存在 cpp-style.json → 不覆盖（字节不变）
+  // 4) An existing cpp-style.json -> not overwritten (bytes unchanged)
   {
     const root = mkGitRepo();
     fs.writeFileSync(path.join(root, 'CMakeLists.txt'), 'project(x)\n');
@@ -76,29 +76,29 @@ try {
     const custom = Buffer.from('{"enabled":false,"mode":"full"}\n', 'utf-8');
     fs.writeFileSync(path.join(dir, 'cpp-style.json'), custom);
     const r = runHook({ hook_event_name: 'SessionStart', cwd: root });
-    assert.strictEqual(r.status, 0, '已存在配置 SessionStart 应 exit 0');
-    assert.ok(fs.readFileSync(cfgPath(root)).equals(custom), '已存在配置必须字节不变（不覆盖）');
+    assert.strictEqual(r.status, 0, 'SessionStart with an existing config should exit 0');
+    assert.ok(fs.readFileSync(cfgPath(root)).equals(custom), 'an existing config must stay byte-identical (not overwritten)');
   }
 
-  // 5) 非 git 目录 → 不生成
+  // 5) A non-git directory -> nothing generated
   {
     const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cse-nogit-'));
     tmps.push(t);
     fs.writeFileSync(path.join(t, 'main.cpp'), 'int main(){}\n');
     const r = runHook({ hook_event_name: 'SessionStart', cwd: t });
-    assert.strictEqual(r.status, 0, '非 git SessionStart 应 exit 0');
-    assert.ok(!fs.existsSync(cfgPath(t)), '非 git 不生成配置（无可靠项目根）');
+    assert.strictEqual(r.status, 0, 'SessionStart in a non-git directory should exit 0');
+    assert.ok(!fs.existsSync(cfgPath(t)), 'a non-git directory generates no config (no reliable project root)');
   }
 
-  // 6) git 仓库但非 C++ 项目（纯 python/js）→ 不生成（保守判断）
+  // 6) A git repo that is not a C++ project (pure python/js) -> nothing generated (conservative)
   {
     const root = mkGitRepo();
     fs.writeFileSync(path.join(root, 'app.py'), 'print(1)\n');
     fs.writeFileSync(path.join(root, 'index.js'), 'console.log(1)\n');
     const r = runHook({ hook_event_name: 'SessionStart', cwd: root });
-    assert.strictEqual(r.status, 0, '非 C++ 项目 SessionStart 应 exit 0');
-    assert.strictEqual(r.stdout, '', '非 C++ 项目应静默');
-    assert.ok(!fs.existsSync(cfgPath(root)), '非 C++ 项目不生成配置（保守）');
+    assert.strictEqual(r.status, 0, 'SessionStart in a non-C++ project should exit 0');
+    assert.strictEqual(r.stdout, '', 'a non-C++ project should stay silent');
+    assert.ok(!fs.existsSync(cfgPath(root)), 'a non-C++ project generates no config (conservative)');
   }
 
   console.log('session_start.integration.test.js PASS');

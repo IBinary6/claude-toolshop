@@ -7,7 +7,7 @@ const {
   resolvePython,
 } = require('../lib/python');
 
-// 首个候选已经是 Python 3 时应立即返回，避免每次 cpplint 重复启动其他解释器。
+// When the first candidate is already Python 3 return at once, so every cpplint run does not start other interpreters again.
 {
   let calls = 0;
   const resolved = resolvePython({
@@ -19,7 +19,7 @@ const {
   assert.strictEqual(calls, 1);
 }
 
-// macOS：第一个命令不存在时必须继续探测 python，不能因 ENOENT 提前中止。
+// macOS: when the first command does not exist probing must continue with python and must not abort early on ENOENT.
 {
   const calls = [];
   const resolved = resolvePython({
@@ -33,10 +33,10 @@ const {
   });
   assert.deepStrictEqual(resolved, { cmd: 'python', args: [] });
   assert.deepStrictEqual(calls.map((call) => call.cmd), ['python3', 'python']);
-  assert.ok(calls.every((call) => call.args.includes('-c')), 'Python 探测必须执行版本校验代码');
+  assert.ok(calls.every((call) => call.args.includes('-c')), 'the Python probe must run the version-check code');
 }
 
-// 可执行文件存在但不是 Python 3 时必须继续探测，避免误用 Python 2。
+// When an executable exists but is not Python 3 probing must continue, so Python 2 is never used by mistake.
 {
   const resolved = resolvePython({
     platform: 'darwin',
@@ -46,7 +46,7 @@ const {
   assert.deepStrictEqual(resolved, { cmd: 'python', args: [] });
 }
 
-// Windows Python Launcher 应选择任意可用 Python 3，而不是绑定单一 3.11 小版本。
+// The Windows Python Launcher should pick any available Python 3 rather than pin a single 3.11 minor version.
 {
   const candidates = pythonCandidates({ platform: 'win32', env: {} });
   assert.deepStrictEqual(candidates[0], { cmd: 'py', args: ['-3'] });
@@ -60,7 +60,7 @@ const {
   assert.deepStrictEqual(resolved, { cmd: 'py', args: ['-3'] });
 }
 
-// 默认运行路径应缓存探测结果，避免每个暂存文件重复启动 Python 候选。
+// The default run path should cache the probe result, so every staged file does not start the Python candidates again.
 {
   resetPythonCacheForTests();
   let calls = 0;

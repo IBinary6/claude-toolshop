@@ -19,7 +19,7 @@ function mkRepo() {
 function relPath(root) { return path.join(root, '.claude-cpp-style', 'cpp-style.json'); }
 
 try {
-  // 1. 无 .claude-cpp-style + 有全局模板 → 生成，内容来自全局模板，无 BOM
+  // 1. No .claude-cpp-style + a global template -> generated, content from the global template, no BOM
   {
     const root = mkRepo();
     const tplDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tpl-'));
@@ -30,26 +30,26 @@ try {
 
     ensureProjectConfig(root, tpl);
     const p = relPath(root);
-    assert.ok(fs.existsSync(p), '应生成 cpp-style.json');
+    assert.ok(fs.existsSync(p), 'cpp-style.json should be generated');
     const buf = fs.readFileSync(p);
-    assert.ok(!buf.subarray(0, 3).equals(BOM), '生成文件无 BOM');
-    assert.strictEqual(buf.toString('utf-8'), tplContent, '内容来自全局模板（逐字一致）');
+    assert.ok(!buf.subarray(0, 3).equals(BOM), 'the generated file has no BOM');
+    assert.strictEqual(buf.toString('utf-8'), tplContent, 'content comes from the global template (verbatim)');
     const parsed = JSON.parse(buf.toString('utf-8'));
-    assert.strictEqual(parsed.mode, 'full', '模板字段保留');
+    assert.strictEqual(parsed.mode, 'full', 'template fields are preserved');
   }
 
-  // 2. 全局模板缺失 → 用硬编码默认 schema
+  // 2. The global template is missing -> use the hard-coded default schema
   {
     const root = mkRepo();
     const missing = path.join(os.tmpdir(), 'nonexistent-tpl-xyz.json');
     ensureProjectConfig(root, missing);
     const p = relPath(root);
-    assert.ok(fs.existsSync(p), '模板缺失也生成');
+    assert.ok(fs.existsSync(p), 'generated even when the template is missing');
     const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
-    assert.deepStrictEqual(parsed, DEFAULT_CONFIG, '内容为硬编码默认 schema');
+    assert.deepStrictEqual(parsed, DEFAULT_CONFIG, 'content is the hard-coded default schema');
   }
 
-  // 3. 全局模板损坏（非法 JSON）→ 回退默认 schema
+  // 3. The global template is corrupt (invalid JSON) -> fall back to the default schema
   {
     const root = mkRepo();
     const tplDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tplbad-'));
@@ -58,10 +58,10 @@ try {
     fs.writeFileSync(tpl, '{ not valid json', 'utf-8');
     ensureProjectConfig(root, tpl);
     const parsed = JSON.parse(fs.readFileSync(relPath(root), 'utf-8'));
-    assert.deepStrictEqual(parsed, DEFAULT_CONFIG, '损坏模板回退默认 schema');
+    assert.deepStrictEqual(parsed, DEFAULT_CONFIG, 'a corrupt template falls back to the default schema');
   }
 
-  // 4. 已存在 cpp-style.json → 字节不变，绝不覆盖
+  // 4. An existing cpp-style.json -> bytes unchanged, never overwritten
   {
     const root = mkRepo();
     const dir = path.join(root, '.claude-cpp-style');
@@ -69,13 +69,13 @@ try {
     const p = path.join(dir, 'cpp-style.json');
     const custom = Buffer.from('{"enabled":false,"mode":"full"}\n', 'utf-8');
     fs.writeFileSync(p, custom);
-    ensureProjectConfig(root); // 用默认模板路径，不应触发写
-    assert.ok(fs.readFileSync(p).equals(custom), '已存在则字节不变不覆盖');
+    ensureProjectConfig(root); // Use the default template path; it must not trigger a write
+    assert.ok(fs.readFileSync(p).equals(custom), 'an existing file keeps its bytes and is not overwritten');
   }
 
-  // 5. 非 git（root=null）→ 不生成、不崩
+  // 5. Not a git repo (root=null) -> nothing generated, no crash
   {
-    assert.doesNotThrow(() => ensureProjectConfig(null), 'root=null 不应抛出');
+    assert.doesNotThrow(() => ensureProjectConfig(null), 'root=null should not throw');
   }
 
   console.log('ensure_project_config.test.js PASS');

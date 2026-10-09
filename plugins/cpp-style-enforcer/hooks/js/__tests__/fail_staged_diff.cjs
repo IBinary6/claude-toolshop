@@ -5,12 +5,12 @@ const childProcess = require('node:child_process');
 const realSpawnSync = childProcess.spawnSync;
 
 /**
- * 仅让 `git diff --cached` 失败，用于验证暂存区枚举的 fail-closed 语义。
+ * Make only `git diff --cached` fail, to verify the fail-closed semantics of staged-file enumeration.
  *
- * @param {string} command 可执行命令
- * @param {string[]} args 命令参数
- * @param {object} options spawnSync 选项
- * @returns {object} 模拟或真实的子进程结果
+ * @param {string} command The executable command.
+ * @param {string[]} args The command arguments.
+ * @param {object} options The spawnSync options.
+ * @returns {object} The simulated or real child process result.
  */
 childProcess.spawnSync = function failStagedDiff(command, args, options) {
   if (/^git(?:\.exe)?$/i.test(String(command))

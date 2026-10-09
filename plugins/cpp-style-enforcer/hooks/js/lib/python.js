@@ -8,10 +8,10 @@ let cachedPythonResolved = false;
 let cachedPython = null;
 
 /**
- * 将环境变量中的启动参数拆成参数数组。
+ * Split launch arguments from an environment variable into an argument array.
  *
- * @param {string|undefined} value 空白分隔的参数文本
- * @returns {string[]} 启动参数
+ * @param {string|undefined} value Whitespace-separated argument text.
+ * @returns {string[]} The launch arguments.
  * @example
  * splitArgs('-3 -X utf8') // ['-3', '-X', 'utf8']
  */
@@ -20,10 +20,10 @@ function splitArgs(value) {
 }
 
 /**
- * 生成当前平台的 Python 候选；Windows Launcher 使用 `py -3`，不绑定小版本。
+ * Build the Python candidates for the current platform; the Windows launcher uses `py -3` and does not pin a minor version.
  *
  * @param {{platform?:string, env?:object}} [options]
- * @returns {Array<{cmd:string,args:string[]}>} 按探测顺序排列的候选
+ * @returns {Array<{cmd:string,args:string[]}>} Candidates in probe order.
  * @example
  * pythonCandidates({ platform: 'win32', env: {} })
  */
@@ -46,11 +46,11 @@ function pythonCandidates(options = {}) {
 }
 
 /**
- * 验证单个启动描述是否能运行 Python 3；命令缺失、超时或 Python 2 均返回 false。
+ * Verify that one launch descriptor can run Python 3; a missing command, a timeout or Python 2 all return false.
  *
- * @param {{cmd:string,args:string[]}} candidate Python 启动描述
+ * @param {{cmd:string,args:string[]}} candidate The Python launch descriptor.
  * @param {{platform?:string, spawnSync?:Function}} [options]
- * @returns {boolean} 是否为可运行的 Python 3
+ * @returns {boolean} Whether it is a runnable Python 3.
  * @example
  * probePython3({ cmd: 'python3', args: [] })
  */
@@ -70,10 +70,10 @@ function probePython3(candidate, options = {}) {
 }
 
 /**
- * 探测并返回所有可运行的 Python 3 启动描述；缺失命令和 Python 2 都会被跳过。
+ * Probe and return every runnable Python 3 launch descriptor; missing commands and Python 2 are skipped.
  *
  * @param {{platform?:string, env?:object, spawnSync?:Function, candidates?:Array<{cmd:string,args:string[]}>}} [options]
- * @returns {Array<{cmd:string,args:string[]}>} 已验证为 Python 3 的候选
+ * @returns {Array<{cmd:string,args:string[]}>} Candidates verified as Python 3.
  * @example
  * resolvePythonCandidates()[0] // { cmd: 'python3', args: [] }
  */
@@ -83,10 +83,10 @@ function resolvePythonCandidates(options = {}) {
 }
 
 /**
- * 返回第一个已验证的 Python 3 启动描述，全部不可用时返回 null。
+ * Return the first verified Python 3 launch descriptor, or null when none is usable.
  *
  * @param {{platform?:string, env?:object, spawnSync?:Function, candidates?:Array<{cmd:string,args:string[]}>}} [options]
- * @returns {{cmd:string,args:string[]}|null} Python 3 启动描述
+ * @returns {{cmd:string,args:string[]}|null} The Python 3 launch descriptor.
  * @example
  * const python = resolvePython();
  * if (python) console.log(python.cmd);
@@ -109,7 +109,7 @@ function resolvePython(options = {}) {
 }
 
 /**
- * 清空进程内 Python 探测缓存，仅供确定性测试使用。
+ * Clear the in-process Python probe cache; for deterministic tests only.
  * @returns {void}
  */
 function resetPythonCacheForTests() {

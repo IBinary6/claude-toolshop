@@ -22,7 +22,7 @@ function stop(turn) {
   const input = { cwd: tmp, session_id: `eol-${turn}`, tool_input: { file_path: source } };
   const opts = { env: { ...process.env, CLAUDE_PLUGIN_DATA: path.join(tmp, 'data') } };
   run(process.execPath, [path.join(pluginRoot, 'hooks/js/post_edit.js')], { ...opts, input: JSON.stringify(input) });
-  // Claude 协议：无事可报时 stdout 为空，按 {} 比较。
+  // Claude protocol: when there is nothing to report stdout is empty, compared as {}.
   const out = run(process.execPath, [path.join(pluginRoot, 'hooks/js/stop_check.js')], { ...opts, input: JSON.stringify(input) });
   return out.trim() ? JSON.parse(out) : {};
 }
@@ -37,33 +37,32 @@ try {
   fs.mkdirSync(path.dirname(config));
   fs.writeFileSync(config, JSON.stringify({
     mode: 'incremental', lineEnding: 'lf',
-    checks: { clangFormat: false, bom: false, copyright: false, cpplint: true },
-    legacyChecks: { clangFormat: false, bom: false, copyright: false, cpplint: true },
-    copyrightInfo: { company: '' },
+    checks: { clangFormat: false, bom: false, cpplint: true },
+    legacyChecks: { clangFormat: false, bom: false, cpplint: true },
   }));
   fs.writeFileSync(source, Buffer.concat([bom, Buffer.from('int main() {\r\n  return 0;\r\n}\r\n')]));
   git('add', '.gitattributes', 'app.vcxproj', 'main.cpp');
   git('commit', '-qm', 'baseline');
 
-  // 模拟编辑器写成 LF，末尾补 CRLF 会混合；旧 cpplint 会进一步建议转 LF。
+  // Simulate an editor writing LF; adding a final CRLF would mix them, and the old cpplint would further suggest converting to LF.
   fs.writeFileSync(source, Buffer.concat([bom, Buffer.from('int main() {\n  return 1;\r\n}')]));
   const beforeLint = fs.readFileSync(source);
-  const diagnostics = runCpplint(source, { root: tmp, suppressCopyright: true });
+  const diagnostics = runCpplint(source, { root: tmp });
   assert.ok(diagnostics.some(v => v.category === 'whitespace/ending_newline'));
   const mixed = diagnostics.find(v => v.category === 'whitespace/newline');
   assert.ok(mixed);
   assert.match(mixed.message, /consistent project line ending/);
   assert.doesNotMatch(mixed.message, /better to use only/);
-  assert.deepEqual(fs.readFileSync(source), beforeLint, '检查本身只读');
+  assert.deepEqual(fs.readFileSync(source), beforeLint, 'the check itself is read-only');
   const result = stop('first');
-  assert.doesNotMatch(result.reason || '', /cpplint 检测到/);
+  assert.doesNotMatch(result.reason || '', /cpplint found/);
   const expected = Buffer.concat([bom, Buffer.from('int main() {\r\n  return 1;\r\n}\r\n')]);
-  assert.deepEqual(fs.readFileSync(source), expected, '旧文件关闭 clang-format 仍统一 CRLF 并补末尾');
+  assert.deepEqual(fs.readFileSync(source), expected, 'an old file with clang-format off is still normalized to CRLF with a final newline');
   const mtime = fs.statSync(source).mtimeMs;
   assert.deepEqual(stop('second'), {});
-  assert.equal(fs.statSync(source).mtimeMs, mtime, '反复触碰不重复修复或报告');
+  assert.equal(fs.statSync(source).mtimeMs, mtime, 'touching repeatedly does not repair or report again');
 
-  // 暂存缺末尾换行，Stop 修工作区后不能静默改写 index 或吞掉暂存检查。
+  // Staged content lacks a final newline: after Stop repairs the working tree it must not silently rewrite the index or swallow the staged check.
   fs.writeFileSync(source, 'int main() { return 2; }');
   git('add', 'main.cpp');
   const stagedBefore = git('show', ':main.cpp');
@@ -74,15 +73,15 @@ try {
   assert.match(commitHook(), /ending_newline/);
   git('add', 'main.cpp');
   const staged = git('show', ':main.cpp');
-  assert.ok(staged.endsWith('\n') && !staged.includes('\r'), 'Git index 可正常存 LF');
-  assert.equal(commitHook(), '', 'CRLF 工作区配合 LF index 正常通过');
+  assert.ok(staged.endsWith('\n') && !staged.includes('\r'), 'the Git index can store LF normally');
+  assert.equal(commitHook(), '', 'a CRLF working tree with an LF index passes normally');
   const includes = '#include <windows.h>\r\n#include <LdsLog/lds_log.h>\r\n\r\nint main() { return 0; }\r\n';
   fs.writeFileSync(source, includes);
-  assert.deepEqual(stop('vs-includes'), {}, 'Stop 不要求重排 VS include');
+  assert.deepEqual(stop('vs-includes'), {}, 'Stop does not ask to reorder VS includes');
   git('add', 'main.cpp');
-  assert.equal(commitHook(), '', '暂存快照没有 vcxproj 时仍应用 VS include 策略');
+  assert.equal(commitHook(), '', 'the VS include policy still applies when the staged snapshot has no vcxproj');
 
-  // VS 旧项目关闭所有高层风格检查仍执行基础行尾规则。
+  // An old VS project with every higher-level style check off still gets the basic line-ending rule.
   const settings = JSON.parse(fs.readFileSync(config));
   settings.legacyChecks.cpplint = false;
   fs.writeFileSync(config, JSON.stringify(settings));
@@ -90,23 +89,20 @@ try {
   stop('fourth');
   assert.equal(fs.readFileSync(source, 'utf8'), 'int main() { return 3; }\r\n');
 
-  // 全流程会新增版权头/格式化行尾，最终必须再次统一到 VS 的 CRLF。
+  // The full pipeline reformats and may rewrite line endings; the result must be normalized to the VS CRLF again.
   settings.mode = 'full';
   settings.checks.clangFormat = true;
-  settings.checks.copyright = true;
-  settings.copyrightInfo.company = 'Example';
   fs.writeFileSync(config, JSON.stringify(settings));
   fs.writeFileSync(source, Buffer.concat([bom, Buffer.from('int main() { return 5; }')]));
   const full = stop('full-pipeline');
   const finalText = fs.readFileSync(source).subarray(3).toString('utf8');
   assert.ok(fs.readFileSync(source).subarray(0, 3).equals(bom));
-  assert.match(finalText, /^\/\/ Copyright/);
   assert.ok(finalText.endsWith('\r\n'));
   assert.ok(!finalText.replace(/\r\n/g, '').includes('\n'));
-  assert.doesNotMatch(full.reason || '', /cpplint 检测到/);
+  assert.doesNotMatch(full.reason || '', /cpplint found/);
   assert.deepEqual(stop('full-repeat'), {});
 
-  // 最近 CMake 源目录优先，其他工程的 LF 配置实际生效。
+  // The nearest CMake source directory wins, so the other project's LF setting actually takes effect.
   settings.mode = 'incremental';
   fs.writeFileSync(config, JSON.stringify(settings));
   fs.writeFileSync(source, 'int main() { return 3; }\r\n');
